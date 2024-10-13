@@ -15,6 +15,7 @@ bits 16
 
 %define FATSEG  0x0000
 %define FATOFF  0x8000
+%define DIROFF  0x9000
 %define SYSSEG  0x1000
 %define SYSOFF  0x0000
 
@@ -77,7 +78,7 @@ mov word [data.root_dir_sz], ax
 
 mov ax, word [bpb.sectrs_res]
 mov cx, word [bpb.sectrs_per_fat]
-mov bx, 0x7e00 ; fat addr
+mov bx, FATOFF
 call read_sects
 jc .panic
 
@@ -85,7 +86,7 @@ xchg ax, cx
 mul byte [bpb.num_of_fats]
 add ax, cx
 
-mov bx, 0x9000 ; dir buff addr
+mov bx, DIROFF
 mov cx, word [data.root_dir_sz]
 call read_sects
 jc .panic
@@ -95,7 +96,7 @@ mov si, rodata.loader_sys
 mov di, bx
 
 .check_next_rec:
-mov cx, 0x0b ; filename length
+mov cx, 0x000b ; filename length
 
 push si
 push di
@@ -120,7 +121,7 @@ jmp .halt
 mov ax, word [di+0x001a]
 push SYSSEG
 pop es
-mov bx, SYSOFF ; loader addr
+mov bx, SYSOFF
 
 .read_next_clust:
 call read_clust
@@ -128,7 +129,7 @@ jc .panic
 
 .continue:
 call calc_next_clust
-jnc .read_next_clust
+jb .read_next_clust
 
 jmp SYSSEG:SYSOFF
 
@@ -154,7 +155,7 @@ jmp SYSSEG:SYSOFF
 read_sect:
 xor dx, dx ; use dx:ax?
 div word [bpb.sectrs_per_track] ; dx:ax / word -> ax - quotient, dx - remainder
-inc dl
+inc dx
 mov cl, dl ; sect = lba % spt + 1
 and cl, 0x3f ; clear 2 most significant bits (for cylinder)
 
@@ -166,13 +167,12 @@ shl ah, 0x06 ; 2 most significant cyld bits
 or cl, ah
 
 ; es:bx - buffer
-mov ax, 0x0201 ; read one sector
 mov dl, byte [bpb.drv_num]
-
 mov di, 0x0003 ; 3 attempts
 
 .again:
-clc ; reset cf before every read
+mov ax, 0x0201 ; read one sector
+stc ; int 0x13 has a problem with setting cf(?)
 int 0x13
 dec di ; doesn't affect cf
 jz .fail
@@ -197,9 +197,26 @@ ret
 ;
 
 read_clust:
+push ax
+sub ax, 0x02
+
 movzx cx, byte [bpb.sectrs_per_clust]
-mul cl
+mul cx
+
+add ax, word [bpb.sectrs_res]
+
+push ax
+mov ax, word [bpb.sectrs_per_fat]
+movzx dx, byte [bpb.num_of_fats]
+mul dx
+mov dx, ax
+pop ax
+
+add ax, dx
+add ax, word [data.root_dir_sz]
+
 call read_sects
+pop ax
 ret
 
 ;
@@ -208,16 +225,17 @@ ret
 
 calc_next_clust:
 mov bx, ax
-add ax, ax
-add bx, ax
 shr bx, 0x01
+add bx, ax
+test ax, 0x01
 mov ax, word [bx+FATOFF]
-test bx, 0x01
 jz .even
-shr ax, 0x08
+shr ax, 0x04
 
 .even:
-and ax, 0x0fff
+and ah, 0x0f ; 0x000 - 0xfff
+
+cmp ax, 0x0ff8 ; 0xff8 - 0xfff means eof
 ret
 
 ;

@@ -4,7 +4,7 @@
 # Author: verner002
 #
 
-TARGET ?= kernel
+TARGET ?= kernel.exe
 
 BOOT_SRC ?= ./src/boot
 KSTD_SRC ?= ./src/kstd
