@@ -8,7 +8,19 @@
  * Includes
 */
 
-#include "kstd/bool.h"
+#include "kstd/string.h"
+
+/**
+ * String Length
+*/
+
+unsigned int strlen(char const *s) {
+    unsigned int i = __UINT_MAX;
+
+    while (s[++i]);
+
+    return i;
+}
 
 /**
  * String Copy
@@ -17,7 +29,7 @@
 char *strcpy(char *d, char const *s) {
     unsigned int i = 0;
     
-    while (d[i++] = s[i]);
+    while ((d[i++] = s[i]));
 
     return d;
 }

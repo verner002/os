@@ -11,6 +11,7 @@
 */
 
 #include "kstd/types.h"
+#include "kstd/vga.h"
 
 /**
  * Constants
@@ -24,19 +25,16 @@
  * Types Definitions
 */
 
-typedef struct _file FILE;
+typedef unsigned int FILE;
 typedef __builtin_va_list va_list;
-
-/**
- * Structures
-*/
-
-struct _file {
-    unsigned int index;
-};
 
 /**
  * Declarations
 */
 
-void printf(char const *s, ...);
+int putc(int c, FILE *stream);
+int putchar(int c);
+int vfprintf(FILE *stream, char const *s, va_list args);
+int vprintf(char const *s, va_list args);
+int fprintf(FILE *stream, char const *s, ...);
+int printf(char const *s, ...);
