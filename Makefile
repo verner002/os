@@ -7,14 +7,14 @@
 TARGET ?= kernel.exe
 
 BOOT_SRC ?= ./src/boot
-KSTD_SRC ?= ./src/kstd
+KSTDLIB_SRC ?= ./src/kstdlib
 KERNEL_SRC ?= ./src/kernel
 INC ?= ./include
 BUILD ?= ./build
 BIN ?= ./bin
 
-KSTD_SRCS := $(shell find $(KSTD_SRC) -name *.c -exec basename {} .c \;)
-KSTD_OBJS := $(KSTD_SRCS:%=$(BUILD)/%.o)
+KSTDLIB_SRCS := $(shell find $(KSTDLIB_SRC) -name *.c -exec basename {} .c \;)
+KSTDLIB_OBJS := $(KSTDLIB_SRCS:%=$(BUILD)/%.o)
 
 KERNEL_SRCS := $(shell find $(KERNEL_SRC) -name *.c -exec basename {} .c \;)
 KERNEL_OBJS := $(KERNEL_SRCS:%=$(BUILD)/%.o)
@@ -34,10 +34,10 @@ init:
 boot:
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/boot.asm -o $(BIN)/boot.bin
 
-kernel: $(KSTD_OBJS) $(KERNEL_OBJS)
-	$(CL) $(KSTD_OBJS) $(KERNEL_OBJS) --oformat=pei-i386 -m i386pe --image-base 0x00010000 -e entry -o $(BIN)/$(TARGET) 
+kernel: $(KSTDLIB_OBJS) $(KERNEL_OBJS)
+	$(CL) $(KSTDLIB_OBJS) $(KERNEL_OBJS) --oformat=pei-i386 -m i386pe --image-base 0x00010000 -e entry -o $(BIN)/$(TARGET) 
 
-$(BUILD)/%.o: $(KSTD_SRC)/%.c
+$(BUILD)/%.o: $(KSTDLIB_SRC)/%.c
 	$(CC) $(C_FLAGS) -c $< -o $@
 
 $(BUILD)/%.o: $(KERNEL_SRC)/%.c

@@ -8,8 +8,8 @@
  * Includes
 */
 
-#include "kstd/null.h"
-#include "kstd/stdio.h"
+#include "kstdlib/null.h"
+#include "kstdlib/stdio.h"
 
 /**
  * Main

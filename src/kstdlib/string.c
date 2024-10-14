@@ -8,22 +8,22 @@
  * Includes
 */
 
-#include "kstd/string.h"
+#include "kstdlib/string.h"
 
 /**
- * String Length
+ * strlen
 */
 
 unsigned int strlen(char const *s) {
     unsigned int i = __UINT_MAX;
 
-    while (s[++i]);
+    while (s[++i]); // `i' wraps to `0' after first iteration
 
     return i;
 }
 
 /**
- * String Copy
+ * strcpy
 */
 
 char *strcpy(char *d, char const *s) {
@@ -35,7 +35,7 @@ char *strcpy(char *d, char const *s) {
 }
 
 /**
- * String N Copy
+ * strncpy
 */
 
 char *strncpy(char *d, char const *s, unsigned int n) {

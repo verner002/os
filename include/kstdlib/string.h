@@ -10,8 +10,8 @@
  * Includes
 */
 
-#include "kstd/limits.h"
-#include "kstd/bool.h"
+#include "kstdlib/limits.h"
+#include "kstdlib/bool.h"
 
 /**
  * Declarations

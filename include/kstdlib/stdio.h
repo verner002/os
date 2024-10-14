@@ -10,8 +10,8 @@
  * Includes
 */
 
-#include "kstd/types.h"
-#include "kstd/vga.h"
+#include "kstdlib/types.h"
+#include "kernel/vga.h"
 
 /**
  * Constants
@@ -38,3 +38,4 @@ int vfprintf(FILE *stream, char const *s, va_list args);
 int vprintf(char const *s, va_list args);
 int fprintf(FILE *stream, char const *s, ...);
 int printf(char const *s, ...);
+int puts(char const *s);
