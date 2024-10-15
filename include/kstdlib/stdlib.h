@@ -10,9 +10,9 @@
  * Includes
 */
 
-#include "kstdlib/null.h"
-#include "kstdlib/types.h"
-#include "kstdlib/bool.h"
+#include "null.h"
+#include "types.h"
+#include "bool.h"
 
 /**
  * Types Definitions

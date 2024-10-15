@@ -20,7 +20,7 @@
 
 void __map_page(dword virt_addr, dword phys_addr, byte avl, bool g, bool d, bool pcd, bool pwt, bool us, bool rw, bool p) {
     asm (
-        "invlpg [ebx]\n\t" // invalidate page table entry
+        "invlpg [ebx]" // invalidate page table entry
         :
         : "b" (phys_addr)
         :

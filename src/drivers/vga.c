@@ -54,7 +54,7 @@ int __setcurpos(dword l, dword c) {
         "out dx, al\n\t"
         "inc dx\n\t" // mov dx, 0x03d5
         "mov al, ch\n\t"
-        "out dx, al\n\t"
+        "out dx, al"
         :
         : "c" (index)
         :

@@ -8,7 +8,7 @@
  * Includes
 */
 
-#include "kernel/fat12.h"
+//#include "loader/fat12.h"
 
 /**
  * Entry Point
