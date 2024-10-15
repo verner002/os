@@ -27,9 +27,7 @@ unsigned int strlen(char const *s) {
 */
 
 char *strcpy(char *d, char const *s) {
-    unsigned int i = 0;
-    
-    while ((d[i++] = s[i]));
+    for (unsigned int i = 0; (d[i] = s[i]); ++i);
 
     return d;
 }
@@ -39,10 +37,9 @@ char *strcpy(char *d, char const *s) {
 */
 
 char *strncpy(char *d, char const *s, unsigned int n) {
-    unsigned int i = 0;
     bool t = TRUE;
 
-    while (i < n) d[i++] = t = t ? s[i] : '\0';
+    for (unsigned int i = 0; i < n; ++i) d[i] = t = t ? s[i] : '\0';
 
     return d;
 }

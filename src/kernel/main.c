@@ -9,14 +9,14 @@
 */
 
 #include "kstdlib/null.h"
-#include "kstdlib/stdio.h"
+//#include "kstdlib/stdio.h"
 
 /**
  * Main
 */
 
 void entry(void) {
-    printf("Kernel ready!\n");
+    //printf("Kernel ready!\n");
 
     for (;;) {
         asm("cli");

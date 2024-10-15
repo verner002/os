@@ -11,7 +11,7 @@
 */
 
 #include "kstdlib/types.h"
-#include "kernel/vga.h"
+#include "drivers/vga.h"
 
 /**
  * Constants

@@ -8,7 +8,7 @@
  * Includes
 */
 
-#include "kernel/vga.h"
+#include "drivers/vga.h"
 
 /**
  * Static Global Variables
@@ -56,7 +56,7 @@ int __setcurpos(dword l, dword c) {
         "mov al, ch\n\t"
         "out dx, al\n\t"
         :
-        :"c" (index)
+        : "c" (index)
         :
     );
     
