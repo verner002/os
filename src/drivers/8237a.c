@@ -15,18 +15,16 @@
 */
 
 void __init_dma_controllers(void) {
-    asm (
-        "mov al, 0x14\n\t" // deactivate controller
-        "out 0x08, al\n\t"
-        "out 0xd0, al\n\t"
-        "out 0x0d, al\n\t" // master clear, mask on
-        "out 0xda, al\n\t" // master clear, mask on
-        "mov al, 0xc0\n\t" // cascade channel 4
-        "out 0xd6, al\n\t" // channel 4 is used for cascade
-        "mov al, 0x10\n\t" // activate controller
-        "out 0xd0, al\n\t"
-        "out 0x08, al"
-    );
+    __deactive_master_dma_controller();
+    __deactive_slave_dma_controller();
+
+    __outb(DMA_MASTER_RESET_REGISTER_03, 0xff); // master clear, mask on
+    __outb(DMA_MASTER_RESET_REGISTER_47, 0xff); // master clear, mask on
+    __outb(DMA_MODE_REGISTER_47, 0xc0); // cascade channel 4
+    __outb(DMA_COMMAND_REGISTER_47, 0x10); // channel 4 is used for cascade
+    
+    __active_slave_dma_controller();
+    __active_master_dma_controller();
 }
 
 /**
@@ -34,11 +32,8 @@ void __init_dma_controllers(void) {
 */
 
 void __mask_dma_channels(void) {
-    asm (
-        "mov al, 0x0f\n\t"
-        "out 0x0f, al\n\t"
-        "out 0xde, al"
-    );
+    __outb(DMA_MULTICHANNEL_MASK_REGISTER_03, 0x0f);
+    __outb(DMA_MULTICHANNEL_MASK_REGISTER_47, 0x0f);
 }
 
 /**
@@ -46,11 +41,8 @@ void __mask_dma_channels(void) {
 */
 
 void __unmask_dma_channels(void) {
-    asm (
-        "xor al, al\n\t"
-        "out 0x0f, al\n\t"
-        "out 0xde, al"
-    );
+    __outb(DMA_MULTICHANNEL_MASK_REGISTER_03, 0x00);
+    __outb(DMA_MULTICHANNEL_MASK_REGISTER_47, 0x00);
 }
 
 /**
@@ -70,10 +62,7 @@ void __unmask_dma_channels(void) {
 */
 
 void __active_master_dma_controller(void) {
-    asm (
-        "mov al, 0x10\n\t"
-        "out 0xd0, al"
-    );
+    __outb(DMA_COMMAND_REGISTER_47, 0x10);
 }
 
 /**
@@ -85,10 +74,7 @@ void __active_master_dma_controller(void) {
 */
 
 void __deactive_master_dma_controller(void) {
-    asm (
-        "mov al, 0x14\n\t"
-        "out 0xd0, al"
-    );
+    __outb(DMA_COMMAND_REGISTER_47, 0x14);
 }
 
 /**
@@ -100,10 +86,7 @@ void __deactive_master_dma_controller(void) {
 */
 
 void __active_slave_dma_controller(void) {
-    asm (
-        "mov al, 0x10\n\t"
-        "out 0x08, al"
-    );
+    __outb(DMA_COMMAND_REGISTER_03, 0x10);
 }
 
 /**
@@ -115,10 +98,7 @@ void __active_slave_dma_controller(void) {
 */
 
 void __deactive_slave_dma_controller(void) {
-    asm (
-        "mov al, 0x14\n\t"
-        "out 0x08, al"
-    );
+    __outb(DMA_COMMAND_REGISTER_03, 0x14);
 }
 
 /**
@@ -126,8 +106,5 @@ void __deactive_slave_dma_controller(void) {
 */
 
 void __wait_for_dma_controllers(void) {
-    asm (
-        "xor al, al\n\t"
-        "out 0x80, al" // dummy write
-    );
+    __outb(POST_CODE_REGISTER, 0x00); // dummy write
 }

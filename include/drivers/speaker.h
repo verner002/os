@@ -11,6 +11,7 @@
 */
 
 #include "types.h"
+#include "drivers/ports.h"
 
 /**
  * Declarations

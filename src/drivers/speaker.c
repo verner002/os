@@ -16,11 +16,7 @@
 
 void __init_speaker(void) {
     __disable_speaker();
-
-    asm (
-        "mov al, 0xb6\n\t"
-        "out 0x43, al" // channel 2, lowbyte / highbyte, square wave
-    );
+    __outb(PIT_MODE_COMMAND_REGISTER, 0xb6); // channel 2, lowbyte/highbyte, square wave
 }
 
 /**
@@ -28,11 +24,7 @@ void __init_speaker(void) {
 */
 
 void __enable_speaker(void) {
-    asm (
-        "in al, 0x61\n\t"
-        "or al, 0x03\n\t"
-        "out 0x61, al"
-    );
+    __outb(PPI_PORT_B, __inb(PPI_PORT_B) | 0x03);
 }
 
 /**
@@ -40,11 +32,7 @@ void __enable_speaker(void) {
 */
 
 void __disable_speaker(void) {
-    asm (
-        "in al, 0x61\n\t"
-        "and al, 0xfc\n\t"
-        "out 0x61, al"
-    );
+    __outb(PPI_PORT_B, __inb(PPI_PORT_B) & 0xfc);
 }
 
 /**
@@ -52,16 +40,6 @@ void __disable_speaker(void) {
 */
 
 void __play_note(word f) {
-    word value = 0x001234de / f;
-    
-    asm(
-        "out 0x42, al\n\t"
-        "mov al, ah\n\t"
-        "out 0x42, al"
-        :
-        : "a" (value)
-        :
-    );
-
+    __outw(PIT_CHANNEL_2_DATA_REGISTER, 0x001234de / f);
     __enable_speaker();
 }

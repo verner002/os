@@ -18,3 +18,4 @@
 
 void __write_cmos_register(byte r, byte v);
 byte __read_cmos_register(byte r);
+void __wait_for_cmos(void);

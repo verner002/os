@@ -7,6 +7,12 @@
 #pragma once
 
 /**
+ * Includes
+*/
+
+#include "drivers/ports.h"
+
+/**
  * Declarations
 */
 

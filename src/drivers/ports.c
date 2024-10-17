@@ -39,3 +39,18 @@ byte __inb(word r) {
 
     return v;
 }
+
+/**
+ * __outw
+*/
+
+void __outw(word r, word v) {
+    asm (
+        "out dx, al\n\t"
+        "mov al, ah\n\t"
+        "out dx, al"
+        :
+        : "d" (r), "a" (v)
+        :
+    );
+}
