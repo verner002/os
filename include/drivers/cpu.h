@@ -4,6 +4,8 @@
  * Author: verner002
 */
 
+#pragma once
+
 /**
  * Declarations
 */

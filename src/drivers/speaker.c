@@ -2,6 +2,9 @@
  * Speaker
  * 
  * Author: verner002
+ * 
+ * TODO:
+ *  1) use functions from 8254a.h to interact with pit
 */
 
 /**
@@ -16,7 +19,7 @@
 
 void __init_speaker(void) {
     __disable_speaker();
-    __outb(PIT_MODE_COMMAND_REGISTER, 0xb6); // channel 2, lowbyte/highbyte, square wave
+    __outb(PIT_MODE_COMMAND_REGISTER, 0xb6); // channel 2, low byte / high byte, square wave
 }
 
 /**
