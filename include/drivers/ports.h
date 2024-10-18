@@ -36,12 +36,13 @@
 #define DMA_MULTICHANNEL_MASK_REGISTER_03       0x000f
 #define PIC_MASTER_COMMAND_REGISTER             0x0020
 #define PIC_MASTER_DATA_REGISTER                0x0021
-#define PIC_SLAVE_COMMAND_REGISTER              0x00a0
-#define PIC_SLAVE_DATA_REGISTER                 0x00a1
 #define PIT_CHANNEL_0_DATA_REGISTER             0x0040
 #define PIT_CHANNEL_2_DATA_REGISTER             0x0042
 #define PIT_MODE_COMMAND_REGISTER               0x0043
+#define PS2_DATA_PORT_REGISTER                  0x0060
 #define PPI_PORT_B                              0x0061
+#define PS2_STATUS_REGISTER                     0x0064 // read
+#define PS2_COMMAND_REGISTER                    0x0064 // write
 #define CMOS_ADDRESS_REGISTER                   0x0070
 #define CMOS_SELECTED_REGISTER                  0x0071
 #define POST_CODE_REGISTER                      0x0080
@@ -53,6 +54,8 @@
 #define DMA_CHANNEL_7_PAGE_ADDRESS_REGISTER     0x008a
 #define DMA_CHANNEL_5_PAGE_ADDRESS_REGISTER     0x008b
 #define DMA_CHANNEL_4_PAGE_ADDRESS_REGISTER     0x008f // unusable
+#define PIC_SLAVE_COMMAND_REGISTER              0x00a0
+#define PIC_SLAVE_DATA_REGISTER                 0x00a1
 #define DMA_START_ADDRESS_REGISTER_4            0x00c0
 #define DMA_COUNT_REGISTER_4                    0x00c2
 #define DMA_START_ADDRESS_REGISTER_5            0x00c4
