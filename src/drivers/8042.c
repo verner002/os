@@ -61,6 +61,8 @@ int __init_ps2(void) {
     __outb(PS2_DATA_PORT_REGISTER, config_byte);
 
     __enable_ps2_a_port();
+
+    return 0;
 }
 
 /**

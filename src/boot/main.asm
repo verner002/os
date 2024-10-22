@@ -65,9 +65,9 @@ sti
 
 mov byte [bpb.drv_num], dl
 
-mov dx, 0x03f2
-xor al, al
-out dx, al ; kill fdd motor
+mov dx, 0x03f2 ; fdc dor
+xor al, al ; kill fdd(s) motor(s)
+out dx, al
 
 mov ax, word [bpb.num_of_rd_ents]
 xor dx, dx

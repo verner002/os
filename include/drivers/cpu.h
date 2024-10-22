@@ -7,6 +7,12 @@
 #pragma once
 
 /**
+ * Includes
+*/
+
+#include "drivers/8254a.h"
+
+/**
  * Declarations
 */
 

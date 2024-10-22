@@ -18,6 +18,7 @@
 */
 
 typedef enum _attributes ATTRIBUTES;
+typedef struct _fat FAT;
 typedef struct _record RECORD;
 
 /**
@@ -39,6 +40,11 @@ enum _attributes {
  * Structures
 */
 
+struct _fat {
+    word sectorsPerTrack;
+    word headsPerCylinder;
+};
+
 struct _record {
     byte filename[11]; // 8.3 format
     byte attributes;
@@ -52,3 +58,9 @@ struct _record {
     word first_cluster;
     dword file_size;
 };
+
+/**
+ * Declarations
+*/
+
+void __lba2chs(dword lba, word *c, word *h, word *s);

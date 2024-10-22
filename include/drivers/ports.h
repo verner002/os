@@ -78,6 +78,16 @@
 #define VGA_MISCELLANEOUS_OUTPUT_REGISTER_R     0x03cc
 #define VGA_CRT_CONTROLLER_ADDRESS_REGISTER     0x03d4
 #define VGA_CRT_CONTROLLER_DATA_REGISTER        0x03d5
+#define FDC_STATUS_REGISTER_A                   0x03f0 // read-only
+#define FDC_STATUS_REGISTER_B                   0x03f1 // read-only
+#define FDC_DIGITAL_OUTPUT_REGISTER             0x03f2 // write-only
+#define FDC_TAPE_DRIVE_REGISTER                 0x03f3
+#define FDC_MAIN_STATUS_REGISTER                0x03f4 // read
+#define FDC_DATARATE_SELECT_REGISTER            0x03f4 // write
+#define FDC_DATA_FIFO                           0x03f5
+#define FDC_DIGITAL_INPUT_REGISTER              0x03f7 // write
+#define FDC_CONFIGURATION_CONTROL_REGISTER      0x03f7 // read
+
 
 /**
  * Declarations
