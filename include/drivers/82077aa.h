@@ -14,6 +14,7 @@
 #include "bool.h"
 #include "drivers/ports.h"
 #include "drivers/cmos.h"
+#include "kstdlib/errno.h"
 
 /**
  * Types Definitions

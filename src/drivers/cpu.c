@@ -44,6 +44,14 @@ void __init_tick_counter(void) {
 }
 
 /**
+ * __set_handler
+*/
+
+int __set_handler(byte irq, word selector, byte dpl, void (*isr)(void)) {
+
+}
+
+/**
  * __current_tick_count
 */
 
