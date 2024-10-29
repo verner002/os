@@ -7,6 +7,9 @@
 %ifndef _EXT2_INCLUDED
 %define _EXT2_INCLUDED
 
+%define SUPERBLOCK_SIZE 0x0400 ; 1024 bytes
+%define SUPERBLOCK_OFF 0x9000
+
 %define FS_IS_CLEAN 0x0001
 %define FS_HAS_ERRORS 0x0002
 
@@ -14,15 +17,15 @@
 %define REMOUNT_FS_AS_RO 0x0002
 %define KERNEL_PANIC 0x0003
 
-struc superblock
+struc __superblock, SUPERBLOCK_OFF
     .total_inodes               resd 1
     .total_blocks               resd 1
     .su_block_count             resd 1
     .total_free_block           resd 1
     .total_free_inodes          resd 1
     .superblock_block_id        resd 1
-    .log_block_size             resd 1
-    .log_fragment_size          resd 1
+    .s_log_block_size           resd 1
+    .s_log_fragment_size        resd 1
     .group_block_count          resd 1
     .group_fragment_count       resd 1
     .group_inodes_count         resd 1

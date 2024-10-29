@@ -1,5 +1,5 @@
 ;
-; Boot Loader
+; Legacy Boot Loader
 ;
 ; Author: verner002
 ;
@@ -43,7 +43,7 @@ mov sp, 0x7c00
 cld
 sti
 
-mov di, 0x0400 ; superblock size
+mov di, SUPERBLOCK_SIZE
 mov cx, ax
 mov dx, ax
 mov ax, di
@@ -57,16 +57,18 @@ inc cx
 call __read_sectors ; read second stage and superblock
 jc __panic
 
-mov cl, byte [SUPERBLOCK_LOC+superblock.log_block_size]
-mov si, di
-shl si, cl ; block size
+; ax points to the first sector of bgdt
+push ax
+xor dx, dx
+mov ax, word [__superblock.total_blocks]
+div word [__superblock.group_block_count] ; dx:ax / r/m16 = ax - quotient, dx - remainder
+test dx, dx
+jz .ok
+inc ax
 
-cmp si, di
-jnz .block1
-inc ax ; block group descriptor table begins at block 2
-
-.block1:
-; calc num of block group descriptors (using tnob and tnoi)
+.ok:
+mov cx, ax
+pop ax
 
 ;
 ; __panic
