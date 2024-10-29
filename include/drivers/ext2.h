@@ -11,7 +11,7 @@
 */
 
 #include "types.h"
-#include "hal/device.h"
+#include "hal/filesystem.h"
 
 /**
  * Types Definitions

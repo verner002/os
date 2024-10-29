@@ -15,5 +15,6 @@
 */
 
 void __load_superblock(void) {
-    __read_sector();
+    //__read_sector(0, 0, NULL);
 }
+
