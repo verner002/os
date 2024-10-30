@@ -8,7 +8,7 @@
 ; Includes
 ;
 
-%include "ext2.inc"
+%include "ebtfs.inc"
 
 ;
 ; __entry
@@ -39,29 +39,59 @@ mov es, ax
 ;mov fs, ax
 ;mov gs, ax
 mov ss, ax
-mov sp, 0x7c00
+mov sp, 0x7c00 ; use 0x7bfe, would be a bit safer?
 cld
 sti
 
-mov di, SUPERBLOCK_SIZE
-mov cx, ax
-mov dx, ax
+mov di, 0x0400 ; EBTFS_HEADER_SIZE, but use different name
+
+mov cx, ax ; cx = 0
+mov dx, ax ; dx = 0
 mov ax, di
-div word [__drive.bps]
-xchg cx, ax
+div word [__drive.bps] ; dx:ax / r/m16 = ax - quotient, dx - remainder
+xchg cx, ax ; cx = EBTFS_HEADER_SIZE / __drive.bps (header size in sectors)
 
 ; ax = 1, sector 2 (lba 1)
-inc ax
-mov bx, 0x7e00 ; es:bx = 0x0000:0x7e00, TODO: use another address
-inc cx
+inc ax ; ax = 1
+mov bx, 0x7e00 ; es:bx = 0x0000:0x7e00
+inc cx ; + 1 sector (second stage)
 call __read_sectors ; read second stage and superblock
 jc __panic
 
-; ax points to the first sector of bgdt
+; check h_magic?
+mov ax, 0x0001
+
+mov si, di
+mov cl, byte [__ebtfs_header.h_log_blocks_size]
+shl si, cl
+cmp si, di
+ja .block1
+inc ax
+
+.block1:
+mul si
+div word [__drive.bps] ; ax = first sector of block group descriptor table
+
 push ax
 xor dx, dx
-mov ax, word [__superblock.total_blocks]
-div word [__superblock.group_block_count] ; dx:ax / r/m16 = ax - quotient, dx - remainder
+mov ax, word [__ebtfs_header.h_blocks_count]
+div word [__ebtfs_header.h_blocks_per_group]
+test dx, dx
+jz .dont_round
+inc ax
+xor dx, dx
+
+.dont_round:
+shl ax, 0x05 ; ax *= 32
+div word [__drive.bps]
+mov cx, ax
+pop ax
+
+; ax points to the first sector of block group descriptor table
+push ax
+xor dx, dx
+mov ax, word [__ebtfs_header.h_blocks_count]
+div word [__ebtfs_header.h_blocks_per_group] ; dx:ax / r/m16 = ax - quotient, dx - remainder
 test dx, dx
 jz .ok
 inc ax
