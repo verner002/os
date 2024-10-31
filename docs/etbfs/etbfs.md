@@ -88,6 +88,7 @@
 ```
 
 ## Block Group Descriptor Table
+- **[verner002: actually i can put bgdt immediately after header and align only the block group 0 so that header and bgdt are not part of block group]**
 - for block size = 1024 bytes, the BGDT will begin at logical block 2.
 - for any other block size, it will begin at logical block 1.
 - the number of entries can be obtained by rounding up the total number of blocks divided by the number of blocks in block group.
