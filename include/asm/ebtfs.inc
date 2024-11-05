@@ -8,7 +8,7 @@
 %define _EXT2_INCLUDED
 
 %define EBTFS_HEADER_SIZE 0x0400 ; always 1024 bytes
-%define EBTFS_HEADER_OFF 0x9000
+%define EBTFS_HEADER_OFF 0x8000
 
 %define FS_IS_CLEAN 0x0001
 %define FS_HAS_ERRORS 0x0002

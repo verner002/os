@@ -4,6 +4,10 @@
 ; Author: verner002
 ;
 
+cpu 486
+org 0x7c00
+bits 16
+
 ;
 ; Includes
 ;
@@ -43,6 +47,13 @@ mov sp, 0x7c00 ; use 0x7bfe, would be a bit safer?
 cld
 sti
 
+pusha
+mov ah, 0x0e
+mov al, '1'
+mov bx, 0x0007
+int 0x10
+popa
+
 mov di, 0x0400 ; EBTFS_HEADER_SIZE, but use different name
 
 mov cx, ax ; cx = 0
@@ -58,6 +69,13 @@ inc cx ; + 1 sector (second stage)
 call __read_sectors ; read second stage and superblock
 jc __panic
 
+pusha
+mov ah, 0x0e
+mov al, '2'
+mov bx, 0x0007
+int 0x10
+popa
+
 ; check h_magic?
 mov ax, 0x0001
 
@@ -71,6 +89,13 @@ inc ax
 .block1:
 mul si
 div word [__drive.bps] ; ax = first sector of block group descriptor table
+
+pusha
+mov ah, 0x0e
+mov al, '3'
+mov bx, 0x0007
+int 0x10
+popa
 
 push ax
 xor dx, dx
@@ -100,11 +125,21 @@ inc ax
 mov cx, ax
 pop ax
 
+mov ah, 0x0e
+mov al, '*'
+mov bx, 0x0007
+int 0x10
+
 ;
 ; __panic
 ;
 
 __panic:
+mov ah, 0x0e
+mov al, '!'
+mov bx, 0x0007
+int 0x10
+
 cli
 hlt
 jmp __panic
@@ -148,7 +183,7 @@ ret
 
 __first_stage_void:
 .zeros times 510-($-$$) db 0x00
-.signature dw 0x55aa
+.signature dw 0xaa55
 
 ;
 ; __second_stage_void

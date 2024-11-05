@@ -8,18 +8,22 @@ BOOT_TARGET ?= boot.bin
 LOADER_TARGET ?= loader.sys
 KERNEL_TARGET ?= kernel.sys
 
-BOOT_SRC ?= ./src/boot
-DRIVERS_SRC ?= ./src/drivers
-KSTDLIB_SRC ?= ./src/kstdlib
-LOADER_SRC = ./src/loader
-KERNEL_SRC ?= ./src/kernel
+DEBUG ?= ./debug
 INC ?= ./include
+SRC ?= ./src
 BUILD ?= ./build
+BIN ?= ./bin
+
+BOOT_SRC ?= $(SRC)/boot
+DRIVERS_SRC ?= $(SRC)/drivers
+KSTDLIB_SRC ?= $(SRC)/kstdlib
+LOADER_SRC = $(SRC)/loader
+KERNEL_SRC ?= $(SRC)/kernel
+
 DRIVERS_BUILD ?= $(BUILD)/drivers
 KSTDLIB_BUILD ?= $(BUILD)/kstdlib
 LOADER_BUILD ?= $(BUILD)/loader
 KERNEL_BUILD ?= $(BUILD)/kernel
-BIN ?= ./bin
 
 DRIVERS_SRCS := $(shell find $(DRIVERS_SRC) -name *.c -exec basename {} .c \;)
 DRIVERS_OBJS := $(DRIVERS_SRCS:%=$(DRIVERS_BUILD)/%.o)
@@ -51,6 +55,7 @@ dirs:
 
 boot:
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/main.asm -o $(BIN)/$(BOOT_TARGET)
+	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/header.asm -o $(BIN)/header.bin
 
 loader: $(LOADER_OBJS) # produces raw binary file (loader objs must come first!!!)
 	$(CL) $(LOADER_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) -Ttext=0x00010000 --oformat=binary -m elf_i386 -e entry -o $(BIN)/$(LOADER_TARGET)
@@ -74,14 +79,26 @@ $(LOADER_BUILD)/%.o: $(LOADER_SRC)/%.c
 $(KERNEL_BUILD)/%.o: $(KERNEL_SRC)/%.c
 	$(CC) $(C_FLAGS) -c $< -o $@
 
+image: all
+	$(DD) if=/dev/zero of=./fdd.img bs=512 count=2880
+	$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=2 conv=notrunc
+	$(DD) if=./bin/header.bin of=./fdd.img bs=512 count=2 seek=2 conv=notrunc
+
+debug-gdb:
+	qemu-system-i386 -fda ./fdd.img -S -s & gdb --quiet -x $(DEBUG)/config.gdb
+
+debug-bochs:
+	bochs -q -f $(DEBUG)/config.bochs
+
 .PHONY: clean
 
 clean:
 	$(RM) -r $(BUILD)
 	$(RM) -r $(BIN)
+	$(RM) ./fdd.img
 
 ASM ?= nasm
 CC ?= gcc
 CL ?= ld
 MKDIR ?= mkdir -p
-ECHO ?= echo
+DD ?= dd status=none

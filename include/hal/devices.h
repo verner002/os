@@ -12,6 +12,10 @@
 
 #include "null.h"
 #include "types.h"
+#include "cpu.h"
+
+#include "kstdlib/errno.h"
+#include "kstdlib/stdlib.h"
 
 /**
  * Types Definitions
@@ -28,4 +32,5 @@ struct _device {
     char *name;
     void *driver;
     DEVICE **devices;
+    int status;
 };

@@ -70,3 +70,10 @@ struct _drive {
     DRIVE_TYPE type; // drive type from cmos
     bool motorOn;
 };
+
+/**
+ * Declarations
+*/
+
+int __init_drives(void);
+void __wait_for_fdc(void);

@@ -200,7 +200,7 @@ void __software_reset(void) {
         break;
     }
 
-    if (i >= 3) return -1; // timeout
+    if (i >= 3) errno = ETIMEDOUT; // timeout
 
     // fdc ready to recieve cmds
 }

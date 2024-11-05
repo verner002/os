@@ -11,6 +11,7 @@
 */
 
 enum {
+    EBUSY = 16,
     ETIMEDOUT = 110
 };
 
