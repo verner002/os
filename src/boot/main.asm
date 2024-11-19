@@ -1,41 +1,37 @@
 ;
-; Legacy Boot Loader
+; FAT12 Bootloader
 ;
 ; Author: verner002
 ;
 
 cpu 486
 org 0x7c00
+
+%define __SYS_SEGMENT 0x1000
+%define __FAT_OFFSET 0x7e00
+%define __RD_OFFSET 0x8000
+
 bits 16
-
-;
-; Includes
-;
-
-%include "ebtfs.inc"
 
 ;
 ; __entry
 ;
 
 __entry:
-jmp 0x0000:__main ; fix cs:ip (0x0000:0x7cxx)
+jmp short __main
+nop
 
-;
-; __drive
-;
-
-__drive:
-.id     db 0x00
-.bps    dw 0x0200
-.spt    dw 0x0012
-.hpc    dw 0x0002
+%include "floppy1440.inc"
+;%include "floppy2880.inc"
 
 ;
 ; __main
 ;
 
 __main:
+;jmp 0x0000:.main ; correct cs
+
+;.main:
 cli
 xor ax, ax
 mov ds, ax
@@ -43,151 +39,200 @@ mov es, ax
 ;mov fs, ax
 ;mov gs, ax
 mov ss, ax
-mov sp, 0x7c00 ; use 0x7bfe, would be a bit safer?
 cld
 sti
 
-pusha
-mov ah, 0x0e
-mov al, '1'
-mov bx, 0x0007
-int 0x10
-popa
+mov byte [drv_num], dl
 
-mov di, 0x0400 ; EBTFS_HEADER_SIZE, but use different name
-
-mov cx, ax ; cx = 0
-mov dx, ax ; dx = 0
-mov ax, di
-div word [__drive.bps] ; dx:ax / r/m16 = ax - quotient, dx - remainder
-xchg cx, ax ; cx = EBTFS_HEADER_SIZE / __drive.bps (header size in sectors)
-
-; ax = 1, sector 2 (lba 1)
-inc ax ; ax = 1
-mov bx, 0x7e00 ; es:bx = 0x0000:0x7e00
-inc cx ; + 1 sector (second stage)
-call __read_sectors ; read second stage and superblock
-jc __panic
-
-pusha
-mov ah, 0x0e
-mov al, '2'
-mov bx, 0x0007
-int 0x10
-popa
-
-; check h_magic?
-mov ax, 0x0001
-
-mov si, di
-mov cl, byte [__ebtfs_header.h_log_blocks_size]
-shl si, cl
-cmp si, di
-ja .block1
-inc ax
-
-.block1:
-mul si
-div word [__drive.bps] ; ax = first sector of block group descriptor table
-
-pusha
-mov ah, 0x0e
-mov al, '3'
-mov bx, 0x0007
-int 0x10
-popa
-
-push ax
 xor dx, dx
-mov ax, word [__ebtfs_header.h_blocks_count]
-div word [__ebtfs_header.h_blocks_per_group]
-test dx, dx
-jz .dont_round
-inc ax
-xor dx, dx
+mov ax, word [num_of_rd_ents]
+shl ax, 0x05 ; *32
+div word [bytes_per_sectr]
+mov word [data.rd_sz], ax
 
-.dont_round:
-shl ax, 0x05 ; ax *= 32
-div word [__drive.bps]
-mov cx, ax
-pop ax
+mov ax, word [sectrs_res]
+mov cx, word [sectrs_per_fat]
+mov bx, __FAT_OFFSET
+call read_sects
+jc .halt
 
-; ax points to the first sector of block group descriptor table
-push ax
-xor dx, dx
-mov ax, word [__ebtfs_header.h_blocks_count]
-div word [__ebtfs_header.h_blocks_per_group] ; dx:ax / r/m16 = ax - quotient, dx - remainder
-test dx, dx
-jz .ok
-inc ax
+xchg ax, cx
+mul byte [num_of_fats]
+add ax, cx
 
-.ok:
-mov cx, ax
-pop ax
+mov cx, word [data.rd_sz]
+mov bx, __RD_OFFSET
+call read_sects
+jc .halt
 
-mov ah, 0x0e
-mov al, '*'
-mov bx, 0x0007
-int 0x10
+mov ax, word [num_of_rd_ents]
+mov si, data.kernel_sys
+mov di, bx
 
-;
-; __panic
-;
+.check_entry:
+mov cx, 0x000b ; filename length
 
-__panic:
-mov ah, 0x0e
-mov al, '!'
-mov bx, 0x0007
-int 0x10
+push si
+push di
+repz cmpsb
+pop di
+pop si
+jz .kernel_found
 
+add di, 0x20
+dec ax
+jnz .check_entry
+
+.halt:
 cli
 hlt
-jmp __panic
+jmp .halt
+
+.kernel_found:
+mov ax, word [di+0x001a]
+push __SYS_SEGMENT
+pop es
+xor bx, bx
+
+.load_kernel:
+push ax
+sub ax, 0x02
+
+movzx cx, byte [sectrs_per_clust]
+mul cx
+
+add ax, word [sectrs_res]
+
+push ax
+mov ax, word [sectrs_per_fat]
+movzx dx, byte [num_of_fats]
+mul dx
+mov dx, ax
+pop ax
+
+add ax, dx
+add ax, word [data.rd_sz]
+
+call read_sects
+pop ax
+jc .halt
+
+mov bx, ax
+shr bx, 0x01
+add bx, ax
+test ax, 0x01
+mov ax, word [bx+__FAT_OFFSET]
+jz .even
+shr ax, 0x04
+
+.even:
+and ah, 0x0f ; 0x000 - 0xfff
+
+cmp ax, 0x0ff8 ; 0xff8 - 0xfff means eof
+jb .load_kernel
+
+push __SYS_SEGMENT
+push 0x0000
+retf ; execute 0x1000:0x0000
 
 ;
-; __read_sectors
+; Read Sector
 ;
+; AX     |    AH    |    AL
+; -------|----------|----------
+; mode   | 76543210 | 
+; count  |          |  6543210
+; -------|----------|----------
+; BX     |    BH    |    BL
+; buffer | 76543210 | 76543210
+; -------|----------|----------
+; CX     |    CH    |    CL
+; cyld   | 76543210 | 98
+; sect   |          |   543210
+; -------|----------|----------
+; DX     |    DH    |    DL
+; head   |   543210 |
+; drive  |          | 76543210
 
-__read_sectors:
+read_sect:
 push ax
 push cx
-xor dx, dx
-div word [__drive.spt]
+xor dx, dx ; use dx:ax?
+div word [sectrs_per_track] ; dx:ax / word -> ax - quotient, dx - remainder
 inc dx
-mov cl, dl ; sector = lba % spt + 1
-and cl, 0x3f
+mov cl, dl ; sect = lba % spt + 1
+and cl, 0x3f ; clear 2 most significant bits (for cylinder)
 
 xor dx, dx
-div word [__drive.hpc]
+div word [heads_per_cyld] ; dx:ax / word -> ax - quotient, dx - remainder
 mov dh, dl ; head = lba / spt % hpc
-mov ch, al ; cylinder = lba / spt / hpc
-shl ah, 0x06
+mov ch, al ; cyld = lba / spt / hpc
+shl ah, 0x06 ; 2 most significant cyld bits
 or cl, ah
 
-mov dl, byte [__drive.id]
+; es:bx - buffer
+mov dl, byte [drv_num]
+mov di, 0x0003 ; 3 attempts
+
+.again:
 mov ax, 0x0201 ; read one sector
+stc ; int 0x13 has a problem with setting cf(?)
 int 0x13
+dec di ; doesn't affect cf
+jz .fail
+jc .again
+
+.fail:
 pop cx
 pop ax
-jc .return
-inc ax
-add bx, 0x0200 ; word [__drive.bps] ; don't cross page boundary!!!
-loop __read_sectors
-
-.return:
 ret
 
 ;
-; __first_stage_void
+; Read Sectors
 ;
 
-__first_stage_void:
-.zeros times 510-($-$$) db 0x00
-.signature dw 0xaa55
+read_sects:
+pusha
+
+.read_sect:
+call read_sect
+inc ax
+mov bx, word [bytes_per_sectr] ; respect page boundary!!!
+loop .read_sect ; cx = 0 is illegal!
+popa
+ret
 
 ;
-; __second_stage_void
+; Read Cluster
 ;
 
-__second_stage_void:
-.zeros times 1024-($-$$) db 0x00
+read_clust:
+push ax
+sub ax, 0x02
+
+movzx cx, byte [sectrs_per_clust]
+mul cx
+
+add ax, word [sectrs_res]
+
+push ax
+mov ax, word [sectrs_per_fat]
+movzx dx, byte [num_of_fats]
+mul dx
+mov dx, ax
+pop ax
+
+add ax, dx
+add ax, word [data.rd_sz]
+
+call read_sects
+pop ax
+ret
+
+data:
+.rd_sz dw 0x0000
+.loader_sys db "LOADER  SYS"
+.kernel_sys db "KERNEL  SYS"
+
+times 510-($-$$) db 0x00
+dw 0xaa55

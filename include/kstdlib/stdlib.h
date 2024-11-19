@@ -39,3 +39,5 @@ struct _chunk {
 
 void *malloc(unsigned int s);
 void free(void *p);
+
+void *__malloc(unsigned int s);

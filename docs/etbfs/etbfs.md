@@ -4,6 +4,8 @@
 - is based on modified B+Tree structure.
 - reserves 1024 bytes for boot loader.
 - reserved 1024 bytes for EBTFS header.
+- no EBTFS Header backup.
+- no Block Group Descriptor Table backup.
 
 ## Layout
 ```
@@ -15,13 +17,14 @@
 ```
 
 ## Block
-- is a group of sectors (typically 1 KiB to 8 KiB).
+- is a group of sectors (typically 4 KiB, same as the page size).
 - contains the data of the file/directory/etc.
 - blocks are numbered from 0.
 - first (logical) block in the file system doesn't have to be the first physical block (drive can be separated into partitions).
 
 ## Block Group
 - is a group of blocks.
+- described by Block Group Descriptor Table.
 
 ## INode
 - represents a file, directory, etc.
@@ -32,6 +35,9 @@
 - first 1024 bytes are reserved for a boot loader.
 
 ## EBTFS Header
+- starts at offset 1024 bytes.
+- 1024 bytes long.
+
 | Offset | Size (in bytes) | Description |
 |:------:|:---------------:|:------------|
 | 0 | 4 | Magic number (`0x000EB7F5`) |
@@ -60,7 +66,7 @@
 |:------:|:------------|
 | 0 | Ignore the error |
 | 1 | Remount file system as read-only |
-| 255 | Kernel panic |
+| 255 (-1) | Kernel panic |
 
 ### Block Size
 - is represented in a form of a base 2 logarithm.
@@ -88,6 +94,9 @@
 ```
 
 ## Block Group Descriptor Table
+- starts at offset 2048 bytes.
+- is (total_blocks / blocks_per_group) * record_size bytes long
+
 - **[verner002: actually i can put bgdt immediately after header and align only the block group 0 so that header and bgdt are not part of block group]**
 - for block size = 1024 bytes, the BGDT will begin at logical block 2.
 - for any other block size, it will begin at logical block 1.
@@ -96,9 +105,26 @@
 - the number of block can be obtained by roungin up the number of sectors divided by the block size.
 
 ### Block Group Descriptor
+- 16 bytes long entry in the BGDT.
+- **[verner002: do i want to support something like flex group???]**
+
 | Offset | Size (in bytes) | Description |
 |:------:|:---------------:|:------------|
-| 0 | 4 | Block address of block usage bitmap |
-| 4 | 4 | Block address of inode usage bitmap |
-| 8 | 4 | Starting block address of inode table |
-| 12 | 
+| 0 | 4 | Number of free blocks |
+| 4 | 4 | Number of inodes |
+| 8 | 4 | Number of used directories |
+| 12 | 4 | Padding |
+
+## Block Group
+- block group 0 is aligned to start at physical block n+m, where n is the first filesystem physical block number and m is (boot_sector_size + header_size + bgdt_size) / block_size rounded up.
+- each block group contains block and inode bitmap, inode table and data blocks
+
+## Block Bitmap
+- tracks the usage of the data blocks within the block group.
+- each bit represents one data block (from the LSB to MSB) => 8 data blocks per one byte.
+
+## INode Bitmap
+- tracks the usage of the inodes in inode table.
+
+## INode Table
+- statically allocated during the creation of the file system.

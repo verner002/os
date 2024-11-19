@@ -159,45 +159,52 @@ void __software_reset(void) {
     bool try_again = FALSE;
 
     for (i = 0; i < 3; ++i) { // this is ugly, i'll change it later
+        errno = 0; // reset errno
+
         __fdc_reset();
 
         for (unsigned int j = 0; j < 4; ++j) { // we should send sense_interrupt 4x
             __write_byte(FDC_COMMAND_SENSE_INTERRUPT);
+            if (errno) break;
+
             __read_byte(); // read st0
+            if (errno) break;
+
             __read_byte(); // read cylinder
+            if (errno) break;
         }
 
-        if (errno || __inb(FDC_MAIN_STATUS_REGISTER) & 0xc0 != 0x80) continue;
+        if (errno || __inb(FDC_MAIN_STATUS_REGISTER) & 0xc0 != 0x80) continue; // fdc not ready for config
 
         __outb(FDC_DATA_FIFO, FDC_COMMAND_CONFIGURE);
 
         __write_byte(0x00);
+        if (errno) continue; // timeout
 
         bool impliedSeekEnabled = TRUE;
         bool fifoDisabled = FALSE;
         bool drivePollingModeDisabled = TRUE;
-        byte threshold = 8 - 1;
+        byte threshold = 8 - 1; // value - 1
 
         __write_byte((impliedSeekEnabled << 6) | (fifoDisabled << 5) | (drivePollingModeDisabled << 4) | threshold);
+        if (errno) continue; // timeout
+
         __write_byte(0x00); // precompensation = 0
+        if (errno) continue; // timeout
 
         __write_byte(FDC_COMMAND_SPECIFY);
+        if (errno) continue; // timeout
 
-        // parameters for 1.44 MB floppy
-        byte ms1 = 8; // time the controller should wait for the head assembly to move between successive cylinders
-        byte ms2 = 240; // time the controller should wait between activating a head and actually performing a read/write, set to 0 (maximum in any mode)?
-        byte ms3 = 30; // time the controller should wait before deactivating the head
-        byte dr = 500000; // datarate
-
-        byte srt = 16 - (ms1 * dr / 500000);
-        byte hut = ms2 * dr / 8000000;
-        byte hlt = ms3 * dr / 1000000;
+        byte srt = 16 - (HEAD_ASSEMBLY * DATARATE / 500000);
+        byte hut = HEAD_ACTIVATION * DATARATE / 8000000;
+        byte hlt = HEAD_DEACTIVATION * DATARATE / 1000000;
         bool ndma = FALSE;
 
         __write_byte((srt << 4) | (hut & 0x0f));
-        __write_byte((hlt << 1) | ndma);
+        if (errno) continue; // timeout
 
-        break;
+        __write_byte((hlt << 1) | ndma);
+        if (!errno) break; // ok
     }
 
     if (i >= 3) errno = ETIMEDOUT; // timeout

@@ -17,6 +17,16 @@
 #include "kstdlib/errno.h"
 
 /**
+ * Constants
+*/
+
+// parameters for 1.44 MB floppy
+#define HEAD_ASSEMBLY 8 // time the controller should wait for the head assembly to move between successive cylinders
+#define HEAD_ACTIVATION 240 // time the controller should wait between activating a head and actually performing a read/write, set to 0 (maximum in any mode)?
+#define HEAD_DEACTIVATION 30 // time the controller should wait before deactivating the head
+#define DATARATE 500000
+
+/**
  * Types Definitions
 */
 
