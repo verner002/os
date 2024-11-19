@@ -31,8 +31,8 @@ DRIVERS_OBJS := $(DRIVERS_SRCS:%=$(DRIVERS_BUILD)/%.o)
 KSTDLIB_SRCS := $(shell find $(KSTDLIB_SRC) -name *.c -exec basename {} .c \;)
 KSTDLIB_OBJS := $(KSTDLIB_SRCS:%=$(KSTDLIB_BUILD)/%.o)
 
-LOADER_SRCS := $(shell find $(LOADER_SRC) -name *.c -exec basename {} .c \;)
-LOADER_OBJS := $(LOADER_SRCS:%=$(LOADER_BUILD)/%.o)
+#LOADER_SRCS := $(shell find $(LOADER_SRC) -name *.c -exec basename {} .c \;)
+#LOADER_OBJS := $(LOADER_SRCS:%=$(LOADER_BUILD)/%.o)
 
 KERNEL_SRCS := $(shell find $(KERNEL_SRC) -name *.c -exec basename {} .c \;)
 KERNEL_OBJS := $(KERNEL_SRCS:%=$(KERNEL_BUILD)/%.o)
@@ -57,8 +57,9 @@ boot:
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/main.asm -o $(BIN)/$(BOOT_TARGET)
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/header.asm -o $(BIN)/header.bin
 
-loader: $(LOADER_OBJS) # produces raw binary file (loader objs must come first!!!)
-	$(CL) $(LOADER_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) -Ttext=0x00010000 --oformat=binary -m elf_i386 -e entry -o $(BIN)/$(LOADER_TARGET)
+loader: #$(LOADER_OBJS) # produces raw binary file (loader objs must come first!!!)
+#$(CL) $(LOADER_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) -m16 -Ttext=0x00010000 --oformat=binary -m elf_i386 -e entry -o $(BIN)/$(LOADER_TARGET)
+	$(ASM) $(ASM_FLAGS) -I$(SRC)/loader $(LOADER_SRC)/main.asm -o $(BIN)/$(LOADER_TARGET)
 
 kernel: $(KERNEL_OBJS)
 	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) --oformat=pei-i386 -m i386pe --image-base 0x00010000 -e entry -o $(BIN)/$(KERNEL_TARGET)
@@ -81,8 +82,10 @@ $(KERNEL_BUILD)/%.o: $(KERNEL_SRC)/%.c
 
 image: all
 	$(DD) if=/dev/zero of=./fdd.img bs=512 count=2880
-	$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=2 conv=notrunc
-	$(DD) if=./bin/header.bin of=./fdd.img bs=512 count=2 seek=2 conv=notrunc
+#$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=2 conv=notrunc
+#$(DD) if=./bin/header.bin of=./fdd.img bs=512 count=2 seek=2 conv=notrunc
+	$(MKFSFAT) ./fdd.img
+	$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=1 conv=notrunc
 
 debug-gdb:
 	qemu-system-i386 -fda ./fdd.img -S -s & gdb --quiet -x $(DEBUG)/config.gdb
@@ -102,3 +105,4 @@ CC ?= gcc
 CL ?= ld
 MKDIR ?= mkdir -p
 DD ?= dd status=none
+MKFSFAT ?= sudo mkfs.fat -f 2 -F 12
