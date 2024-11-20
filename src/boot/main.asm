@@ -87,8 +87,8 @@ __main:
     call __load_file ; load loader.sys (loader must be the last file to load)
     jc __halt
 
-    push __LDR_OFFSET
-    ret ; execute loader
+    ; pass some arguments?
+    jmp near __LDR_OFFSET ; execute loader
 
 ;
 ; __halt

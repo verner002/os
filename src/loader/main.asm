@@ -81,6 +81,9 @@ __entry:
     call __print_smap
     pop es
 
+    mov si, __data.correct_gdt
+    call __print_str
+
     sub ebx, 0x04 ; minus 4k cuz of gdt.limit
     shr ebx, 0x02 ; /4 (page granularity)
     mov cl, 0x0c ; pg granularity, 32-bit descriptor
@@ -92,6 +95,12 @@ __entry:
     mov si, __gdt.data ; add eax, 0x08?
     call __set_gdt_limit
     call __set_gdt_flags
+
+    mov si, __data.ok
+    call __print_str
+
+    mov si, __data.enter_pm
+    call __print_str
 
     cli
     lgdt [__gdt_ptr]
@@ -157,27 +166,37 @@ __gdt_ptr:
 
 bits 32
 
-%define __SYS_SEGMENT 0x8000
+%define __SYS_SEGMENT 0x8000 ; TODO: use value from same file here and in bootloader
 
 ;
 ; __main
 ;
 
 __main:
-    ;lidt [__idt_ptr]
+    mov ax, 0x0010
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov esi, 0x00007c00
+
+    mov esi, __data.ok
+    ;call __pm_print_str
+
+    ;lidt [__idt_ptr] -- do in kernel?
     ;sti
 
-    call __init_paging
+    call __init_paging ; self map first MiB
 
     mov eax, cr0
     or eax, 0x80000000 ; enable paging
     mov cr0, eax
 
-    ; TODO: parse kernel image
+    mov edi, __SYS_SEGMENT<<4
+    call __parse_pe
 
-    push __SYS_SEGMENT
-    push 0x000
-    retf ; execute kernel
+    jmp 0x0008:0x00080000 ; execute kernel
 
 ;
 ; __idt_ptr
@@ -188,6 +207,7 @@ __main:
 ;    dd __IDT_ADDRESS ; ptr
 
 %include "paging.inc"
+%include "peldr.inc"
 
 ;
 ; __panic
@@ -215,6 +235,15 @@ __data:
     .enable_a20 db `Enabling A20... \0`
     .memory_detect db `Detecting memory... \0`
     .construct_smap db `Constructing SMAP...\n\r\0`
+    .correct_gdt db `Correcting GDT... \0`
+    .enter_pm db `Entering PM... \0`
+    .parse_kernel db `Parsing kernel... \0`
     .kibs db ` KiBs\n\r\0`
     .ok db `Ok\n\r\0`
     .panic db `PANIC\n\r\0`
+
+    .section_comment db ``
+    .section_edata db ``
+    .section_idata db ``
+    .section_rsrc db ``
+    .section_tls db ``
