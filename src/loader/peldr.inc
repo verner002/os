@@ -28,10 +28,10 @@ __parse_pe:
     cmp dword [eax+pe_signature.magic], PE_MAGIC
     jnz .terminate ; invalid magic
 
-    cmp word [eax+coff_header.machine], MACH_I386
+    cmp word [eax+coff_header.machine], MACHINE_I386
     jnz .terminate ; invalid machine type
 
-    movzx ecx, word [eax+coff_header.num_of_sects]
+    movzx ecx, word [eax+coff_header.num_of_sections]
 
     cmp word [eax+opt_header.magic], OPT_MAGIC
     jnz .terminate ; invalid magic

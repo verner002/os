@@ -166,6 +166,8 @@ __gdt_ptr:
 
 bits 32
 
+%include "pe.inc"
+
 %define __SYS_SEGMENT 0x8000 ; TODO: use value from same file here and in bootloader
 
 ;
@@ -193,10 +195,18 @@ __main:
     or eax, 0x80000000 ; enable paging
     mov cr0, eax
 
-    mov edi, __SYS_SEGMENT<<4
-    call __parse_pe
+    ;mov edi, __SYS_SEGMENT<<4
+    ;call __parse_pe
 
-    jmp 0x0008:0x00080000 ; execute kernel
+    mov eax, 0x00080000
+    mov ebx, dword [eax+mz_header.e_lfanew]
+    add eax, ebx
+    mov ebx, dword [eax+opt_header.img_base]
+    mov eax, dword [eax+opt_header.entry_point]
+    add eax, ebx
+    call eax
+
+    ;jmp 0x0008:0x00080000 ; execute kernel
 
 ;
 ; __idt_ptr
@@ -207,7 +217,7 @@ __main:
 ;    dd __IDT_ADDRESS ; ptr
 
 %include "paging.inc"
-%include "peldr.inc"
+;%include "peldr.inc"
 
 ;
 ; __panic
