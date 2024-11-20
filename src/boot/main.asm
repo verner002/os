@@ -7,10 +7,14 @@
 cpu 486
 org 0x7c00
 
-%define __LDR_SEGMENT 0x1000
+%define __LDR_OFFSET 0x8000 ; loader will replace root directory
 %define __SYS_SEGMENT 0x8000
 %define __FAT_OFFSET 0x7e00
 %define __RD_OFFSET 0x8000
+
+%if __SYS_SEGMENT == 0
+    %error "__SYS_SEGMENT cannot be 0x0000!"
+%endif
 
 bits 16
 
@@ -69,19 +73,22 @@ __main:
     call __read_sects ; load root dir
     jc __halt
 
-    mov bx, __LDR_SEGMENT
-    mov si, __data.loader_sys
-    call __load_file ; load loader.sys
-    jc __halt
-
-    mov bx, __SYS_SEGMENT
+    push __SYS_SEGMENT
+    pop es
+    xor bx, bx
     mov si, __data.kernel_sys
     call __load_file ; load kernel.sys
     jc __halt
 
-    push __LDR_SEGMENT
     push 0x0000
-    retf ; execute loader
+    pop es
+    mov bx, __LDR_OFFSET
+    mov si, __data.loader_sys
+    call __load_file ; load loader.sys (loader must be the last file to load)
+    jc __halt
+
+    push __LDR_OFFSET
+    ret ; execute loader
 
 ;
 ; __halt
@@ -97,6 +104,10 @@ __halt:
 ;
 
 __load_file:
+    push es
+    push ds
+    pop es
+
     mov ax, word [__bpb.num_of_rd_ents]
     mov di, __RD_OFFSET
 
@@ -113,15 +124,13 @@ __load_file:
     add di, 0x20
     dec ax
     jnz .check_entry
+    pop es
     stc
     ret
 
     .kernel_found:
     mov ax, word [di+0x001a]
-
-    push es
-    mov es, bx
-    xor bx, bx
+    pop es
 
     .load_kernel:
     push ax
@@ -156,7 +165,6 @@ __load_file:
     clc
 
     .return:
-    pop es
     ret
 ;
 ; __read_sects

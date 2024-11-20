@@ -5,7 +5,7 @@
 ;
 
 cpu 486
-org 0x00010000
+org 0x00008000
 
 bits 16
 
@@ -17,15 +17,15 @@ bits 16
 ;
 
 __entry:
-    cli
-    mov ax, 0x1000
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
+    ;cli
+    ;xor ax, ax
+    ;mov ds, ax
+    ;mov es, ax
+    ;mov fs, ax
+    ;mov gs, ax
     ;mov ss, ax
     ;mov sp, 0x7c00
-    sti
+    ;sti
 
     mov si, __data.enable_a20
     call __print_str
@@ -56,7 +56,7 @@ __entry:
     jc __panic
 
     mov eax, ebx
-    call print_uint16
+    call __print_uint
 
     mov si, __data.kibs
     call __print_str
@@ -78,10 +78,10 @@ __entry:
     push __SMAP_SEGMENT
     pop es
     mov cx, ax
-    call print_sys_mem_map16
+    call __print_smap
     pop es
 
-    sub ebx, 0x00000004 ; minus 4k cuz of gdt.limit
+    sub ebx, 0x04 ; minus 4k cuz of gdt.limit
     shr ebx, 0x02 ; /4 (page granularity)
     mov cl, 0x0c ; pg granularity, 32-bit descriptor
 
