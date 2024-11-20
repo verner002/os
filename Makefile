@@ -43,6 +43,8 @@ INC_FLAGS := $(addprefix -I,$(INCS))
 ASM_FLAGS ?= -I$(INC)/asm
 C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie
 
+MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
+
 all: dirs boot drivers kstdlib loader kernel
 
 dirs:
@@ -87,6 +89,13 @@ image: all
 	$(MKFSFAT) ./fdd.img
 	$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=1 conv=notrunc
 
+	sudo mkdir /mnt/$(MOUNT)
+	sudo mount ./fdd.img /mnt/$(MOUNT)
+	sudo cp ./bin/loader.sys /mnt/$(MOUNT)/loader.sys
+	sudo cp ./bin/kernel.sys /mnt/$(MOUNT)/kernel.sys
+	sudo umount /mnt/$(MOUNT)
+	sudo rm -rf /mnt/$(MOUNT)
+
 debug-gdb:
 	qemu-system-i386 -fda ./fdd.img -S -s & gdb --quiet -x $(DEBUG)/config.gdb
 
@@ -105,4 +114,4 @@ CC ?= gcc
 CL ?= ld
 MKDIR ?= mkdir -p
 DD ?= dd status=none
-MKFSFAT ?= sudo mkfs.fat -f 2 -F 12
+MKFSFAT ?= sudo mkfs.fat -f 2 -F 12 -s 1

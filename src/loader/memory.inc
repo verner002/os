@@ -233,7 +233,7 @@ __get_smap:
     xor ebx, ebx ; continuation
     mov ecx, 0x00000018 ; buffer size
     mov edx, 'PAMS' ; signature
-    mov dword [es:di+0x0014], 0x00000001 ; for comp with acpi 3.x
+    mov dword [es:di+0x0014], 0x00000001 ; for pcs with acpi 3.x
     int 0x15
     jc .terminate ; not supp
 
@@ -241,9 +241,9 @@ __get_smap:
     jnz .terminate
 
     test ebx, ebx
-    jz .terminate ; only one desc
+    jz .terminate ; only one descriptor
 
-    xor bp, bp ; addr range descs counter
+    xor bp, bp ; addr range descriptors counter
 
     ;mov esi, dword [sda.mem_sz]
     shl esi, 0x0a
@@ -251,7 +251,7 @@ __get_smap:
     jmp .check_desc
 
     .next_ent:
-    mov eax, 0x0000e820 ; get sys mem map
+    mov eax, 0x0000e820 ; get smap
     mov ecx, 0x00000018 ; buffer size
     mov edx, 'PAMS' ; signature
     mov dword [es:di+0x0014], 0x00000001
@@ -259,41 +259,41 @@ __get_smap:
     jc .return ; end of list
 
     .check_desc:
-    jecxz .skip_ent ; invalid ent size
+    jecxz .skip_entry ; invalid entry size
 
     cmp cl, 0x14 ; cl <= 20
-    jna .store_ent ; check for acpi 3.x ent
+    jna .store_ent ; check for acpi 3.x entry
 
     test byte [es:di+0x0014], 0x01
-    jz .skip_ent ; skip ent
+    jz .skip_entry ; skip ent
 
     .store_ent:
     mov edx, dword [es:di+0x0004] ; base addr high
 
     test edx, edx
-    jnz .skip_ent ; we don't need addr range descs above 4 GiBs
+    jnz .skip_entry ; we don't need addr range descriptors above 4 GiBs
 
     mov eax, dword [es:di] ; base low
 
-    cmp eax, esi ; esi contains last possible addr
-    ja .skip_ent ; skip addr range descs above detected mem size
+    cmp eax, esi ; esi contains last mapped addr
+    ja .skip_entry ; skip addr range descriptors above detected mem size
 
     mov edx, dword [es:di+0x000c] ; length high
 
     test edx, edx
-    jnz .corr_length
+    jnz .correct_length
 
     mov ecx, dword [es:di+0x0008] ; length low
 
     test ecx, ecx
-    jz .skip_ent ; inval length
+    jz .skip_entry ; invalid length
 
     dec ecx
     add ecx, eax ; base addr low
-    ;jc .corr_length ; above 4 GiBs
+    ;jc .correct_length ; above 4 GiBs
 
     cmp ecx, esi
-    ja .corr_length
+    ja .correct_length
 
     .length_corr:
     ;mov ecx, dword [es:di+0x0008]
@@ -301,7 +301,7 @@ __get_smap:
     ;dec ecx
 
     ;cmp ecx, esi
-    ;ja .skip_ent ; skip addr range descs above detected mem size
+    ;ja .skip_entry ; skip addr range descriptors above detected mem size
 
     mov ecx, dword [es:di+0x0008] ; length low
     mov dword [es:di+0x0004], ecx
@@ -311,7 +311,7 @@ __get_smap:
     inc bp
     add di, 0x0c ; 0x18
 
-    .skip_ent:
+    .skip_entry:
     test ebx, ebx
     jnz .next_ent ; end of list
 
@@ -322,7 +322,7 @@ __get_smap:
     clc
     ret
 
-    .corr_length:
+    .correct_length:
     xor ecx, ecx
     mov dword [es:di+0x000c], ecx ; length high
     mov ecx, esi

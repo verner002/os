@@ -44,37 +44,39 @@ __main:
     cld
     sti
 
-    mov byte [__bpb.drv_num], dl
+    int 0x13 ; reset disk system
+    mov byte [__bpb.drv_num], dl ; store drive number
 
     xor dx, dx
     mov ax, word [__bpb.num_of_rd_ents]
     shl ax, 0x05 ; *32
     div word [__bpb.bytes_per_sectr]
-    mov word [__data.rd_sz], ax
+    mov word [__data.rd_sz], ax ; store root dir size in sectors
 
     mov ax, word [__bpb.sectrs_res]
     mov cx, word [__bpb.sectrs_per_fat]
     mov bx, __FAT_OFFSET
-    call __read_sects
+    call __read_sects ; load fat
     jc __halt
 
     xchg ax, cx
     mul byte [__bpb.num_of_fats]
+    mov word [__data.fats_sz], ax ; store fats size in sectors
     add ax, cx
 
     mov cx, word [__data.rd_sz]
     mov bx, __RD_OFFSET
-    call __read_sects
+    call __read_sects ; load root dir
     jc __halt
 
     mov bx, __LDR_SEGMENT
     mov si, __data.loader_sys
-    call __load_file
+    call __load_file ; load loader.sys
     jc __halt
 
     mov bx, __SYS_SEGMENT
     mov si, __data.kernel_sys
-    call __load_file
+    call __load_file ; load kernel.sys
     jc __halt
 
     push __LDR_SEGMENT
@@ -129,26 +131,20 @@ __load_file:
     mul cx
 
     add ax, word [__bpb.sectrs_res]
-
-    push ax
-    mov ax, word [__bpb.sectrs_per_fat]
-    movzx dx, byte [__bpb.num_of_fats]
-    mul dx
-    mov dx, ax
-    pop ax
-
-    add ax, dx
+    add ax, word [__data.fats_sz]
     add ax, word [__data.rd_sz]
 
     call __read_sects
     pop ax
     jc .return
 
+    push bx
     mov bx, ax
     shr bx, 0x01
     add bx, ax
     test ax, 0x01
     mov ax, word [bx+__FAT_OFFSET]
+    pop bx
     jz .even
     shr ax, 0x04
 
@@ -162,51 +158,10 @@ __load_file:
     .return:
     pop es
     ret
-
-;
-; __read_clust
-;
-
-__read_clust:
-    push ax
-    sub ax, 0x02
-
-    movzx cx, byte [__bpb.sectrs_per_clust]
-    mul cx
-
-    add ax, word [__bpb.sectrs_res]
-
-    push ax
-    mov ax, word [__bpb.sectrs_per_fat]
-    movzx dx, byte [__bpb.num_of_fats]
-    mul dx
-    mov dx, ax
-    pop ax
-
-    add ax, dx
-    add ax, word [__data.rd_sz]
-
-    call __read_sects
-    pop ax
-    ret
-
 ;
 ; __read_sects
 ;
-
-__read_sects:
-    pusha
-
-    .read_sect:
-    call __read_sect
-    inc ax
-    mov bx, word [__bpb.bytes_per_sectr] ; respect page boundary!!!
-    loop .read_sect ; cx = 0 is illegal!
-    popa
-    ret
-
-;
-; __read_sect
+; int 0x13/ah=0x02, chs:
 ;
 ; AX     |    AH    |    AL
 ; -------|----------|----------
@@ -223,8 +178,13 @@ __read_sects:
 ; DX     |    DH    |    DL
 ; head   |   543210 |
 ; drive  |          | 76543210
+;
 
-__read_sect:
+__read_sects:
+    push ax
+    push cx
+
+    .read_sect:
     push ax
     push cx
     xor dx, dx ; use dx:ax?
@@ -242,17 +202,25 @@ __read_sect:
 
     ; es:bx - buffer
     mov dl, byte [__bpb.drv_num]
-    mov di, 0x0003 ; 3 attempts
+    mov bp, 0x0003 ; 3 attempts
 
     .again:
     mov ax, 0x0201 ; read one sector
     stc ; int 0x13 has a problem with setting cf(?)
     int 0x13
-    dec di ; doesn't affect cf
+    dec bp ; doesn't affect cf
     jz .fail
     jc .again
 
     .fail:
+    pop cx
+    pop ax
+    jc .return
+    inc ax
+    add bx, word [__bpb.bytes_per_sectr] ; respect page boundary!!!
+    loop .read_sect ; cx = 0 is illegal!
+    
+    .return:
     pop cx
     pop ax
     ret
@@ -262,6 +230,7 @@ __read_sect:
 ;
 
 __data:
+    .fats_sz dw 0x0000
     .rd_sz dw 0x0000
     .loader_sys db "LOADER  SYS"
     .kernel_sys db "KERNEL  SYS"

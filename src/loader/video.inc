@@ -161,7 +161,7 @@ loop .next_ent
 popa
 ret
 
-.padding db 0x20, 0xb3, 0x20, 0x00
+.padding db `,\0` ;0x20, 0xb3, 0x20, 0x00
 .free db `Free\n\r\0`
 .reserved db `Reserved\n\r\0`
 
