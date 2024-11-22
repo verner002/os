@@ -16,13 +16,13 @@
  * Types Definitions
 */
 
-typedef struct _smap_entry SMAP_ENTRY;
+typedef struct _address_range_descriptor ADDRESS_RANGE_DESCRIPTOR;
 
 /**
  * Structures
 */
 
-struct _smap_entry {
+struct _address_range_descriptor {
     dword base;
     dword size;
     dword type;

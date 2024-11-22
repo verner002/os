@@ -235,7 +235,7 @@ __get_smap:
     mov edx, 'PAMS' ; signature
     mov dword [es:di+0x0014], 0x00000001 ; for pcs with acpi 3.x
     int 0x15
-    jc .terminate ; not supp
+    jc .terminate ; not supported
 
     cmp eax, 'PAMS' ; we could use edx but some bioses trashes it
     jnz .terminate
@@ -248,9 +248,9 @@ __get_smap:
     ;mov esi, dword [sda.mem_sz]
     shl esi, 0x0a
     dec esi ; last available address (max. 0xffffffff)
-    jmp .check_desc
+    jmp .check_descriptor
 
-    .next_ent:
+    .next_descriptor:
     mov eax, 0x0000e820 ; get smap
     mov ecx, 0x00000018 ; buffer size
     mov edx, 'PAMS' ; signature
@@ -258,25 +258,25 @@ __get_smap:
     int 0x15
     jc .return ; end of list
 
-    .check_desc:
-    jecxz .skip_entry ; invalid entry size
+    .check_descriptor:
+    jecxz .skip_descriptor ; invalid descriptor size
 
     cmp cl, 0x14 ; cl <= 20
-    jna .store_ent ; check for acpi 3.x entry
+    jna .store_descriptor ; check for acpi 3.x descriptor
 
     test byte [es:di+0x0014], 0x01
-    jz .skip_entry ; skip ent
+    jz .skip_descriptor ; skip ent
 
-    .store_ent:
+    .store_descriptor:
     mov edx, dword [es:di+0x0004] ; base address high
 
     test edx, edx
-    jnz .skip_entry ; we don't need address range descriptors above 4 GiBs
+    jnz .skip_descriptor ; we don't need address range descriptors above 4 GiBs
 
     mov eax, dword [es:di] ; base low
 
     cmp eax, esi ; esi contains last mapped address
-    ja .skip_entry ; skip address range descriptors above detected mem size
+    ja .skip_descriptor ; skip address range descriptors above detected mem size
 
     mov edx, dword [es:di+0x000c] ; length high
 
@@ -286,7 +286,7 @@ __get_smap:
     mov ecx, dword [es:di+0x0008] ; length low
 
     test ecx, ecx
-    jz .skip_entry ; invalid length
+    jz .skip_descriptor ; invalid length
 
     dec ecx
     add ecx, eax ; base address low
@@ -301,7 +301,7 @@ __get_smap:
     ;dec ecx
 
     ;cmp ecx, esi
-    ;ja .skip_entry ; skip address range descriptors above detected mem size
+    ;ja .skip_descriptor ; skip address range descriptors above detected mem size
 
     mov ecx, dword [es:di+0x0008] ; length low
     mov dword [es:di+0x0004], ecx
@@ -311,9 +311,9 @@ __get_smap:
     inc bp
     add di, 0x0c ; 0x18
 
-    .skip_entry:
+    .skip_descriptor:
     test ebx, ebx
-    jnz .next_ent ; end of list
+    jnz .next_descriptor ; end of list
 
     .return:
     mov word [.buffer], bp
@@ -326,8 +326,8 @@ __get_smap:
     xor ecx, ecx
     mov dword [es:di+0x000c], ecx ; length high
     mov ecx, esi
-    inc ecx
     sub ecx, dword [es:di] ; base low
+    inc ecx
     mov dword [es:di+0x0008], ecx ; length low
     jmp .length_correct
 

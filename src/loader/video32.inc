@@ -10,7 +10,7 @@
 %define __VIDEO_MEMORY 0x000b8000
 %define __COLUMNS 80
 %define __ROWS 25
-%define __ARGUMENT 0x0f
+%define __ARGUMENT 0x07
 
 ;
 ; __cur_pos

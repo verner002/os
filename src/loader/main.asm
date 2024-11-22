@@ -228,6 +228,10 @@ __main:
     mov eax, __SYS_SEGMENT<<4
     call __parse_pe
 
+    movzx ebx, byte [__cur_pos.cur_x]
+    push ebx
+    movzx ebx, byte [__cur_pos.cur_y]
+    push ebx
     push __SMAP_SEGMENT<<4
     push dword [__data.smap_entries_count]
     
