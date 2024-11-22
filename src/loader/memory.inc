@@ -164,7 +164,7 @@ __wait_for_ps2_out_buff:
 ; Input: Nothing
 ; Output: EBX (mem size in kibs), CF (set on err)
 ;
-; Note: Returns memory above 16 MiBs only (mem sz below 16 MiBs causes err)!!!
+; Note: Returns memory above 16 MiBs only (memory size below 16 MiBs causes error)!!!
 ;
 ; TODO: Implement a binary structuring algorithm. The SMAP will contain free
 ;  and reserved areas and will be sorted.
@@ -174,10 +174,10 @@ __get_mem_size:
     push ax
     push cx
     push dx
-    mov ax, 0xe801 ; handles mem holes under 16 MiBs
+    mov ax, 0xe801 ; handles memory holes under 16 MiBs
     xor cx, cx
     xor dx, dx
-    int 0x15 ; get mem size up to 4 GiBs
+    int 0x15 ; get memory size up to 4 GiBs
     jc .terminate
 
     cmp ah, 0x86
@@ -217,19 +217,19 @@ __get_mem_size:
 ;
 ; __get_smap
 ;
-; Input: (ES:)DI (sys mem map struct ptr), ESI (memory size)
-; Output: AX (num of ents)
+; Input: (ES:)DI (smap struct ptr), ESI (memory size)
+; Output: AX (entries count)
 ;
 ; Note:
 ;  Address Range Descriptor:
-;   0x00000000 | dword | base addr
+;   0x00000000 | dword | base address
 ;   0x00000004 | dword | lenght
 ;   0x00000008 | dword | type
 ;
 
 __get_smap:
     pusha
-    mov eax, 0x0000e820 ; get sys mem map
+    mov eax, 0x0000e820 ; get smap
     xor ebx, ebx ; continuation
     mov ecx, 0x00000018 ; buffer size
     mov edx, 'PAMS' ; signature
@@ -243,11 +243,11 @@ __get_smap:
     test ebx, ebx
     jz .terminate ; only one descriptor
 
-    xor bp, bp ; addr range descriptors counter
+    xor bp, bp ; address range descriptors counter
 
     ;mov esi, dword [sda.mem_sz]
     shl esi, 0x0a
-    dec esi ; last available addr (max. 0xffffffff)
+    dec esi ; last available address (max. 0xffffffff)
     jmp .check_desc
 
     .next_ent:
@@ -268,15 +268,15 @@ __get_smap:
     jz .skip_entry ; skip ent
 
     .store_ent:
-    mov edx, dword [es:di+0x0004] ; base addr high
+    mov edx, dword [es:di+0x0004] ; base address high
 
     test edx, edx
-    jnz .skip_entry ; we don't need addr range descriptors above 4 GiBs
+    jnz .skip_entry ; we don't need address range descriptors above 4 GiBs
 
     mov eax, dword [es:di] ; base low
 
-    cmp eax, esi ; esi contains last mapped addr
-    ja .skip_entry ; skip addr range descriptors above detected mem size
+    cmp eax, esi ; esi contains last mapped address
+    ja .skip_entry ; skip address range descriptors above detected mem size
 
     mov edx, dword [es:di+0x000c] ; length high
 
@@ -289,19 +289,19 @@ __get_smap:
     jz .skip_entry ; invalid length
 
     dec ecx
-    add ecx, eax ; base addr low
+    add ecx, eax ; base address low
     ;jc .correct_length ; above 4 GiBs
 
     cmp ecx, esi
     ja .correct_length
 
-    .length_corr:
+    .length_correct:
     ;mov ecx, dword [es:di+0x0008]
     ;add ecx, dword [es:di]
     ;dec ecx
 
     ;cmp ecx, esi
-    ;ja .skip_entry ; skip addr range descriptors above detected mem size
+    ;ja .skip_entry ; skip address range descriptors above detected mem size
 
     mov ecx, dword [es:di+0x0008] ; length low
     mov dword [es:di+0x0004], ecx
@@ -329,7 +329,7 @@ __get_smap:
     inc ecx
     sub ecx, dword [es:di] ; base low
     mov dword [es:di+0x0008], ecx ; length low
-    jmp .length_corr
+    jmp .length_correct
 
     .terminate:
     popa

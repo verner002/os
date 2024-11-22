@@ -90,6 +90,8 @@ __entry:
     pop es
     mov cx, ax
     call __print_smap
+    movzx eax, ax
+    mov dword [__data.smap_entries_count], eax
     pop es
 
     mov si, __data.correct_gdt
@@ -225,6 +227,9 @@ __main:
 
     mov eax, __SYS_SEGMENT<<4
     call __parse_pe
+
+    push __SMAP_SEGMENT<<4
+    push dword [__data.smap_entries_count]
     
     call eax
     ;jmp 0x0008:__SYS_SEGMENT<<4 ; execute kernel
@@ -273,3 +278,5 @@ __data:
     .kibs db ` KiBs\n\r\0`
     .ok db `Ok\n\r\0`
     .panic db `PANIC\n\r\0`
+    
+    .smap_entries_count dd 0x00000000

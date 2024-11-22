@@ -51,7 +51,7 @@ int __putc(byte c, byte a) {
     }
 
     if (cursor_y >= VIDEO_MEM_ROWS) {
-        cursor_y = VIDEO_MEM_ROWS; // this is safer than --cursor_y
+        cursor_y = VIDEO_MEM_ROWS - 1; // this is safer than --cursor_y
         __scroll_down();
     }
 
