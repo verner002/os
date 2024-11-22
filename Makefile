@@ -41,7 +41,7 @@ INCS := $(INC)
 INC_FLAGS := $(addprefix -I,$(INCS))
 
 ASM_FLAGS ?= -I$(INC)/asm
-C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie
+C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables
 
 MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
 
@@ -64,7 +64,7 @@ loader: #$(LOADER_OBJS) # produces raw binary file (loader objs must come first!
 	$(ASM) $(ASM_FLAGS) -I$(SRC)/loader $(LOADER_SRC)/main.asm -o $(BIN)/$(LOADER_TARGET)
 
 kernel: $(KERNEL_OBJS)
-	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) --oformat=pei-i386 -m i386pe --image-base 0x00080000 -e entry -o $(BIN)/$(KERNEL_TARGET)
+	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) -O2 --oformat=pei-i386 -m i386pe --image-base 0x00090000 -e entry -o $(BIN)/$(KERNEL_TARGET)
 
 drivers: $(DRIVERS_OBJS)
 

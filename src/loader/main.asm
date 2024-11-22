@@ -27,6 +27,17 @@ __entry:
     ;mov sp, 0x7c00
     ;sti
 
+    push 0x0040
+    pop es
+
+    mov ax, 0x0600
+    mov bh, 0x07
+    xor cx, cx
+    mov dh, byte [es:0x0084] ; TODO: store this values for kernel?
+    mov dl, byte [es:0x004a] ; it's a word actually, not a byte
+    dec dx
+    int 0x10
+
     mov si, __data.enable_a20
     call __print_str
 
@@ -102,6 +113,10 @@ __entry:
     mov si, __data.enter_pm
     call __print_str
 
+    mov ah, 0x03
+    xor bh, bh
+    int 0x10 ; dx=cur_pos
+
     cli
     lgdt [__gdt_ptr]
 
@@ -121,7 +136,7 @@ __entry:
     and ax, 0xffec ; disable pse, pvi and vme
     mov cr4, eax
 
-    jmp 0x0008:__main ; FIXME: loader must reside in first segment!!!
+    jmp 0x0008:__main
 
 ;
 ; __gdt
@@ -152,6 +167,14 @@ __gdt:
     db 11001111b    ; flags and limit
     db 0x00         ; base
 
+    .tss:
+    dw 0xffff       ; limit
+    dw 0x0000       ; base
+    db 0x00         ; base
+    db 10001001b    ; access byte
+    db 11001111b    ; flags and limit
+    db 0x00         ; base
+
 ;
 ; __gdt_ptr
 ;
@@ -165,8 +188,6 @@ __gdt_ptr:
 %include "gdt.inc"
 
 bits 32
-
-%include "pe.inc"
 
 %define __SYS_SEGMENT 0x8000 ; TODO: use value from same file here and in bootloader
 
@@ -183,8 +204,10 @@ __main:
     mov ss, ax
     mov esi, 0x00007c00
 
+    call __set_cur_pos32
+
     mov esi, __data.ok
-    ;call __pm_print_str
+    call __print_str32
 
     ;lidt [__idt_ptr] -- do in kernel?
     ;sti
@@ -195,18 +218,16 @@ __main:
     or eax, 0x80000000 ; enable paging
     mov cr0, eax
 
-    ;mov edi, __SYS_SEGMENT<<4
-    ;call __parse_pe
+    ; let's assume, kernel has at most 4 MiB
+    ; we create a pt following the self map pt
+    ; and start mapping virtual space from
+    ; 0x80000000 to kernel's physical address
 
-    mov eax, 0x00080000
-    mov ebx, dword [eax+mz_header.e_lfanew]
-    add eax, ebx
-    mov ebx, dword [eax+opt_header.img_base]
-    mov eax, dword [eax+opt_header.entry_point]
-    add eax, ebx
+    mov eax, __SYS_SEGMENT<<4
+    call __parse_pe
+    
     call eax
-
-    ;jmp 0x0008:0x00080000 ; execute kernel
+    ;jmp 0x0008:__SYS_SEGMENT<<4 ; execute kernel
 
 ;
 ; __idt_ptr
@@ -216,8 +237,9 @@ __main:
 ;    dw 0x07ff ; length
 ;    dd __IDT_ADDRESS ; ptr
 
+%include "video32.inc"
 %include "paging.inc"
-;%include "peldr.inc"
+%include "peldr.inc"
 
 ;
 ; __panic
@@ -251,9 +273,3 @@ __data:
     .kibs db ` KiBs\n\r\0`
     .ok db `Ok\n\r\0`
     .panic db `PANIC\n\r\0`
-
-    .section_comment db ``
-    .section_edata db ``
-    .section_idata db ``
-    .section_rsrc db ``
-    .section_tls db ``

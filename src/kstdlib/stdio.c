@@ -85,7 +85,7 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
                 }
                 default: return -1;
             }
-        } else if (c == '\033') { // escape sequences
+        } /*else if (c == '\033') { // escape sequences
             if (s[++i] != '[') return -1;
 
             unsigned p = 0;
@@ -121,7 +121,7 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
                 ++p;
             } while (c == ';');
 
-        } else errno = putc(c, stream);
+        }*/ else errno = putc(c, stream);
     }
 
     return errno;

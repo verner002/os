@@ -15,7 +15,7 @@
  * Main
 */
 
-void entry(void) {
+void entry() {
     printf("Kernel ready!\n");
 
     for (;;) {

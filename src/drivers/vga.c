@@ -32,10 +32,30 @@ void __init_vga(void) {
 */
 
 int __putc(byte c, byte a) {
-    word data = ((word)(a + !a * VIDEO_MEM_DEF_ATTR) << 0x08) | c;
-        // (a ? a : VIDEO_MEM_DEF_ATTR)
+    if (c == '\r') cursor_x = 0;
+    else if (c == '\n') {
+        ++cursor_y;
+        cursor_x = 0;
+    } else {
+        if (c < 0x20 || c > 0xfe) c = '?'; // invalid character
 
-    video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = data;
+        word data = ((word)(a + !a * VIDEO_MEM_DEF_ATTR) << 0x08) | c;
+            // (a ? a : VIDEO_MEM_DEF_ATTR)
+
+        video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = data;
+
+        if (++cursor_x >= VIDEO_MEM_COLS) {
+            ++cursor_y;
+            cursor_x = 0;
+        }
+    }
+
+    if (cursor_y >= VIDEO_MEM_ROWS) {
+        cursor_y = VIDEO_MEM_ROWS; // this is safer than --cursor_y
+        __scroll_down();
+    }
+
+    __setcurpos(cursor_y, cursor_x);
 
     return 0; // error code
 }
@@ -56,4 +76,13 @@ int __setcurpos(dword l, dword c) {
     __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (byte)(index >> 0x08)); // compiler should optimize this to use low and high part of an register
     
     return 0;
+}
+
+/**
+ * __scroll_down
+*/
+
+void __scroll_down(void) {
+    for (unsigned int i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j) video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
+    for (unsigned int i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i) video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
 }
