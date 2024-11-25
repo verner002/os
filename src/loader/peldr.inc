@@ -72,7 +72,7 @@ __parse_pe:
     ; edi=section virtual address
 
     .map_page:
-    ;call __map_page
+    ;call __map_page -- implement (let's assume kernel has up to 4 MiB)
     dec edx
     jnz .map_page
 

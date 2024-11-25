@@ -38,6 +38,11 @@ __entry:
     dec dx
     int 0x10
 
+    mov ah, 0x02
+    xor bh, bh
+    xor dx, dx
+    int 0x10
+
     mov si, __data.enable_a20
     call __print_str
 
@@ -220,6 +225,9 @@ __main:
     or eax, 0x80000000 ; enable paging
     mov cr0, eax
 
+    mov esi, __data.parse_kernel
+    call __print_str32
+
     ; let's assume, kernel has at most 4 MiB
     ; we create a pt following the self map pt
     ; and start mapping virtual space from
@@ -227,6 +235,9 @@ __main:
 
     mov eax, __SYS_SEGMENT<<4
     call __parse_pe
+
+    mov esi, __data.ok
+    call __print_str32
 
     movzx ebx, byte [__cur_pos.cur_x]
     push ebx

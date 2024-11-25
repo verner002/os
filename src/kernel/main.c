@@ -29,13 +29,7 @@ static int __compare_ards(void const *ard1, void const *ard2) {
 void entry(dword smap_ards_count, ADDRESS_RANGE_DESCRIPTOR *smap, dword cursor_y, dword cursor_x) {
     __setcurpos(cursor_y, cursor_x);
     
-    printf("Kernel ready!\n");
-
-    // !!! VALUES USED ARE ONLY FOR TESTING !!!
-    init_pager((dword *)0x00008000, 32); // TODO: use smap to find suitable region for pmm?
-    printf("physical page address: %p\n", kalloc(1)); // test 1 (ok)
-    printf("physical page address: %p\n", kalloc(31)); // test 2 (fail)
-    printf("physical page address: %p\n", kalloc(30)); // test 3 (ok)
+    printf("Welcome to Kernel!\n");
 
     // sort map and *merge* free, reserved and overlapping regions
     qsort(smap, smap_ards_count, sizeof(ADDRESS_RANGE_DESCRIPTOR), &__compare_ards);
@@ -54,8 +48,14 @@ void entry(dword smap_ards_count, ADDRESS_RANGE_DESCRIPTOR *smap, dword cursor_y
             default: type = "Unknown"; break;
         }
         
-        printf("base: %u, size: %u, type: %s\n", descriptor->base, descriptor->size, type);
+        printf("base: %p, size: %u, type: %s\n", (void *)descriptor->base, descriptor->size, type);
     }
+
+    // !!! VALUES USED ARE ONLY FOR TESTING !!!
+    init_pager((dword *)0x00008000, 32); // TODO: use smap to find suitable region for pmm?
+    printf("physical page address: %p\n", kalloc(1)); // test 1 (ok)
+    printf("physical page address: %p\n", kalloc(31)); // test 2 (fail)
+    printf("physical page address: %p\n", kalloc(30)); // test 3 (ok)
 
     for (;;) {
         asm("cli");

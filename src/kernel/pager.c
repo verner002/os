@@ -1,5 +1,5 @@
 /**
- * Pager
+ * Physical Memory Manager (Page Frame Allocator, Pager)
  * 
  * Author: verner002
 */
@@ -48,7 +48,7 @@ void *kalloc(unsigned int n) {
     if (chunks_count) { // handles allocation of large blocks of memory
         unsigned int last_chunk = size - chunks_count + 1;
         unsigned int chunks_to_find = chunks_count;
-        unsigned int i = 0;
+        unsigned int i = 0; // TODO: start from offset
 
         for (; i < last_chunk; ++i) {
             if (!bitmap[i]) {
@@ -62,7 +62,7 @@ void *kalloc(unsigned int n) {
 
                 if (!chunks_to_find) {
                     if (!pages_count) {
-                        // allocate, change offset
+                        // TODO: allocate, change offset
                         return (void *)(i * 16 * 4096); // ### THIS ###
                     } // else...
 
@@ -71,7 +71,7 @@ void *kalloc(unsigned int n) {
                     // mov eax, 0x00008000
                     // sar eax, cl
                     if (i > 0 && !(bitmap[i - 1] & ~(((word)0x8000 >> (pages_count - 1)) - 1))) {
-                        // allocate, change offset
+                        // TODO: allocate, change offset
                         return (void *)((i * 16 - pages_count) * 4096);
                     }
                     
@@ -82,7 +82,7 @@ void *kalloc(unsigned int n) {
                     // dec eax
                     unsigned int l = ++j/* + 1*/; // ### HERE ###
                     if (l < size && !(bitmap[l] & (((word)0x0001 << pages_count) - 1))) {
-                        // allocate, change offset
+                        // TODO: allocate, change offset
                         return (void *)(i * 16 * 4096); // TODO: merge with ### THIS ###?
                     }
 
@@ -104,7 +104,7 @@ void *kalloc(unsigned int n) {
 
                 for (unsigned int j = 0; j < 32 - pages_count; ++j) {
                     if (!(dchunk & (mask << j))) {
-                        // allocate, change offset
+                        // TODO: change offset
                         bitmap[i] |= (word)(mask << j);
                         bitmap[i + 1] |= (word)((mask << j) >> 16);
                         return (void *)((i * 16 + j) * 4096);
