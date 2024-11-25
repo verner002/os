@@ -2,6 +2,8 @@
  * Standard Input/Output
  * 
  * Author: verner002
+ * 
+ * TODO: use errno from errno.h(c?)
 */
 
 /**
@@ -81,6 +83,21 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
 
                     do n[j++] = u % 10 + '0'; while (u /= 10);
                     do errno = putc(n[--j], stream); while (j && !errno);
+                    break;
+                }
+                case 'p': {
+                    unsigned int p = va_arg(args, unsigned int);
+                    //fprintf(stream, "0x%08x", p); -- implement!!!
+                    putc('0', stream);
+                    putc('x', stream);
+
+                    for (unsigned int i = 0; i < sizeof(unsigned int) * 2; ++i) {
+                        byte d = ((p = (p << 4) | (p >> 28)) & 0x0f) + '0';
+
+                        if (d > '9') d += 'a' - '9' - 1;
+                        
+                        putc(d, stream);
+                    }
                     break;
                 }
                 default: return -1;

@@ -1,4 +1,5 @@
 .vscode/
+temp/
 build/
 bin/
 fdd.img
