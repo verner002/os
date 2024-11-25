@@ -8,6 +8,7 @@
  * Includes
 */
 
+#include "types.h"
 #include "kstdlib/string.h"
 
 /**
@@ -42,4 +43,14 @@ char *strncpy(char *d, char const *s, unsigned int n) {
     for (unsigned int i = 0; i < n; ++i) d[i] = t = t ? s[i] : '\0';
 
     return d;
+}
+
+/**
+ * memcpy
+*/
+
+void *memcpy(void *destination, void const *source, unsigned int n) {
+    for (unsigned int i = 0; i < n; ++i) ((byte *)destination)[i] = ((byte *)source)[i];
+
+    return destination;
 }
