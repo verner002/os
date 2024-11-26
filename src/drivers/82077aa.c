@@ -131,7 +131,7 @@ int __wait_for_fdc_input_buff(void) {
 
 void __write_byte(byte v) {
     for (unsigned int i = 0; i < 512; ++i) {
-        if (__inb(FDC_MAIN_STATUS_REGISTER) & 0xc0 == 0x80) {
+        if ((__inb(FDC_MAIN_STATUS_REGISTER) & 0xc0) == 0x80) {
             __outb(FDC_DATA_FIFO, v);
             return;
         }
@@ -145,9 +145,10 @@ void __write_byte(byte v) {
 */
 
 byte __read_byte(void) {
-    for (unsigned int i = 0; i < 512; ++i) if (__inb(FDC_MAIN_STATUS_REGISTER) & 0xc0 == 0xc0) return __inb(FDC_DATA_FIFO);
+    for (unsigned int i = 0; i < 512; ++i) if ((__inb(FDC_MAIN_STATUS_REGISTER) & 0xc0) == 0xc0) return __inb(FDC_DATA_FIFO);
 
     errno = ETIMEDOUT;
+    return 0;
 }
 
 /**
@@ -174,7 +175,7 @@ void __software_reset(void) {
             if (errno) break;
         }
 
-        if (errno || __inb(FDC_MAIN_STATUS_REGISTER) & 0xc0 != 0x80) continue; // fdc not ready for config
+        if (errno || (__inb(FDC_MAIN_STATUS_REGISTER) & 0xc0) != 0x80) continue; // fdc not ready for config
 
         __outb(FDC_DATA_FIFO, FDC_COMMAND_CONFIGURE);
 

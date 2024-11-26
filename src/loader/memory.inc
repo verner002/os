@@ -222,8 +222,8 @@ __get_mem_size:
 ;
 ; Note:
 ;  Address Range Descriptor:
-;   0x00000000 | dword | base address
-;   0x00000004 | dword | lenght
+;   0x00000000 | dword | base
+;   0x00000004 | dword | size
 ;   0x00000008 | dword | type
 ;
 
@@ -268,7 +268,7 @@ __get_smap:
     jz .skip_descriptor ; skip ent
 
     .store_descriptor:
-    mov edx, dword [es:di+0x0004] ; base address high
+    mov edx, dword [es:di+0x0004] ; base high
 
     test edx, edx
     jnz .skip_descriptor ; we don't need address range descriptors above 4 GiBs
@@ -278,24 +278,24 @@ __get_smap:
     cmp eax, esi ; esi contains last mapped address
     ja .skip_descriptor ; skip address range descriptors above detected mem size
 
-    mov edx, dword [es:di+0x000c] ; length high
+    mov edx, dword [es:di+0x000c] ; size high
 
     test edx, edx
-    jnz .correct_length
+    jnz .correct_size
 
-    mov ecx, dword [es:di+0x0008] ; length low
+    mov ecx, dword [es:di+0x0008] ; size low
 
     test ecx, ecx
-    jz .skip_descriptor ; invalid length
+    jz .skip_descriptor ; invalid size
 
     dec ecx
-    add ecx, eax ; base address low
-    ;jc .correct_length ; above 4 GiBs
+    add ecx, eax ; base low
+    ;jc .correct_size ; above 4 GiBs
 
     cmp ecx, esi
-    ja .correct_length
+    ja .correct_size
 
-    .length_correct:
+    .size_correct:
     ;mov ecx, dword [es:di+0x0008]
     ;add ecx, dword [es:di]
     ;dec ecx
@@ -303,7 +303,7 @@ __get_smap:
     ;cmp ecx, esi
     ;ja .skip_descriptor ; skip address range descriptors above detected mem size
 
-    mov ecx, dword [es:di+0x0008] ; length low
+    mov ecx, dword [es:di+0x0008] ; size low
     mov dword [es:di+0x0004], ecx
     mov ecx, dword [es:di+0x0010] ; type
     mov dword [es:di+0x0008], ecx
@@ -322,14 +322,14 @@ __get_smap:
     clc
     ret
 
-    .correct_length:
+    .correct_size:
     xor ecx, ecx
-    mov dword [es:di+0x000c], ecx ; length high
+    mov dword [es:di+0x000c], ecx ; size high
     mov ecx, esi
     sub ecx, dword [es:di] ; base low
     inc ecx
-    mov dword [es:di+0x0008], ecx ; length low
-    jmp .length_correct
+    mov dword [es:di+0x0008], ecx ; size low
+    jmp .size_correct
 
     .terminate:
     popa

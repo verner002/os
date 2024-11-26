@@ -12,13 +12,13 @@
 
 static dword *bitmap; // max 128 KiB to represent 4 GiB
 static dword size; // max 1024*1024/16 pages to represent 4 GiB
-static unsigned int offset; // first free page in bitmap
+static unsigned int last_index;
 
 /**
  * init_pager
 */
 
-void init_pager(dword *bitmap_ptr, unsigned int pages_count) {
+void __init_pager(dword *bitmap_ptr, unsigned int pages_count) {
     if (pages_count % 16 || pages_count < 32) {
         //error();
         return;
@@ -26,7 +26,7 @@ void init_pager(dword *bitmap_ptr, unsigned int pages_count) {
 
     bitmap = bitmap_ptr;
     size = pages_count / 16; // 16 pages per dword
-    //offset = 0;
+    last_index = 0;
 
     for (unsigned int i = 1; i < size; ++i) bitmap[i] = 0;
 
@@ -36,10 +36,59 @@ void init_pager(dword *bitmap_ptr, unsigned int pages_count) {
 }
 
 /**
- * kalloc
+ * pgalloc
+ * 
+ * Note:
+ *  Allocates a page.
 */
 
-void *kalloc(unsigned int n) {
+void *pgalloc(void) {
+    for (unsigned int i = last_index; i < size; ++i) {
+        if (~bitmap[i]) {
+            word temp = bitmap[i];
+            temp ^= bitmap[i] |= temp + 1; // toggles the first 0 bit it finds
+            
+            // fast log2
+            register unsigned int r = (temp & 0x0000aaaa) != 0;
+            r |= ((temp & 0x0000cccc) != 0) << 1;
+            r |= ((temp & 0x0000f0f0) != 0) << 2;
+            r |= ((temp & 0x0000ff00) != 0) << 3;
+
+            last_index = i; // update offset
+            
+            return (void *)((i * 16 + r) * 4096);
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * pgfree
+ * 
+ * Note:
+ *  Deallocates a page.
+*/
+
+void pgfree(void *p) {
+    if (!p) return;
+
+    unsigned int i = (unsigned int)p / 4096;
+
+    bitmap[i / 16] &= ~(1 << (i % 16));
+
+    if (i < last_index) last_index = i; // update offset
+}
+
+/**
+ * pgsalloc
+ * 
+ * Note:
+ *  Allocates a contiguous block of pages. Use this
+ *  function to allocate memory for DMA transfers.
+*/
+
+void *pgsalloc(unsigned int n) {
     if (!n) return NULL;
 
     unsigned int chunks_count = n / 16; // number of words
