@@ -31,7 +31,8 @@ void entry(dword smap_ards_count, ADDRESS_RANGE_DESCRIPTOR *smap, dword cursor_y
     
     printf("Welcome to Kernel!\n");
 
-    // sort map and *merge* free, reserved and overlapping regions
+    // smap may be unsorted and some regions may overlap (in some rare cases, mask as unknown?)
+    // sort map, *merge* free memory regions (and correct overlapping regions?)
     qsort(smap, smap_ards_count, sizeof(ADDRESS_RANGE_DESCRIPTOR), &__compare_ards);
 
     for (unsigned int i = 0; i < smap_ards_count; ++i) {
@@ -40,12 +41,12 @@ void entry(dword smap_ards_count, ADDRESS_RANGE_DESCRIPTOR *smap, dword cursor_y
         char *type;
 
         switch (descriptor->type) {
-            case 1: type = "Free"; break;
-            case 2: type = "Reserved"; break;
-            case 3: type = "ACPI Reclaimable"; break;
-            case 4: type = "NVS"; break;
-            case 5: type = "Bad"; break;
-            default: type = "Unknown"; break;
+            case 1: type = "Free"; break; // usable memory, merge these regions if possible
+            case 2: type = "Reserved"; break; // don't use
+            case 3: type = "ACPI Reclaimable"; break; // we can use this after we're done with acpi
+            case 4: type = "ACPI NVS"; break; // don't use
+            case 5: type = "Bad"; break; // don't use
+            default: type = "Unknown"; break; // // don't use, change type to reserved?
         }
         
         printf("base: %p, size: %u, type: %s\n", (void *)descriptor->base, descriptor->size, type);

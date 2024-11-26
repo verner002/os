@@ -87,17 +87,21 @@ __entry:
     pop es
     mov esi, ebx
     call __get_smap
-    pop es
-    jc __panic
-
-    push es
-    push __SMAP_SEGMENT
-    pop es
-    mov cx, ax
-    call __print_smap
     movzx eax, ax
     mov dword [__data.smap_entries_count], eax
     pop es
+    jc __panic
+
+    mov esi, __data.ok
+    call __print_str
+
+    ;push es
+    ;push __SMAP_SEGMENT
+    ;pop es
+    ;mov cx, ax
+    ;call __print_smap
+    ;movzx eax, ax
+    ;pop es
 
     mov si, __data.correct_gdt
     call __print_str
@@ -286,7 +290,7 @@ __halt:
 __data:
     .enable_a20 db `Enabling A20... \0`
     .memory_detect db `Detecting memory... \0`
-    .construct_smap db `Constructing SMAP...\n\r\0`
+    .construct_smap db `Constructing SMAP... \0`
     .correct_gdt db `Correcting GDT... \0`
     .enter_pm db `Entering PM... \0`
     .parse_kernel db `Parsing kernel... \0`
