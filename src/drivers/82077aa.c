@@ -38,7 +38,7 @@ void __detect_drives(void) {
  * __set_datarate
 */
 
-int __set_datarate(DRIVE drive) {
+void __set_datarate(DRIVE drive) {
     switch (drive.type) {
         case DRIVE_TYPE_NO_DRIVE: break;
         case DRIVE_TYPE_12MB_525:
@@ -50,10 +50,8 @@ int __set_datarate(DRIVE drive) {
             __outb(FDC_DATARATE_SELECT_REGISTER, 0x03);
             __outb(FDC_CONFIGURATION_CONTROL_REGISTER, 0x03);
             break;
-        default: return -1;
+        default: errno = ENODEV; break;
     }
-
-    return 0;
 }
 
 /**
@@ -83,10 +81,10 @@ void __turn_motor_off(DRIVE drive) {
 }
 
 /**
- * __irq_handler
+ * __fdc_irq6_handler
 */
 
-void __irq_handler(void) {
+void __fdc_irq6_handler(void) {
     controller.irqReceived = TRUE;
 }
 
@@ -117,13 +115,13 @@ static void __fdc_reset(void) {
  * __wait_for_fdc_input_buff
 */
 
-int __wait_for_fdc_input_buff(void) {
+/*int __wait_for_fdc_input_buff(void) {
     while (!(__inb(FDC_MAIN_STATUS_REGISTER) & 0x80)); // wait for fdc
 
     if (!(__inb(FDC_MAIN_STATUS_REGISTER) & 0x40)) return -1; // fdc should expect an in opcode
 
     return 0;
-}
+}*/
 
 /**
  * __write_byte
@@ -217,7 +215,7 @@ void __software_reset(void) {
  * __init_drives
 */
 
-int __init_drives(void) {
+void __init_drives(void) {
     controller.master.id = 0x00;
     
     controller.slave.id = 0x01;
@@ -226,8 +224,6 @@ int __init_drives(void) {
 
     __set_datarate(controller.master);
     __set_datarate(controller.slave);
-
-    return -1;
 }
 
 /**

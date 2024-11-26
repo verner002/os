@@ -10,14 +10,15 @@
  * Includes
 */
 
+#include "kstdlib/errno.h"
 #include "drivers/ports.h"
 
 /**
  * Declarations
 */
 
-int __init_ps2(void);
+void __init_ps2(void);
 void __enable_ps2_a_port(void);
 void __disable_ps2_a_port(void);
-void __wait_for_ps2_input_buff(void);
-void __wait_for_ps2_ouput_buff(void);
+void __ps2_write_byte(byte r, byte v);
+byte __ps2_read_byte(void);

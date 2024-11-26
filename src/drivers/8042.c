@@ -14,55 +14,47 @@
  * __init_ps2
 */
 
-int __init_ps2(void) {
+void __init_ps2(void) {
+    byte buffer;
+
     __disable_ps2_a_port();
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0xa7); // disable port b, we won't use it
+    __inb(PS2_DATA_PORT_REGISTER); // flush output buffer
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0xa7); // disable port b, we won't use it
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0x20); // read config byte
 
-    __inb(PS2_DATA_PORT_REGISTER); // flush out buffer
+    buffer = __ps2_read_byte();
+    if (errno) return;
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0x20); // read config byte
+    byte config_byte = buffer & 0x24; // disable translantion for port a, disable irqs, enable signal for port a
 
-    __wait_for_ps2_ouput_buff();
-    byte config_byte = __inb(PS2_DATA_PORT_REGISTER) & 0x24; // disable translantion for port a, disable irqs, enable signal for port a
-    
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0x60); // write config byte
-    
-    __wait_for_ps2_input_buff();
-    __outb(PS2_DATA_PORT_REGISTER, config_byte);
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0x60); // write config byte    
+    __ps2_write_byte(PS2_DATA_PORT_REGISTER, config_byte);
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0xaa); // test ps/2 controller
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0xaa); // test ps/2 controller
 
-    __wait_for_ps2_ouput_buff();
+    buffer = __ps2_read_byte();
+    if (errno) return;
 
-    if (__inb(PS2_DATA_PORT_REGISTER) != 0x55) return -1;
+    if (buffer != 0x55) errno = EIO;
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0xab); // test port a
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0xab); // test port a
 
-    __wait_for_ps2_ouput_buff();
+    buffer = __ps2_read_byte();
+    if (errno) return;
 
-    if (__inb(PS2_DATA_PORT_REGISTER)) return -1;
+    if (buffer) errno = EIO;
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0x20); // read config byte
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0x20); // read config byte
 
-    __wait_for_ps2_ouput_buff();
-    config_byte = __inb(PS2_DATA_PORT_REGISTER) | 0x01; // enable irq for port a
+    buffer = __ps2_read_byte();
+    if (errno) return;
 
-    __wait_for_ps2_input_buff();
-    __outb(PS2_COMMAND_REGISTER, 0x60); // write config byte
-    
-    __wait_for_ps2_input_buff();
-    __outb(PS2_DATA_PORT_REGISTER, config_byte);
+    config_byte = buffer | 0x01; // enable irq for port a
 
+    __ps2_write_byte(PS2_COMMAND_REGISTER, 0x60); // write config byte
+    __ps2_write_byte(PS2_DATA_PORT_REGISTER, config_byte);
     __enable_ps2_a_port();
-
-    return 0;
 }
 
 /**
@@ -70,8 +62,7 @@ int __init_ps2(void) {
 */
 
 void __enable_ps2_a_port(void) {
-    __wait_for_ps2_input_buff();
-    __outb(PS2_STATUS_REGISTER, 0xae);
+    __ps2_write_byte(PS2_STATUS_REGISTER, 0xae);
 }
 
 /**
@@ -79,8 +70,7 @@ void __enable_ps2_a_port(void) {
 */
 
 void __disable_ps2_a_port(void) {
-    __wait_for_ps2_input_buff();
-    __outb(PS2_STATUS_REGISTER, 0xad);
+    __ps2_write_byte(PS2_STATUS_REGISTER, 0xad);
 }
 
 /**
@@ -92,17 +82,27 @@ void __disable_ps2_a_port(void) {
 */
 
 /**
- * __wait_for_ps2_input_buff
+ * __ps2_write_byte
 */
 
-void __wait_for_ps2_input_buff(void) {
-    while (__inb(PS2_STATUS_REGISTER) & 0x02); // TODO: add timeout
+void __ps2_write_byte(byte r, byte v) {
+    for (unsigned int i = 0; i < 512; ++i) {
+        if (!(__inb(PS2_STATUS_REGISTER) & 0x02)) {
+            __outb(r, v);
+            return;
+        }
+    }
+
+    errno = ETIMEDOUT;
 }
 
 /**
- * __wait_for_ps2_output_buff
+ * __ps2_read_byte
 */
 
-void __wait_for_ps2_ouput_buff(void) {
-    while (!(__inb(PS2_STATUS_REGISTER) & 0x01)); // TODO: add timeout
+byte __ps2_read_byte(void) {
+    for (unsigned int i = 0; i < 512; ++i) if (__inb(PS2_STATUS_REGISTER) & 0x01) return __inb(PS2_DATA_PORT_REGISTER);
+
+    errno = ETIMEDOUT;
+    return 0;
 }

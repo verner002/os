@@ -12,9 +12,8 @@
 
 #include "null.h"
 #include "types.h"
-#include "cpu.h"
-
 #include "kstdlib/errno.h"
+#include "drivers/cpu.h"
 #include "kstdlib/stdlib.h"
 
 /**

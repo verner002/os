@@ -12,9 +12,9 @@
 
 #include "types.h"
 #include "bool.h"
+#include "kstdlib/errno.h"
 #include "drivers/ports.h"
 #include "drivers/cmos.h"
-#include "kstdlib/errno.h"
 
 /**
  * Constants
@@ -85,5 +85,7 @@ struct _drive {
  * Declarations
 */
 
-int __init_drives(void);
+void __init_drives(void);
+void __fdc_irq6_handler(void);
+void __software_reset(void);
 void __wait_for_fdc(void);

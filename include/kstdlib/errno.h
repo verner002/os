@@ -11,7 +11,9 @@
 */
 
 enum {
+    EIO = 5,
     EBUSY = 16,
+    ENODEV = 19,
     ETIMEDOUT = 110
 };
 
@@ -19,4 +21,4 @@ enum {
  * Global Variables
 */
 
-int errno;
+extern int errno;

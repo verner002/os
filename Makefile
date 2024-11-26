@@ -41,7 +41,7 @@ INCS := $(INC)
 INC_FLAGS := $(addprefix -I,$(INCS))
 
 ASM_FLAGS ?= -I$(INC)/asm
-C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables -save-temps=obj
+C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables -save-temps=obj -g
 
 MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
 
