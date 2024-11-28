@@ -92,7 +92,7 @@ void free(void *p) {
  * qsort
 */
 
-static void __swap(void *array, unsigned int element_size, int i, int j) {
+static void __swap(void *array, int element_size, int i, int j) {
     if (i == j) return; // in-place swap using xor when i==j would result in 0
     
     byte *i_pieces = array + element_size * i;
@@ -105,7 +105,7 @@ static void __swap(void *array, unsigned int element_size, int i, int j) {
     }
 }
 
-static int __partition(void *array, unsigned int element_size, int (*compare)(void const *element1, void const *element2), int low, int high) {
+static int __partition(void *array, int element_size, int (*compare)(void const *element1, void const *element2), int low, int high) {
     void *pivot = array + element_size * low;
     int i = low, j = high;
 
@@ -121,7 +121,7 @@ static int __partition(void *array, unsigned int element_size, int (*compare)(vo
     return j;
 }
 
-static void __qsort(void *array, unsigned int element_size, int (*compare)(void const *element1, void const *element2), int low, int high) {
+static void __qsort(void *array, int element_size, int (*compare)(void const *element1, void const *element2), int low, int high) {
     if (low >= high || low < 0) return;
     
     int p = __partition(array, element_size, compare, low, high);
@@ -130,6 +130,6 @@ static void __qsort(void *array, unsigned int element_size, int (*compare)(void 
     __qsort(array, element_size, compare, p + 1, high);
 }
 
-void qsort(void *array, unsigned int array_size, unsigned int element_size, int (*compare)(void const *element1, void const *element2)) {
+void qsort(void *array, unsigned int array_size, int element_size, int (*compare)(void const *element1, void const *element2)) {
     __qsort(array, element_size, compare, 0, array_size - 1);
 }

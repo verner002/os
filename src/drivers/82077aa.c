@@ -84,7 +84,8 @@ void __turn_motor_off(DRIVE drive) {
  * __fdc_irq6_handler
 */
 
-void __fdc_irq6_handler(void) {
+__attribute__((interrupt)) void __fdc_irq6_handler(INTERRUPT_FRAME *frame) {
+    __send_eoi(0x06);
     controller.irqReceived = TRUE;
 }
 

@@ -5,6 +5,12 @@
 */
 
 /**
+ * Includes
+*/
+
+#include "kstdlib/errno.h"
+
+/**
  * Global Variables
 */
 

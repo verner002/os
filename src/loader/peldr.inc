@@ -17,6 +17,7 @@
 ;
 
 __parse_pe:
+    push eax
     cmp word [eax+__mz_header.magic], __MZ_MAGIC
     jnz .terminate ; invalid mz magic
 
@@ -43,7 +44,7 @@ __parse_pe:
     ; esi=ptr to section table
 
     .map_section:
-    call __skip_sections
+    call __skip_sections ; TODO: implement support for names longer than 8 chars
     jz .skip_section
 
     mov edx, dword [esi+__section.virtual_size]
@@ -94,13 +95,16 @@ __parse_pe:
     .skip_section:
     add esi, __section_size
     loop .map_section
-
+    pop edx ; pe ptr
+    add edx, dword [eax+__coff_header.symbol_table_ptr]
+    mov ecx, dword [eax+__coff_header.symbols_count]
     mov eax, dword [eax+__opt_header.entry_point]
     add eax, ebx ; image base
     clc
     ret
 
     .terminate:
+    pop eax
     stc
     ret
 
@@ -113,6 +117,12 @@ __parse_pe:
 
 __skip_sections:
     push edi
+    test dword [esi], 0xffff ; long name
+    jz .return
+
+    test byte [esi], '/' ; long name (some tools use this format)
+    jz .return
+
     mov edi, .section_comment
     call __match_section
     jz .return

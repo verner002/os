@@ -29,6 +29,15 @@ typedef unsigned int FILE;
 typedef __builtin_va_list va_list;
 
 /**
+ * Global Variables
+*/
+
+extern FILE
+    *stdin,
+    *stdout,
+    *stderr;
+
+/**
  * Declarations
 */
 

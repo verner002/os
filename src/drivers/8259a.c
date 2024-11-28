@@ -41,7 +41,7 @@ void __send_eoi(byte irq_number) {
 
     if (irq_number >= 0x08) __outb(PIC_SLAVE_COMMAND_REGISTER, 0x20); // end of interrupt command
 
-    __outb(PIT_MODE_COMMAND_REGISTER, 0x20); // end of interrupt command
+    __outb(PIC_MASTER_COMMAND_REGISTER, 0x20); // end of interrupt command
 }
 
 /**

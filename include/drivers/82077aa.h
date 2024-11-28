@@ -14,7 +14,9 @@
 #include "bool.h"
 #include "kstdlib/errno.h"
 #include "drivers/ports.h"
+#include "drivers/cpu.h"
 #include "drivers/cmos.h"
+#include "drivers/8259a.h"
 
 /**
  * Constants
@@ -86,6 +88,6 @@ struct _drive {
 */
 
 void __init_drives(void);
-void __fdc_irq6_handler(void);
+__attribute__((interrupt)) void __fdc_irq6_handler(INTERRUPT_FRAME *frame);
 void __software_reset(void);
 void __wait_for_fdc(void);

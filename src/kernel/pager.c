@@ -47,16 +47,26 @@ void *pgalloc(void) {
         if (~bitmap[i]) {
             word temp = bitmap[i];
             temp ^= bitmap[i] |= temp + 1; // toggles the first 0 bit it finds
+
+            asm (
+                "push ax\t\n"
+                "bsf ax, %1\t\n"
+                "mov %0, ax\t\n"
+                "pop ax"
+                : "=m" (temp)
+                : "m" (temp)
+                :
+            );
             
             // fast log2
-            register unsigned int r = (temp & 0x0000aaaa) != 0;
+            /*register unsigned int r = (temp & 0x0000aaaa) != 0;
             r |= ((temp & 0x0000cccc) != 0) << 1;
             r |= ((temp & 0x0000f0f0) != 0) << 2;
-            r |= ((temp & 0x0000ff00) != 0) << 3;
+            r |= ((temp & 0x0000ff00) != 0) << 3;*/
 
             last_index = i; // update offset
             
-            return (void *)((i * 16 + r) * 4096);
+            return (void *)((i * 16 + (unsigned int)temp) * 4096);
         }
     }
 

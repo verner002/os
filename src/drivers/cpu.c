@@ -16,7 +16,7 @@
 
 static GLOBAL_DESCRIPTOR *gdt; // global descriptor table
 static INTERRUPT_DESCRIPTOR *idt; // interrupt descriptor table
-static qword counter; // current tick count, 1 tick = 1 ms
+static unsigned long ticks; // current tick count, 1 tick = 1 ms
 
 /**
  * __enable_interrupts
@@ -69,13 +69,10 @@ void __set_global_descriptor(void) {
  * __init_idt
 */
 
-void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default_isr)(void)) {
+void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default_isr)(INTERRUPT_FRAME *frame)) {
     idt = interrupt_descriptor_table;
 
-    struct {
-        word length;
-        dword base;
-    } __attribute__((aligned(1),packed)) idt_ptr = {
+    IDT_PTR idt_ptr = {
         .length = 0x07ff,
         .base = (dword)idt
     };
@@ -101,7 +98,7 @@ void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default
  * __set_handler
 */
 
-void __set_handler(byte irq, word selector, byte attributes, void (*isr)(void)) {
+void __set_handler(byte irq, word selector, byte attributes, void (*isr)(INTERRUPT_FRAME *frame)) {
     INTERRUPT_DESCRIPTOR id = {
         .offset_low = (word)((dword)isr & 0xffff),
         .selector = selector,
@@ -117,20 +114,44 @@ void __set_handler(byte irq, word selector, byte attributes, void (*isr)(void)) 
 */
 
 void __init_tick_counter(void) {
-    counter = 0;
+    ticks = 0;
 
     // set pit channel 0 to generate irq
     // map irq to isr __update_tick_counter
 }
 
-void __update_tick_counter(void) {
-    ++counter;
+__attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame) {
+    __send_eoi(0x00);
+    ++ticks;
 }
 
 /**
  * __current_tick_count
 */
 
-qword __current_tick_count(void) {
-    return counter;
+unsigned long __current_tick_count(void) {
+    return ticks;
+}
+
+/**
+ * __sleep_ms
+ * 
+ * Note:
+ *  Another task is begin processed.
+ *  Sleeps the task for a given period of time.
+ *  (Remove task from queue and let timer fire an
+ *  interrupt after a given time to return it?)
+*/
+
+/**
+ * __delay_ms
+ * 
+ * Note:
+ *  The same task is begin processed.
+*/
+
+void __delay_ms(unsigned int ms) {
+    unsigned long ticks_end = ticks + ms;
+
+    while (ticks < ticks_end);
 }

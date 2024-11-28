@@ -239,10 +239,23 @@ __main:
 
     mov eax, __SYS_SEGMENT<<4
     call __parse_pe
+    jc __panic
 
     mov esi, __data.ok
     call __print_str32
 
+    push eax
+    push edx
+    mov eax, 0x00000012 ; sizeof(SYMBOL)
+    mul ecx
+    mov edi, eax
+    pop edx
+    pop eax
+    add edi, edx
+
+    push edi ; string table
+    push ecx ; symbols count
+    push edx ; symbol table ptr
     movzx ebx, byte [__cur_pos.cur_x]
     push ebx
     movzx ebx, byte [__cur_pos.cur_y]
