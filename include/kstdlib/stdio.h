@@ -12,6 +12,7 @@
 
 #include "types.h"
 #include "drivers/vga.h"
+#include "kstdlib/math.h"
 
 /**
  * Constants
@@ -48,3 +49,4 @@ int vprintf(char const *s, va_list args);
 int fprintf(FILE *stream, char const *s, ...);
 int printf(char const *s, ...);
 int puts(char const *s);
+void printk(char const *s, ...);

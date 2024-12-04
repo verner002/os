@@ -71,9 +71,7 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
 
     for (unsigned int i = 0; !errno && (c = s[i]); ++i) {
         if (c == '%') {
-            c = s[++i];
-
-            switch (c) { // variable arguments
+            switch (/*c = */s[++i]) { // variable arguments
                 case 'c': errno = putc(va_arg(args, int), stream); break;
                 case 's': errno = fprintf(stream, va_arg(args, char const *)); break;
                 case 'u': {
@@ -97,6 +95,21 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
                         if (d > '9') d += 'a' - '9' - 1;
                         
                         putc(d, stream);
+                    }
+                    break;
+                }
+                case 'l': {
+                    switch (/*c = */s[++i]) {
+                        case 'u': {
+                            unsigned char n[20];
+                            unsigned long u = va_arg(args, unsigned long);
+                            unsigned int j = 0;
+
+                            do n[j++] = u % 10 + '0'; while (u /= 10);
+                            do errno = putc(n[--j], stream); while (j && !errno);
+                            break;
+                        }
+                        default: return -1;
                     }
                     break;
                 }
@@ -188,4 +201,37 @@ int printf(char const *s, ...) {
 
 int puts(char const *s) {
     return printf("%s\n\r", s);
+}
+
+/**
+ * printk
+*/
+
+void printk(char const *s, ...) {
+    va_list args;
+    va_start(args, s);
+
+    unsigned int padding;
+    unsigned long ticks = __current_tick_count();
+
+    if (ticks > 0x00000000ffffffff) {
+        printf("[-------.---");
+    } else {
+        unsigned int s = ticks / 1000;
+        unsigned int ms = ticks % 1000;
+
+        putchar('[');
+
+        padding = 6 - log10(s);
+        for (unsigned int i = 0; i < padding; ++i) putchar(' ');
+        printf("%u.", s); 
+
+        padding = 2 - log10(ms);
+        for (unsigned int i = 0; i < padding; ++i) putchar('0');
+        printf("%u", ms);
+    }
+
+    printf("] ");
+    vprintf(s, args);
+    va_end(args);
 }
