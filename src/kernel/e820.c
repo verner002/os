@@ -24,7 +24,7 @@ static void __add_region(E820_MAP *map, E820_ENTRY entry) {
     if (!entry.size) return;
 
     if (map->index >= E820_MAX_ENTRIES) {
-        printk("e820: too many regions in map\n");
+        printk("\033[33me820:\033[37m \033[91mtoo many regions in map\033[37m\n");
         return;
     }
 
@@ -98,6 +98,6 @@ void dump_e820(unsigned int entries_count, E820_ENTRY *map) {
             default: type = "Unknown"; break; // // don't use, change type to reserved?
         }
         
-        printk("e820: %p - %p: %s\n", (void *)descriptor->base, descriptor->base + descriptor->size, type);
+        printk("\033[33me820:\033[37m %p - %p: %s\n", (void *)descriptor->base, descriptor->base + descriptor->size, type);
     }
 }

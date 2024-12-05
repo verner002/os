@@ -55,7 +55,7 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     __send_eoi(0x01);
     __inb(PS2_DATA_PORT_REGISTER);
-    putchar('!');
+    printk("\033[33mkbd:\033[37m reading buffer\n");
 }
 
 /*static int __compare_ards(void const *ard1, void const *ard2) {
@@ -70,13 +70,13 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     __init_vga();
     
     __setcurpos(cursor_y, cursor_x);
-    printf("Welcome to Kernel!\n");
+    printf("\033[97mWelcome to Kernel!\033[37m\n");
 
     // reset tick counter
     __init_tick_counter();
 
-    printk("ard_table=%p, ards_count=%u\n", ard_table, ards_count);
-    printk("symbol_table=%p, symbols_count=%u\n", symbol_table, symbols_count);
+    printk("e820_table=%p, entries=%u\n", ard_table, ards_count);
+    printk("symbol_table=%p, entries=%u\n", symbol_table, symbols_count);
     printk("string_table=%p\n", string_table);
 
     //dump_e820(ards_count, ard_table);
@@ -126,14 +126,14 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     printf("%s\n", errno ? "Error" : "Ok");
 
     printk("Initializing FDC...\n");
-    printk("fdc: Detecting FDDs... ");
+    printk("\033[33mfdc:\033[37m Detecting FDDs... ");
     errno = 0; // reset errno
     __init_drives();
     if (!errno) {
         __set_handler(0x26, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__fdc_irq6_handler);
         __enable_irq(0x06); // irq6
         printf("Ok\n");
-        printk("fdc: Software reset... ");
+        printk("\033[33mfdc:\033[37m Software reset... ");
         __software_reset();
         printf("%s\n", errno ? "Error" : "Ok");
     } else printf("Error\n");
@@ -176,8 +176,6 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
         printf("\n type: %s\n section number: %u\n\n", type, symbol->section_number);
         //__delay_ms(2000);
     }*/
-
-    printf("\033[31;107mRED TEXT");
 
     for (;;) {
         /*asm("cli");
