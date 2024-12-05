@@ -86,7 +86,7 @@ __parse_pe:
     mov edi, dword [esi+__section.virtual_address]
     add edi, ebx ; image base
     mov esi, dword [esi+__section.raw_data_ptr]
-    add esi, __SYS_SEGMENT<<4
+    add esi, __SYS_ADDRESS ; FIXME: use eax
     rep movsb ; copy raw data
     pop esi
     pop edi

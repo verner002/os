@@ -11,6 +11,7 @@
 */
 
 #include "types.h"
+#include "bool.h"
 #include "drivers/ports.h"
 
 /**
@@ -26,6 +27,7 @@
  * Declarations
 */
 
-int __putc(byte c, byte a);
+void __init_vga(void);
+int __putc(byte c);
 int __setcurpos(dword l, dword c);
 void __scroll_down(void);

@@ -20,6 +20,7 @@ static FILE
     _stdin = 0,
     _stdout = 1,
     _stderr = 2;
+static unsigned int color = 0x07;
 
 /**
  * Global Variables
@@ -43,8 +44,8 @@ void __stack_chk_fail(void) {
 */
 
 int putc(int c, FILE *stream) {
-    if (stream == stdout) return __putc((byte)c, 0x00);
-    else if (stream == stderr) return __putc((byte)c, 0x04);
+    if (stream == stdout) return __putc((byte)c);
+    else if (stream == stderr) return __putc((byte)c);
     
     return -1;
 }
@@ -66,8 +67,6 @@ int putchar(int c) {
 int vfprintf(FILE *stream, char const *s, va_list args) {
     char c;
     int errno = 0;
-
-    unsigned char color = 0x0f; // black background, white foreground 
 
     for (unsigned int i = 0; !errno && (c = s[i]); ++i) {
         if (c == '%') {
@@ -115,43 +114,7 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
                 }
                 default: return -1;
             }
-        } /*else if (c == '\033') { // escape sequences
-            if (s[++i] != '[') return -1;
-
-            unsigned p = 0;
-            unsigned n = 0;
-
-            do {
-                c = s[++i];
-
-                if (c < '0' || c > '9') return -1; // we expect a digit
-
-                do {
-                    n = n * 10 + c - '0';
-                    c = s[++i];
-                } while (c >= '0' && c <= '9');
-
-                if (!p && n) return -1; // TODO: implement other options
-                else if (p == 1) {
-                    switch (n) {
-                        case 30: color = 0x00; break;
-                        case 31: color = 0x04; break;
-                        case 32: color = 0x0a; break;
-                        case 33: color = 0x0e; break;
-                        case 34: color = 0x09; break;
-                        case 35: color = 0x0d; break;
-                        case 36: color = 0x0b; break;
-                        case 37: color = 0x0f; break;
-                        default: return -1;
-                    }
-                }
-
-                if (c != 'm' && c != ';') return -1;
-
-                ++p;
-            } while (c == ';');
-
-        }*/ else errno = putc(c, stream);
+        } else errno = putc(c, stream);
     }
 
     return errno;

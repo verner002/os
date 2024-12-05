@@ -28,24 +28,28 @@
 */
 
 __attribute__((interrupt)) static void __default_isr(INTERRUPT_FRAME *frame) {
-    fprintf(stderr, "[%s]: Unhandled interrupt!\n", __func__);
+    printk("warning: unhandled interrupt!\n");
+    for (;;);
 }
 
 __attribute__((interrupt)) static void __division_by_zero(INTERRUPT_FRAME *frame) {
-    fprintf(stderr, "[%s]: Unhandled interrupt!\n", __func__);
+    printk("fault: division by zero!\n");
+    for (;;);
 }
 
 __attribute__((interrupt)) static void __double_fault(INTERRUPT_FRAME *frame) {
-    fprintf(stderr, "[%s]: Unhandled interrupt!\n", __func__);
+    printk("abort: double fault!\n");
+    for (;;);
 }
 
 __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAME *frame) {
-    fprintf(stderr, "[%s]: Unhandled interrupt!\n", __func__);
+    printk("fault: general protection fault!\n");
     for (;;);
 }
 
 __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
-    fprintf(stderr, "[%s]: Unhandled interrupt!\n", __func__);
+    printk("fault: page fault!\n");
+    for (;;);
 }
 
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
@@ -63,6 +67,8 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
 */
 
 void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword cursor_x, SYMBOL *symbol_table, unsigned int symbols_count, char *string_table) {
+    __init_vga();
+    
     __setcurpos(cursor_y, cursor_x);
     printf("Welcome to Kernel!\n");
 
@@ -81,7 +87,8 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     printf("%s\n", errno ? "Error" : "Ok");
     // TODO: allocate memory for idt after sanitizing e820
 
-    dump_e820(smap->index, smap->entries);
+    dump_e820(ards_count, ard_table);
+    //dump_e820(smap->index, smap->entries);
 
     printk("Initializing IDT... ");
     errno = 0; // reset errno
@@ -137,11 +144,11 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     printf("Ok\n");
 
     void *my_page;
-    printf("pgalloc: %p\n", pgalloc()); // test 1 (ok)
-    printf("pgalloc: %p\n", (my_page = pgalloc())); // test 2 (ok)
-    printf("pgfree: %p\n", my_page);
+    printk("pgalloc: %p\n", pgalloc()); // test 1 (ok)
+    printk("pgalloc: %p\n", (my_page = pgalloc())); // test 2 (ok)
+    printk("pgfree: %p\n", my_page);
     pgfree(my_page);
-    printf("pgalloc: %p\n", pgalloc()); // test 3 (fail)
+    printk("pgalloc: %p\n", pgalloc()); // test 3 (fail)
 
     /*printk("waiting 5 seconds...\n");
     __delay_ms(5000);
@@ -169,6 +176,8 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
         printf("\n type: %s\n section number: %u\n\n", type, symbol->section_number);
         //__delay_ms(2000);
     }*/
+
+    printf("\033[31;107mRED TEXT");
 
     for (;;) {
         /*asm("cli");

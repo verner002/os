@@ -11,6 +11,7 @@
 */
 
 #include "types.h"
+#include "drivers/cpu.h"
 #include "drivers/vga.h"
 #include "kstdlib/math.h"
 

@@ -74,10 +74,14 @@
 #define DMA_MASTER_RESET_REGISTER_47            0x00da // write
 #define DMA_MASK_RESET_REGISTER_47              0x00dc
 #define DMA_MULTICHANNEL_MASK_REGISTER_47       0x00de
+#define VGA_ATTRIBUTE_ADDRESS_REGISTER          0x03c0
+#define VGA_ATTRIBUTE_WRITE_DATA_REGISTER       0x03c0 // write
+#define VGA_ATTRIBUTE_READ_DATA_REGISTER        0x03c1 // read
 #define VGA_MISCELLANEOUS_OUTPUT_REGISTER_W     0x03c2
 #define VGA_MISCELLANEOUS_OUTPUT_REGISTER_R     0x03cc
 #define VGA_CRT_CONTROLLER_ADDRESS_REGISTER     0x03d4
 #define VGA_CRT_CONTROLLER_DATA_REGISTER        0x03d5
+#define VGA_INPUT_STATUS_1_REGISTER             0x03da
 #define FDC_STATUS_REGISTER_A                   0x03f0 // read-only
 #define FDC_STATUS_REGISTER_B                   0x03f1 // read-only
 #define FDC_DIGITAL_OUTPUT_REGISTER             0x03f2 // write-only

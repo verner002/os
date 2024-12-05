@@ -7,14 +7,7 @@
 cpu 486
 org 0x7c00
 
-%define __LDR_OFFSET 0x8000 ; loader will replace root directory
-%define __SYS_SEGMENT 0x8000
-%define __FAT_OFFSET 0x7e00
-%define __RD_OFFSET 0x8000
-
-%if __SYS_SEGMENT == 0
-    %error "__SYS_SEGMENT cannot be 0x0000!"
-%endif
+%include "const.inc"
 
 bits 16
 
@@ -225,7 +218,13 @@ __read_sects:
     pop ax
     jc .return
     inc ax
+    mov bp, es
+    xor dx, dx
     add bx, word [__bpb.bytes_per_sectr] ; respect page boundary!!!
+    adc dh, 0x00 ; setz dh
+    shl dh, 0x04
+    add bp, dx
+    mov es, bp
     loop .read_sect ; cx = 0 is illegal!
     
     .return:

@@ -7,10 +7,9 @@
 cpu 486
 org 0x00008000
 
-bits 16
+%include "const.inc"
 
-%define __SMAP_SEGMENT 0x2000
-%define __PGT_ADDRESS 0xe000
+bits 16
 
 ;
 ; __entry
@@ -200,8 +199,6 @@ __gdt_ptr:
 
 bits 32
 
-%define __SYS_SEGMENT 0x8000 ; TODO: use value from same file here and in bootloader
-
 ;
 ; __main
 ;
@@ -237,9 +234,9 @@ __main:
     ; and start mapping virtual space from
     ; 0x80000000 to kernel's physical address
 
-    mov eax, __SYS_SEGMENT<<4
+    mov eax, __SYS_ADDRESS
     call __parse_pe
-    jc __panic
+    jc __panic32
 
     mov esi, __data.ok
     call __print_str32
@@ -264,7 +261,8 @@ __main:
     push dword [__data.smap_entries_count]
     
     call eax
-    ;jmp 0x0008:__SYS_SEGMENT<<4 ; execute kernel
+    add esp, 0x0000001c ; stack cleanup
+    jmp __panic32
 
 ;
 ; __idt_ptr
@@ -285,6 +283,15 @@ __main:
 __panic:
     mov si, __data.panic
     call __print_str
+    jmp short __halt
+
+;
+; __panic32
+;
+
+__panic32:
+    mov si, __data.panic
+    call __print_str32
     ;jmp short __halt
 
 ;

@@ -40,3 +40,4 @@ struct _chunk {
 void *malloc(unsigned int s);
 void free(void *p);
 void qsort(void *array, unsigned int array_size, int element_size, int (*compare)(void const *element1, void const *element2));
+int atoi(char const *s);

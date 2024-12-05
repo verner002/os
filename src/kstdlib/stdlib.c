@@ -9,7 +9,6 @@
 */
 
 #include "kstdlib/stdlib.h"
-#include "kstdlib/string.h"
 
 /**
  * Static Global Variables
@@ -132,4 +131,24 @@ static void __qsort(void *array, int element_size, int (*compare)(void const *el
 
 void qsort(void *array, unsigned int array_size, int element_size, int (*compare)(void const *element1, void const *element2)) {
     __qsort(array, element_size, compare, 0, array_size - 1);
+}
+
+/**
+ * atoi
+*/
+
+int atoi(char const *s) {
+    if (!s) return 0;
+
+    while (*s == ' ') ++s; // skip whitespaces
+
+    int minus = *s == '-';
+
+    if (*s == '+' || minus) ++s;
+
+    int value = 0;
+
+    for (char c; (c = *s) >= '0' && c <= '9'; ++s) value = 10 * value + c - '0';
+
+    return minus ? -value : value;
 }
