@@ -177,15 +177,11 @@ void printk(char const *s, ...) {
     unsigned int padding;
     unsigned long ticks = __current_tick_count();
 
-    printf("\033[32m");
+    printf("\033[32m[");
 
-    if (ticks > (unsigned long)999999999999) {
-        printf("[-------.---");
-    } else { // we can handle up to about 32 years
+    if (ticks <= (unsigned long)999999999999) { // we can handle up to about 32 years
         unsigned int s = ticks / 1000;
         unsigned int ms = ticks % 1000;
-
-        putchar('[');
 
         padding = 8 - log10(s);
         for (unsigned int i = 0; i < padding; ++i) putchar(' ');
@@ -194,7 +190,8 @@ void printk(char const *s, ...) {
         padding = 2 - log10(ms);
         for (unsigned int i = 0; i < padding; ++i) putchar('0');
         printf("%u", ms);
-    }
+        
+    } else printf("---------.---");
 
     printf("]\033[37m ");
     vprintf(s, args);
