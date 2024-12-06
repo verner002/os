@@ -156,7 +156,6 @@ byte __read_byte(void) {
 
 void __software_reset(void) {
     unsigned int i;
-    bool try_again = FALSE;
 
     for (i = 0; i < 3; ++i) { // this is ugly, i'll change it later
         errno = 0; // reset errno

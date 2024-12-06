@@ -39,6 +39,8 @@ void __disable_interrupts(void) {
 */
 
 void __init_gdt(GLOBAL_DESCRIPTOR *global_descriptor_table) {
+    gdt = global_descriptor_table;
+
     GLOBAL_DESCRIPTOR null_descriptor = {
         .base_high = 0,
         .flag_limit_high = 0,

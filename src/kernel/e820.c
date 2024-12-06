@@ -101,3 +101,7 @@ void dump_e820(unsigned int entries_count, E820_ENTRY *map) {
         printk("\033[33me820:\033[37m %p - %p: %s\n", (void *)descriptor->base, descriptor->base + descriptor->size, type);
     }
 }
+
+void *e820_alloc(unsigned int n) {
+    return NULL;
+}

@@ -24,8 +24,17 @@
 #include "kstdlib/stdlib.h"
 
 /**
- * __compare_ards
+ * panic
 */
+
+void panic(void) {
+    printk("\033[31mKERNEL PANIC\n");
+
+    for (;;) {
+        asm("cli");
+        asm("hlt");
+    }
+}
 
 __attribute__((interrupt)) static void __default_isr(INTERRUPT_FRAME *frame) {
     printk("warning: unhandled interrupt!\n");
@@ -58,10 +67,6 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
     printk("\033[33mkbd:\033[37m reading buffer\n");
 }
 
-/*static int __compare_ards(void const *ard1, void const *ard2) {
-    return (((ADDRESS_RANGE_DESCRIPTOR *)ard1)->base > ((ADDRESS_RANGE_DESCRIPTOR *)ard2)->base) - (((ADDRESS_RANGE_DESCRIPTOR *)ard1)->base < ((ADDRESS_RANGE_DESCRIPTOR *)ard2)->base);
-}*/
-
 /**
  * entry
 */
@@ -81,7 +86,7 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
 
     //dump_e820(ards_count, ard_table);
     
-    printk("Sanitizing SMAP... ");
+    printk("Sanitizing E820... ");
     errno = 0;
     E820_MAP *smap = __sanitize_e820(ards_count, ard_table);
     printf("%s\n", errno ? "Error" : "Ok");
@@ -90,19 +95,23 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     dump_e820(ards_count, ard_table);
     //dump_e820(smap->index, smap->entries);
 
-    printk("Initializing IDT... ");
+    printk("\033[33midt:\033[37m Initializing... ");
+    // e820 is page-aligned, so we reserve 1 page even though we're going to use only half of it
+    INTERRUPT_DESCRIPTOR *idt = (INTERRUPT_DESCRIPTOR *)e820_alloc(1);
+    if (!idt) {
+        printf("Error\n");
+        panic();
+    }
+
     errno = 0; // reset errno
     __init_idt((INTERRUPT_DESCRIPTOR *)0x00007000, &__default_isr); // TODO: use smap to find suitable region for idt?
-    printf("%s\n", errno ? "Error" : "Ok");
-
-    //printk("Setting up exception handlers... ");
     __set_handler(0x00, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__division_by_zero);
     __set_handler(0x08, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__double_fault);
     __set_handler(0x0d, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__general_protection_fault);
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
     __disable_irqs();
     __enable_interrupts();
-    //printf("Ok\n");
+    printf("%s\n", errno ? "Error" : "Ok");
 
     printk("Initializing PICs... ");
     errno = 0; // reset errno

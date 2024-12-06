@@ -20,7 +20,6 @@ static FILE
     _stdin = 0,
     _stdout = 1,
     _stderr = 2;
-static unsigned int color = 0x07;
 
 /**
  * Global Variables

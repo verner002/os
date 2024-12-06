@@ -70,14 +70,14 @@ __main:
     pop es
     xor bx, bx
     mov si, __data.kernel_sys
-    call __load_file ; load kernel.sys
+    call __load_file ; load kernel.sys, up to 576 KiB
     jc __halt
 
     push 0x0000
     pop es
     mov bx, __LDR_OFFSET
     mov si, __data.loader_sys
-    call __load_file ; load loader.sys (loader must be the last file to load)
+    call __load_file ; load loader.sys (loader must be the last file to load), up to 32 KiB
     jc __halt
 
     ; pass some arguments?
