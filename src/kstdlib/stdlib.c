@@ -17,10 +17,10 @@
 static CHUNK *first_free_chunk = NULL;
 
 /**
- * init_heap
+ * __init_heap
 */
 
-void init_heap(byte *p, unsigned int s) {
+void __init_heap(void *p, unsigned int s) {
     CHUNK *heap = (CHUNK *)p;
     heap->free = TRUE;
     heap->size = s - sizeof(CHUNK); // `s' is real size of area reserved for heap

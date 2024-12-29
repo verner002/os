@@ -64,7 +64,8 @@ loader: #$(LOADER_OBJS) # produces raw binary file (loader objs must come first!
 	$(ASM) $(ASM_FLAGS) -I$(SRC)/loader $(LOADER_SRC)/main.asm -o $(BIN)/$(LOADER_TARGET)
 
 kernel: $(KERNEL_OBJS) # temporarily changed image base so i can load kernel even without page manager
-	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) --oformat=pei-i386 -m i386pe --image-base 0x00080000 -e entry -o $(BIN)/$(KERNEL_TARGET)
+	$(ASM) $(KERNEL_SRC)/userland.asm -felf -o $(KERNEL_BUILD)/userland.o
+	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) $(KERNEL_BUILD)/userland.o --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o $(BIN)/$(KERNEL_TARGET)
 
 drivers: $(DRIVERS_OBJS)
 

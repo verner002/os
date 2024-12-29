@@ -38,13 +38,16 @@ __parse_pe:
     add esi, __pe_signature_size+__coff_header_size
     add esi, eax ; eax=e_lfanew+base
 
+    mov ebp, 0x00100000
+
     ; eax=ptr to pe_signature
     ; ebx=image base
     ; ecx=sections count
     ; esi=ptr to section table
+    ; ebp=kernel physical address
 
     .map_section:
-    call __skip_sections ; TODO: implement support for names longer than 8 chars
+    call __skip_sections
     jz .skip_section
 
     mov edx, dword [esi+__section.virtual_size]
@@ -68,19 +71,24 @@ __parse_pe:
     ; eax=ptr to pe_signature
     ; ebx=image base
     ; ecx=sections count
-    ; edx=section virtual size
+    ; edx=section virtual size (in pages)
     ; esi=ptr to section table
     ; edi=section virtual address
+    ; ebp=kernel physical address
 
+    push edi
     .map_page:
-    ;call __map_page -- implement (let's assume kernel has up to 4 MiB)
+    call __map_kern_page ; maps up to 4 MiB
+    add edi, 0x00001000 ; next page
+    add ebp, 0x00001000 ; next page
     dec edx
     jnz .map_page
+    pop edi
 
     ; what if __SYS_SEGMENT<<4 == virtual address (skip copying)? (unlikely)
 
     push ecx
-    push edi
+    push edi ; rfc: do i need to push edi???
     push esi
     mov ecx, dword [esi+__section.raw_data_size]
     mov edi, dword [esi+__section.virtual_address]
@@ -171,6 +179,29 @@ __match_section:
     ;pop edi
     ;pop esi
     ;pop ecx
+    ret
+
+;
+; __map_kern_page
+;
+
+__map_kern_page:
+    push edi
+    shr edi, 22 ; /(4096*1024), pd entry
+    cmp edi, 512 ; only this pd entry!!!
+    pop edi
+    jnz .terminate
+
+    push ebp
+    push edi
+    shr edi, 12 ; /4096
+    and edi, 0x000003ff ; pt entry
+    or bp, 0x0007 ; user, r/w, present
+    mov dword [edi*4+__KERN_PT_OFFSET], ebp; raw address
+    pop edi
+    pop ebp
+
+    .terminate:
     ret
 
 %endif

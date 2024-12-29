@@ -13,6 +13,8 @@
 #include "kernel/syms.h"
 #include "kernel/e820.h"
 #include "kernel/pager.h"
+#include "kernel/userland.h"
+#include "kernel/task.h"
 
 #include "drivers/cpu.h"
 #include "drivers/8259a.h"
@@ -22,6 +24,12 @@
 
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
+
+/**
+ * Global Variables
+*/
+
+TASK *current_task = NULL;
 
 /**
  * panic
@@ -67,11 +75,19 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
     printk("\033[33mkbd:\033[37m reading buffer\n");
 }
 
+__attribute__((interrupt)) static void test(INTERRUPT_FRAME *frame) {
+    printk("\033[33mkernel:\033[37m syscall\n");
+}
+
+void test_func(void) {
+    asm("int 0x80");
+}
+
 /**
  * entry
 */
 
-void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword cursor_x, SYMBOL *symbol_table, unsigned int symbols_count, char *string_table) {
+void entry(unsigned int memory_size, unsigned int e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, dword cursor_y, dword cursor_x, SYMBOL *symbol_table, unsigned int symbols_count, char *string_table) {
     __init_vga();
     
     __setcurpos(cursor_y, cursor_x);
@@ -80,28 +96,53 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     // reset tick counter
     __init_tick_counter();
 
-    printk("e820_table=%p, entries=%u\n", ard_table, ards_count);
-    printk("symbol_table=%p, entries=%u\n", symbol_table, symbols_count);
-    printk("string_table=%p\n", string_table);
+    #ifdef __DEBUG
+        printk("memory_size=%u\n", memory_size);
+        printk("e820_entries=%p, regions=%u\n", e820_entries, e820_entries_count);
+        printk("symbol_table=%p, symbols=%u\n", symbol_table, symbols_count);
+        printk("string_table=%p\n", string_table);
+    #endif
 
-    //dump_e820(ards_count, ard_table);
+    printk("Loading GDT... ");
+    __init_gdt(0x10, 0x7c00);
+    printk("Ok\n");
     
     printk("Sanitizing E820... ");
     errno = 0;
-    E820_MAP *smap = __sanitize_e820(ards_count, ard_table);
+    __init_e820(e820_entries_count, e820_entries);
     printf("%s\n", errno ? "Error" : "Ok");
-    // TODO: allocate memory for idt after sanitizing e820
 
-    dump_e820(ards_count, ard_table);
+    E820_ENTRY *first_descriptor = e820_get_descriptor(0);
+
+    if (first_descriptor->type == 1 || first_descriptor->base || first_descriptor->size < 0x00001000) {
+        printk("Reserving memory for IVT and BDA... ");
+        
+        e820_alloc(1);
+
+        first_descriptor = e820_get_descriptor(0);
+
+        if (first_descriptor->type == 2 && !first_descriptor->base && first_descriptor->size >= 0x00001000) printf("Ok\n");
+        else {
+            printf("Error\n");
+            panic();
+        }
+    }
+
+    dump_e820();
     //dump_e820(smap->index, smap->entries);
 
-    printk("\033[33midt:\033[37m Initializing... ");
+    //printk("\033[33midt:\033[37m Initializing... ");
     // e820 is page-aligned, so we reserve 1 page even though we're going to use only half of it
+
+
+
     INTERRUPT_DESCRIPTOR *idt = (INTERRUPT_DESCRIPTOR *)e820_alloc(1);
     if (!idt) {
-        printf("Error\n");
+        //printf("Error\n");
         panic();
     }
+
+    //dump_e820();
 
     errno = 0; // reset errno
     __init_idt((INTERRUPT_DESCRIPTOR *)0x00007000, &__default_isr); // TODO: use smap to find suitable region for idt?
@@ -152,12 +193,9 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
     __init_pager((dword *)0x00008000, 32); // TODO: use smap to find suitable region for pmm?
     printf("Ok\n");
 
-    void *my_page;
-    printk("pgalloc: %p\n", pgalloc()); // test 1 (ok)
-    printk("pgalloc: %p\n", (my_page = pgalloc())); // test 2 (ok)
-    printk("pgfree: %p\n", my_page);
-    pgfree(my_page);
-    printk("pgalloc: %p\n", pgalloc()); // test 3 (fail)
+    printk("Initializing heap... ");
+    __init_heap(pgalloc(), 4096);
+    printf("Ok\n");
 
     /*printk("waiting 5 seconds...\n");
     __delay_ms(5000);
@@ -186,8 +224,30 @@ void entry(unsigned int ards_count, E820_ENTRY *ard_table, dword cursor_y, dword
         //__delay_ms(2000);
     }*/
 
+    __set_handler(0x80, 0x0008, 0xee, &test); // FIXME: implement setting dpl, this is stupid
+
+    __disable_interrupts();
+    TASK *system = current_task = (TASK *)malloc(sizeof(TASK));
+    
+    TASK *test = (TASK *)malloc(sizeof(TASK));
+    test->id = 1;
+    test->eip = (unsigned int)&test_func;
+    test->esp = test->ebp = pgalloc() + 4096;
+    test->kernel_stack = pgalloc() + 4096;
+    test->next = system;
+
+    system->id = 0;
+    system->esp = system->ebp = pgalloc() + 4096;
+    system->kernel_stack = pgalloc() + 4096;
+    system->next = test;
+    __enable_interrupts();
+
+    __switch_task();
+
+    printf("kernel\n");
+
+    // idle loop
     for (;;) {
-        /*asm("cli");
-        asm("hlt");*/
+        asm("hlt");
     }
 }

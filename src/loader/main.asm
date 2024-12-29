@@ -70,6 +70,10 @@ __entry:
     call __get_mem_size
     jc __panic
 
+    cmp ebx, 0x00008000 ; we need at least 32 MiB
+    jb __panic
+
+    mov dword [__data.memory_size], ebx
     mov eax, ebx
     call __print_uint
 
@@ -79,11 +83,9 @@ __entry:
     mov si, __data.construct_smap
     call __print_str
 
-    xor di, di
-
-    push es
-    push __SMAP_SEGMENT
+    push 0x0000
     pop es
+    mov di, __SMAP_OFFSET
     mov esi, ebx
     call __get_smap
     movzx eax, ax
@@ -101,24 +103,6 @@ __entry:
     ;call __print_smap
     ;movzx eax, ax
     ;pop es
-
-    mov si, __data.correct_gdt
-    call __print_str
-
-    sub ebx, 0x04 ; minus 4k cuz of gdt.limit
-    shr ebx, 0x02 ; /4 (page granularity)
-    mov cl, 0x0c ; pg granularity, 32-bit descriptor
-
-    mov si, __gdt.code
-    call __set_gdt_limit
-    call __set_gdt_flags
-
-    mov si, __gdt.data ; add eax, 0x08?
-    call __set_gdt_limit
-    call __set_gdt_flags
-
-    mov si, __data.ok
-    call __print_str
 
     mov si, __data.enter_pm
     call __print_str
@@ -162,7 +146,7 @@ __gdt:
     db 0x00         ; base
 
     .code:
-    dw 0xffff       ; limit
+    dw 0xffff       ; limit (32 MiB)
     dw 0x0000       ; base
     db 0x00         ; base
     db 10011010b    ; access byte
@@ -170,18 +154,10 @@ __gdt:
     db 0x00         ; base
 
     .data:
-    dw 0xffff       ; limit
+    dw 0xffff       ; limit (32 MiB)
     dw 0x0000       ; base
     db 0x00         ; base
     db 10010010b    ; access byte
-    db 11001111b    ; flags and limit
-    db 0x00         ; base
-
-    .tss:
-    dw 0xffff       ; limit
-    dw 0x0000       ; base
-    db 0x00         ; base
-    db 10001001b    ; access byte
     db 11001111b    ; flags and limit
     db 0x00         ; base
 
@@ -210,15 +186,12 @@ __main:
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    mov esi, 0x00007c00
+    mov esp, 0x00006000
 
     call __set_cur_pos32
 
     mov esi, __data.ok
     call __print_str32
-
-    ;lidt [__idt_ptr] -- do in kernel?
-    ;sti
 
     call __init_paging ; self map first MiB
 
@@ -229,7 +202,7 @@ __main:
     mov esi, __data.parse_kernel
     call __print_str32
 
-    ; let's assume, kernel has at most 4 MiB
+    ; let's assume, kernel has at most 448 KiB
     ; we create a pt following the self map pt
     ; and start mapping virtual space from
     ; 0x80000000 to kernel's physical address
@@ -254,11 +227,13 @@ __main:
     push ecx ; symbols count
     push edx ; symbol table ptr
     movzx ebx, byte [__cur_pos.cur_x]
-    push ebx
+    push ebx ; cursor x
     movzx ebx, byte [__cur_pos.cur_y]
-    push ebx
-    push __SMAP_SEGMENT<<4
-    push dword [__data.smap_entries_count]
+    push ebx ; cursor y
+    push __PD_OFFSET
+    push __SMAP_OFFSET ; smap
+    push dword [__data.smap_entries_count] ; smap entries
+    push dword [__data.memory_size] ; memory size
     
     call eax
     add esp, 0x0000001c ; stack cleanup
@@ -318,4 +293,5 @@ __data:
     .ok db `Ok\n\r\0`
     .panic db `PANIC\n\r\0`
     
+    .memory_size dd 0x00000000
     .smap_entries_count dd 0x00000000

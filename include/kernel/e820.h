@@ -44,6 +44,7 @@ struct __attribute__((__packed__)) _e820_map {
     E820_ENTRY entries[E820_MAX_ENTRIES];
 };
 
-E820_MAP *__sanitize_e820(unsigned int entries_count, E820_ENTRY *map);
-void dump_e820(unsigned int entries_count, E820_ENTRY *map);
+void __init_e820(unsigned int entries_count, E820_ENTRY *map);
+void dump_e820(void);
 void *e820_alloc(unsigned int n);
+E820_ENTRY *e820_get_descriptor(unsigned int index);

@@ -14,8 +14,9 @@
  * Static Global Variable
 */
 
-static GLOBAL_DESCRIPTOR *gdt; // global descriptor table
+static GLOBAL_DESCRIPTOR gdt[6]; // global descriptor table
 static INTERRUPT_DESCRIPTOR *idt; // interrupt descriptor table
+static TASK_STATE_SEGMENT tss; // task state segment
 static unsigned long ticks; // current tick count, 1 tick = 1 ms
 
 /**
@@ -38,33 +39,145 @@ void __disable_interrupts(void) {
  * __init_gdt
 */
 
-void __init_gdt(GLOBAL_DESCRIPTOR *global_descriptor_table) {
-    gdt = global_descriptor_table;
-
-    GLOBAL_DESCRIPTOR null_descriptor = {
-        .base_high = 0,
-        .flag_limit_high = 0,
-        .attributes = 0,
-        .base_midd = 0,
-        .base_low = 0,
-        .limit_low = 0
+void __init_gdt(unsigned short ss0, unsigned int esp0) {
+    GDT_PTR gdt_ptr = {
+        .length = sizeof(gdt) - 1,
+        .base = (dword)&gdt
     };
 
-    /**
-     * code and data descriptors should be
-     * initialized by loader with respect
-     * to detected memory
-    */
+    gdt[0] = (GLOBAL_DESCRIPTOR) { // null descriptor
+        .limit_low = 0,
+        .base_low = 0,
+        .accessed = 0,
+        .read_write = 0,
+        .direction_conforming = 0,
+        .executable = 0,
+        .descriptor_type = 0,
+        .descriptor_privilage_level = 0,
+        .present = 0,
+        .limit_high = 0,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 0,
+        .granularity = 0,
+        .base_high = 0
+    };
 
-    global_descriptor_table[0] = null_descriptor;
+    gdt[1] = (GLOBAL_DESCRIPTOR) { // code descriptor
+        .limit_low = 0xffff,
+        .base_low = 0x000000,
+        .accessed = 0,
+        .read_write = 1,
+        .direction_conforming = 0,
+        .executable = 1,
+        .descriptor_type = 1,
+        .descriptor_privilage_level = 0,
+        .present = 1,
+        .limit_high = 0xf,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 1,
+        .granularity = 1,
+        .base_high = 0x00
+    };
+
+    gdt[2] = (GLOBAL_DESCRIPTOR) { // data descriptor
+        .limit_low = 0xffff,
+        .base_low = 0x000000,
+        .accessed = 0,
+        .read_write = 1,
+        .direction_conforming = 0,
+        .executable = 0,
+        .descriptor_type = 1,
+        .descriptor_privilage_level = 0,
+        .present = 1,
+        .limit_high = 0xf,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 1,
+        .granularity = 1,
+        .base_high = 0x00
+    };
+
+    gdt[3] = (GLOBAL_DESCRIPTOR) { // code descriptor
+        .limit_low = 0xffff,
+        .base_low = 0x000000,
+        .accessed = 0,
+        .read_write = 1,
+        .direction_conforming = 0,
+        .executable = 1,
+        .descriptor_type = 1,
+        .descriptor_privilage_level = 3,
+        .present = 1,
+        .limit_high = 0xf,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 1,
+        .granularity = 1,
+        .base_high = 0x00
+    };
+
+    gdt[4] = (GLOBAL_DESCRIPTOR) { // data descriptor
+        .limit_low = 0xffff,
+        .base_low = 0x000000,
+        .accessed = 0,
+        .read_write = 1,
+        .direction_conforming = 0,
+        .executable = 0,
+        .descriptor_type = 1,
+        .descriptor_privilage_level = 3,
+        .present = 1,
+        .limit_high = 0xf,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 1,
+        .granularity = 1,
+        .base_high = 0x00
+    };
+
+    dword base = (dword)&tss;
+    dword size = sizeof(TASK_STATE_SEGMENT);
+
+    gdt[5] = (GLOBAL_DESCRIPTOR) { // tss
+        .limit_low = size,
+        .base_low = base,
+        .accessed = 1,
+        .read_write = 0,
+        .direction_conforming = 0,
+        .executable = 1,
+        .descriptor_type = 0,
+        .descriptor_privilage_level = 0,
+        .present = 1,
+        .limit_high = (size & 0x000f0000) >> 16,
+        .reserved = 0,
+        .long_mode = 0,
+        .size = 0,
+        .granularity = 0,
+        .base_high = (base & 0xff000000) >> 24
+    };
+
+    memset(&tss, 0, size);
+
+    tss.ss0 = ss0;
+    tss.esp0 = esp0;
+
+    tss.io_map_base = size; // no io bitmap
+
+    tss.cs = 0x0b;
+    tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x13;
+
+    asm (
+        "lgdt %0"
+        :
+        : "m" (gdt_ptr)
+        :
+    );
+
+    __flush_tss();
 }
 
-/**
- * __set_global_descriptor
-*/
-
-void __set_global_descriptor(void) {
-
+void __set_kernel_stack(unsigned int stack) {
+    tss.esp0 = stack;
 }
 
 /**
@@ -122,9 +235,60 @@ void __init_tick_counter(void) {
     // map irq to isr __update_tick_counter
 }
 
+extern TASK *current_task;
+
+/**
+ * __switch_task
+*/
+
+void __switch_task(void) {
+    if (!current_task) return; // not initialized yet
+
+    __disable_interrupts();
+
+    unsigned int esp, ebp, eip;
+
+    asm volatile (
+        "mov esp, %0\t\n"
+        "mov ebp, %1\t\n"
+        : "=r" (esp), "=r" (ebp)
+        :
+        :
+    );
+
+    
+}
+
 __attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame) {
+    __disable_interrupts();
+    
+    unsigned int eip;
+
+    asm (
+        "mov eax, dword [ebp+8]"
+        : "=a" (eip)
+        :
+        :
+    );
+    
     __send_eoi(0x00);
+
     ++ticks;
+
+    if (current_task) {
+        current_task->eip = eip;
+        current_task = current_task->next;
+
+        __set_kernel_stack(0);
+
+        if (!current_task->id) {
+            printk("switching to task with pid %u, eip=%p\n", current_task->id, eip);
+            __exec_kernelmode(current_task->eip);
+        } else {
+            // usermode
+            __exec_usermode(0);
+        }
+    }
 }
 
 /**
