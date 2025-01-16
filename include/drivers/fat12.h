@@ -41,26 +41,26 @@ enum _attributes {
 */
 
 struct _fat {
-    word sectorsPerTrack;
-    word headsPerCylinder;
+    uint16_t sectorsPerTrack;
+    uint16_t headsPerCylinder;
 };
 
 struct _record {
-    byte filename[11]; // 8.3 format
-    byte attributes;
-    byte _reserved1[2];
-    word creation_time;
-    word creation_date;
-    word last_access_date;
-    byte _reserved2[2];
-    word last_write_time;
-    word last_write_date;
-    word first_cluster;
-    dword file_size;
+    uint8_t filename[11]; // 8.3 format
+    uint8_t attributes;
+    uint8_t _reserved1[2];
+    uint16_t creation_time;
+    uint16_t creation_date;
+    uint16_t last_access_date;
+    uint8_t _reserved2[2];
+    uint16_t last_write_time;
+    uint16_t last_write_date;
+    uint16_t first_cluster;
+    uint32_t file_size;
 };
 
 /**
  * Declarations
 */
 
-void __lba2chs(dword lba, word *c, word *h, word *s);
+void __lba2chs(uint32_t lba, uint16_t *c, uint16_t *h, uint16_t *s);

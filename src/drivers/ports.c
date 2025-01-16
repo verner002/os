@@ -14,7 +14,7 @@
  * __outb
 */
 
-void __outb(word r, byte v) {
+void __outb(uint16_t r, uint8_t v) {
     asm (
         "out dx, al"
         :
@@ -27,8 +27,8 @@ void __outb(word r, byte v) {
  * __inb
 */
 
-byte __inb(word r) {
-    byte v;
+uint8_t __inb(uint16_t r) {
+    uint8_t v;
 
     asm (
         "in al, dx"
@@ -44,7 +44,7 @@ byte __inb(word r) {
  * __outw
 */
 
-void __outw(word r, word v) {
+void __outw(uint16_t r, uint16_t v) {
     asm (
         "out dx, al\n\t"
         "mov al, ah\n\t"

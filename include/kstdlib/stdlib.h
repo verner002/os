@@ -25,9 +25,9 @@ typedef struct _chunk CHUNK;
 */
 
 struct _chunk {
-    // unsigned int magic = 0x0badbabe
+    // uint32_t magic = 0x0badbabe
     bool free;
-    unsigned int size;
+    uint32_t size;
     CHUNK
         *previous_chunk,
         *next_chunk;
@@ -37,8 +37,8 @@ struct _chunk {
  * Declarations
 */
 
-void __init_heap(void *p, unsigned int s);
-void *malloc(unsigned int s);
+void __init_heap(void *p, uint32_t s);
+void *malloc(uint32_t s);
 void free(void *p);
-void qsort(void *array, unsigned int array_size, int element_size, int (*compare)(void const *element1, void const *element2));
+void qsort(void *array, uint32_t array_size, int element_size, int (*compare)(void const *element1, void const *element2));
 int atoi(char const *s);

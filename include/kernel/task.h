@@ -23,11 +23,11 @@ typedef struct _task TASK;
 */
 
 struct _task {
-    unsigned int id;
-    unsigned int eip;
-    unsigned int esp;
-    unsigned int ebp;
+    uint32_t id;
+    uint32_t eip;
+    uint32_t esp;
+    uint32_t ebp;
     // TODO: paging directory
-    unsigned int kernel_stack;
+    uint32_t kernel_stack;
     TASK *next;
 };

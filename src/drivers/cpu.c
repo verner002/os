@@ -17,7 +17,7 @@
 static GLOBAL_DESCRIPTOR gdt[6]; // global descriptor table
 static INTERRUPT_DESCRIPTOR *idt; // interrupt descriptor table
 static TASK_STATE_SEGMENT tss; // task state segment
-static unsigned long ticks; // current tick count, 1 tick = 1 ms
+static uint64_t ticks; // current tick count, 1 tick = 1 ms
 
 /**
  * __enable_interrupts
@@ -39,10 +39,10 @@ void __disable_interrupts(void) {
  * __init_gdt
 */
 
-void __init_gdt(unsigned short ss0, unsigned int esp0) {
+void __init_gdt(uint16_t ss0, uint32_t esp0) {
     GDT_PTR gdt_ptr = {
         .length = sizeof(gdt) - 1,
-        .base = (dword)&gdt
+        .base = (uint32_t)&gdt
     };
 
     gdt[0] = (GLOBAL_DESCRIPTOR) { // null descriptor
@@ -135,8 +135,8 @@ void __init_gdt(unsigned short ss0, unsigned int esp0) {
         .base_high = 0x00
     };
 
-    dword base = (dword)&tss;
-    dword size = sizeof(TASK_STATE_SEGMENT);
+    uint32_t base = (uint32_t)&tss;
+    uint32_t size = sizeof(TASK_STATE_SEGMENT);
 
     gdt[5] = (GLOBAL_DESCRIPTOR) { // tss
         .limit_low = size,
@@ -176,7 +176,7 @@ void __init_gdt(unsigned short ss0, unsigned int esp0) {
     __flush_tss();
 }
 
-void __set_kernel_stack(unsigned int stack) {
+void __set_kernel_stack(uint32_t stack) {
     tss.esp0 = stack;
 }
 
@@ -189,17 +189,17 @@ void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default
 
     IDT_PTR idt_ptr = {
         .length = 0x07ff,
-        .base = (dword)idt
+        .base = (uint32_t)idt
     };
 
     INTERRUPT_DESCRIPTOR __default_descriptor = {
-        .offset_low = (word)((dword)default_isr & 0xffff),
+        .offset_low = (uint16_t)((uint32_t)default_isr & 0xffff),
         .selector = 0x0008, // code segment selector
         .attributes = INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE,
-        .offset_high = (word)(((dword)default_isr >> 16) & 0xffff)
+        .offset_high = (uint16_t)(((uint32_t)default_isr >> 16) & 0xffff)
     };
 
-    for (unsigned int i = 0; i < 256; ++i) idt[i] = __default_descriptor;
+    for (uint32_t i = 0; i < 256; ++i) idt[i] = __default_descriptor;
 
     asm (
         "lidt %0"
@@ -213,12 +213,12 @@ void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default
  * __set_handler
 */
 
-void __set_handler(byte irq, word selector, byte attributes, void (*isr)(INTERRUPT_FRAME *frame)) {
+void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*isr)(INTERRUPT_FRAME *frame)) {
     INTERRUPT_DESCRIPTOR id = {
-        .offset_low = (word)((dword)isr & 0xffff),
+        .offset_low = (uint16_t)((uint32_t)isr & 0xffff),
         .selector = selector,
         .attributes = attributes,
-        .offset_high = (word)(((dword)isr >> 16) & 0xffff)
+        .offset_high = (uint16_t)(((uint32_t)isr >> 16) & 0xffff)
     };
 
     idt[irq] = id;
@@ -241,12 +241,12 @@ extern TASK *current_task;
  * __switch_task
 */
 
-void __switch_task(void) {
+void __switch_task(uint32_t eip) {
     if (!current_task) return; // not initialized yet
 
     __disable_interrupts();
 
-    unsigned int esp, ebp, eip;
+    uint32_t esp, ebp;
 
     asm volatile (
         "mov esp, %0\t\n"
@@ -256,46 +256,43 @@ void __switch_task(void) {
         :
     );
 
-    
+    current_task->eip = eip;
+    current_task = current_task->next;
+
+    __set_kernel_stack(0);
+
+    //printk("switching to task with pid %u, eip=%p\n", current_task->id, eip);
+
+    if (!current_task->id) {
+        //__exec_kernelmode(current_task->eip);
+    } else {
+        // usermode
+        //__exec_usermode(current_task->eip);
+    }
 }
 
 __attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame) {
-    __disable_interrupts();
+    //__disable_interrupts();
+    __send_eoi(0x00);
+    ++ticks;
     
-    unsigned int eip;
+    uint32_t eip;
 
     asm (
-        "mov eax, dword [ebp+8]"
-        : "=a" (eip)
+        "mov %0, dword [ebp+0]"
+        : "=r" (eip)
         :
         :
     );
-    
-    __send_eoi(0x00);
 
-    ++ticks;
-
-    if (current_task) {
-        current_task->eip = eip;
-        current_task = current_task->next;
-
-        __set_kernel_stack(0);
-
-        if (!current_task->id) {
-            printk("switching to task with pid %u, eip=%p\n", current_task->id, eip);
-            __exec_kernelmode(current_task->eip);
-        } else {
-            // usermode
-            __exec_usermode(0);
-        }
-    }
+    //__switch_task(eip);
 }
 
 /**
  * __current_tick_count
 */
 
-unsigned long __current_tick_count(void) {
+uint64_t __current_tick_count(void) {
     return ticks;
 }
 
@@ -316,8 +313,8 @@ unsigned long __current_tick_count(void) {
  *  The same task is begin processed.
 */
 
-void __delay_ms(unsigned int ms) {
-    unsigned long ticks_end = ticks + ms;
+void __delay_ms(uint32_t ms) {
+    uint64_t ticks_end = ticks + ms;
 
     while (ticks < ticks_end);
 }

@@ -20,4 +20,4 @@
 void __init_speaker(void);
 void __enable_speaker(void);
 void __disable_speaker(void);
-void __play_note(word f);
+void __play_note(uint16_t f);

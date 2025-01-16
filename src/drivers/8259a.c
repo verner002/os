@@ -14,8 +14,8 @@
  * __init_pics
 */
 
-void __init_pics(byte master_vec_offset, byte slave_vec_offset) {
-    byte
+void __init_pics(uint8_t master_vec_offset, uint8_t slave_vec_offset) {
+    uint8_t
         master_mask = __inb(PIC_MASTER_DATA_REGISTER),
         slave_mask = __inb(PIC_SLAVE_DATA_REGISTER);
 
@@ -33,15 +33,31 @@ void __init_pics(byte master_vec_offset, byte slave_vec_offset) {
 }
 
 /**
+ * __send_eoi_slave
+*/
+
+void __send_eoi_slave(void) {
+    __outb(PIC_SLAVE_COMMAND_REGISTER, 0x20); // end of interrupt command
+}
+
+/**
+ * __send_eoi_master
+*/
+
+void __send_eoi_master(void) {
+    __outb(PIC_MASTER_COMMAND_REGISTER, 0x20); // end of interrupt command
+}
+
+/**
  * __send_eoi
 */
 
-void __send_eoi(byte irq_number) {
+void __send_eoi(uint8_t irq_number) {
     //if (irq_number > 0x0f) return;
 
-    if (irq_number >= 0x08) __outb(PIC_SLAVE_COMMAND_REGISTER, 0x20); // end of interrupt command
+    if (irq_number >= 0x08) __send_eoi_slave();
 
-    __outb(PIC_MASTER_COMMAND_REGISTER, 0x20); // end of interrupt command
+    __send_eoi_master();
 }
 
 /**
@@ -66,20 +82,20 @@ void __disable_irqs(void) {
  * __enable_irq
 */
 
-void __enable_irq(byte irq_number) {
-    word mask = ~(0x01 << irq_number) & (__inb(PIC_SLAVE_DATA_REGISTER) << 0x08 | __inb(PIC_MASTER_DATA_REGISTER));
+void __enable_irq(uint8_t irq_number) {
+    uint16_t mask = ~(0x01 << irq_number) & (__inb(PIC_SLAVE_DATA_REGISTER) << 0x08 | __inb(PIC_MASTER_DATA_REGISTER));
 
-    __outb(PIC_MASTER_DATA_REGISTER, (byte)mask);
-    __outb(PIC_SLAVE_DATA_REGISTER, (byte)(mask >> 0x08));
+    __outb(PIC_MASTER_DATA_REGISTER, (uint8_t)mask);
+    __outb(PIC_SLAVE_DATA_REGISTER, (uint8_t)(mask >> 0x08));
 }
 
 /**
  * __disable_irq
 */
 
-void __disable_irq(byte irq_number) {
-    word mask = 0x01 << irq_number | (__inb(PIC_SLAVE_DATA_REGISTER) << 0x08 | __inb(PIC_MASTER_DATA_REGISTER));
+void __disable_irq(uint8_t irq_number) {
+    uint16_t mask = 0x01 << irq_number | (__inb(PIC_SLAVE_DATA_REGISTER) << 0x08 | __inb(PIC_MASTER_DATA_REGISTER));
 
-    __outb(PIC_MASTER_DATA_REGISTER, (byte)mask);
-    __outb(PIC_SLAVE_DATA_REGISTER, (byte)(mask >> 0x08));
+    __outb(PIC_MASTER_DATA_REGISTER, (uint8_t)mask);
+    __outb(PIC_SLAVE_DATA_REGISTER, (uint8_t)(mask >> 0x08));
 }

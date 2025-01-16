@@ -23,10 +23,10 @@ typedef struct _symbol SYMBOL;
 */
 
 struct __attribute__((__packed__)) _symbol {
-    byte symbol_name[8];
-    dword symbol_value;
-    word section_number;
-    word symbol_type;
-    byte storage_class;
-    byte auxiliary_count;
+    uint8_t symbol_name[8];
+    uint32_t symbol_value;
+    uint16_t section_number;
+    uint16_t symbol_type;
+    uint8_t storage_class;
+    uint8_t auxiliary_count;
 };

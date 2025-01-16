@@ -16,17 +16,21 @@
 #include "drivers/ports.h"
 #include "drivers/cpu.h"
 #include "drivers/cmos.h"
-#include "drivers/8259a.h"
+#include "drivers/8237a.h"
 
 /**
  * Constants
 */
 
+#define __FDC_OUTB_TIMEOUT 500
+#define __FDC_INB_TIMEOUT 500
+#define __FDC_IRQ6_TIMEOUT 500
+
 // parameters for 1.44 MB floppy
-#define HEAD_ASSEMBLY 8 // time the controller should wait for the head assembly to move between successive cylinders
-#define HEAD_ACTIVATION 240 // time the controller should wait between activating a head and actually performing a read/write, set to 0 (maximum in any mode)?
-#define HEAD_DEACTIVATION 30 // time the controller should wait before deactivating the head
 #define DATARATE 500000
+#define HEAD_ASSEMBLY 8 // time the controller should wait for the head assembly to move between successive cylinders
+#define HEAD_ACTIVATION 30 // time the controller should wait between activating a head and actually performing a read/write, set to 0 (maximum in any mode)?
+#define HEAD_DEACTIVATION 240 // time the controller should wait before deactivating the head
 
 /**
  * Types Definitions
@@ -34,6 +38,9 @@
 
 typedef enum _drive_type DRIVE_TYPE;
 typedef enum _fdc_command FDC_COMMAND;
+typedef enum __fdc_command_extension FDC_COMMAND_EXTENSION;
+typedef enum __fdc_gap3_length FDC_GAP3_LENGTH;
+typedef enum __fdc_sector_dtl FDC_SECTOR_DTL;
 typedef struct _drive DRIVE;
 
 /**
@@ -73,12 +80,35 @@ enum _fdc_command {
     FDC_COMMAND_SCAN_HIGH_OR_EQUAL = 0x1d
 };
 
+enum __fdc_command_extension {
+    FDC_COMMAND_EXTENSION_SKIP = 0x20,
+    FDC_COMMAND_EXTENSION_DENSITY = 0x40,
+    FDC_COMMAND_EXTENSION_MULTITRACK = 0x80
+};
+
+enum __fdc_gap3_length {
+    FDC_GAP3_LENGTH_STANDARD = 42,
+    FDC_GAP3_LENGTH_5_14 = 32,
+    FDC_GAP3_LENGTH_3_5 = 27
+};
+
+enum __fdc_sector_dtl {
+    FDC_SECTOR_DTL_128 = 0,
+    FDC_SECTOR_DTL_256 = 1,
+    FDC_SECTOR_DTL_512 = 2,
+    FDC_SECTOR_DTL_1024 = 3
+};
+
+enum __fdc_sectors_per_track {
+    FDC_SECTORS_PER_TRACK_3_5 = 18
+};
+
 /**
  * Structures
 */
 
 struct _drive {
-    byte id;
+    uint8_t id;
     DRIVE_TYPE type; // drive type from cmos
     bool motorOn;
 };
@@ -87,7 +117,7 @@ struct _drive {
  * Declarations
 */
 
-void __init_drives(void);
-__attribute__((interrupt)) void __fdc_irq6_handler(INTERRUPT_FRAME *frame);
-void __software_reset(void);
-void __wait_for_fdc(void);
+void __fdc_outb(uint8_t v);
+uint8_t __fdc_inb(void);
+uint32_t __init_fdc(void);
+uint32_t __recalibrate(void);

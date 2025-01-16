@@ -97,6 +97,6 @@
  * Declarations
 */
 
-void __outb(word r, byte v);
-byte __inb(word r);
-void __outw(word r, word v);
+void __outb(uint16_t r, uint8_t v);
+uint8_t __inb(uint16_t r);
+void __outw(uint16_t r, uint16_t v);

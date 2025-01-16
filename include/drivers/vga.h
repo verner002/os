@@ -28,6 +28,6 @@
 */
 
 void __init_vga(void);
-int __putc(byte c);
-int __setcurpos(dword l, dword c);
+int __putc(uint8_t c);
+int __setcurpos(uint32_t l, uint32_t c);
 void __scroll_down(void);

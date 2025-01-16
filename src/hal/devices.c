@@ -38,7 +38,7 @@ void __init_devs(void) {
     // init cpu
     cpu.status = 0; // __init_cpu()
 
-    // look for device to initialize (use config file?)
+    // look for device to initialize (use config file from initrd?)
     // create a node with status EBUSY
     // try to initialize it
     // change status to value in errno

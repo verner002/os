@@ -39,81 +39,81 @@ typedef struct _interrupt_frame INTERRUPT_FRAME;
 */
 
 struct __attribute__((__packed__)) _gdt_ptr {
-    word length;
-    dword base;
+    uint16_t length;
+    uint32_t base;
 };
 
 struct __attribute__((__packed__)) _global_descriptor {
-    unsigned int limit_low                  : 16;
-    unsigned int base_low                   : 24;
-    unsigned int accessed                   : 1;
-    unsigned int read_write                 : 1;
-    unsigned int direction_conforming       : 1;
-    unsigned int executable                 : 1;
-    unsigned int descriptor_type            : 1;
-    unsigned int descriptor_privilage_level : 2;
-    unsigned int present                    : 1;
-    unsigned int limit_high                 : 4;
-    unsigned int reserved                   : 1; // available?
-    unsigned int long_mode                  : 1;
-    unsigned int size                       : 1;
-    unsigned int granularity                : 1;
-    unsigned int base_high                  : 8;
+    uint32_t limit_low                  : 16;
+    uint32_t base_low                   : 24;
+    uint32_t accessed                   : 1;
+    uint32_t read_write                 : 1;
+    uint32_t direction_conforming       : 1;
+    uint32_t executable                 : 1;
+    uint32_t descriptor_type            : 1;
+    uint32_t descriptor_privilage_level : 2;
+    uint32_t present                    : 1;
+    uint32_t limit_high                 : 4;
+    uint32_t reserved                   : 1; // available?
+    uint32_t long_mode                  : 1;
+    uint32_t size                       : 1;
+    uint32_t granularity                : 1;
+    uint32_t base_high                  : 8;
 };
 
 struct __attribute__((__packed__)) _idt_ptr {
-    word length;
-    dword base;
+    uint16_t length;
+    uint32_t base;
 };
 
 struct __attribute__((__packed__)) _interrupt_descriptor {
-    word offset_low;
-    word selector;
-    byte _reserved;
-    byte attributes;
-    word offset_high;
+    uint16_t offset_low;
+    uint16_t selector;
+    uint8_t _reserved;
+    uint8_t attributes;
+    uint16_t offset_high;
 };
 
 struct __attribute__((__packed__)) _task_state_segment {
-    word link_old_tss;
-    word reserved1;
-    dword esp0;
-    word ss0;
-    word reserved2;
-    dword esp1;
-    word ss1;
-    word reserved3;
-    dword esp2;
-    word ss2;
-    word reserved4;
-    dword reserved5;
-    dword eip;
-    dword eflags;
-    dword eax;
-    dword ecx;
-    dword edx;
-    dword ebx;
-    dword esp;
-    dword ebp;
-    dword esi;
-    dword edi;
-    word es;
-    word reserved6;
-    word cs;
-    word reserved7;
-    word ss;
-    word reserved8;
-    word ds;
-    word reserved9;
-    word fs;
-    word reserved10;
-    word gs;
-    word reserved11;
-    word ldt;
-    word reserved12;
-    unsigned short trap       : 1;
-    unsigned short reserved13 : 15;
-    word io_map_base;
+    uint16_t link_old_tss;
+    uint16_t reserved1;
+    uint32_t esp0;
+    uint16_t ss0;
+    uint16_t reserved2;
+    uint32_t esp1;
+    uint16_t ss1;
+    uint16_t reserved3;
+    uint32_t esp2;
+    uint16_t ss2;
+    uint16_t reserved4;
+    uint32_t reserved5;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t ebx;
+    uint32_t esp;
+    uint32_t ebp;
+    uint32_t esi;
+    uint32_t edi;
+    uint16_t es;
+    uint16_t reserved6;
+    uint16_t cs;
+    uint16_t reserved7;
+    uint16_t ss;
+    uint16_t reserved8;
+    uint16_t ds;
+    uint16_t reserved9;
+    uint16_t fs;
+    uint16_t reserved10;
+    uint16_t gs;
+    uint16_t reserved11;
+    uint16_t ldt;
+    uint16_t reserved12;
+    uint16_t trap       : 1;
+    uint16_t reserved13 : 15;
+    uint16_t io_map_base;
 };
 
 struct __attribute__((__packed__)) _interrupt_frame {
@@ -126,12 +126,12 @@ struct __attribute__((__packed__)) _interrupt_frame {
 
 void __enable_interrupts(void);
 void __disable_interrupts(void);
-void __init_gdt(unsigned short ss0, unsigned int esp0);
-void __set_kernel_stack(unsigned int stack);
+void __init_gdt(uint16_t ss0, uint32_t esp0);
+void __set_kernel_stack(uint32_t stack);
 void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default_isr)(INTERRUPT_FRAME *frame));
-void __set_handler(byte irq, word selector, byte attributes, void (*isr)(INTERRUPT_FRAME *frame));
+void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*isr)(INTERRUPT_FRAME *frame));
 void __init_tick_counter(void);
-void __switch_task(void);
+void __switch_task(uint32_t eip);
 __attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame);
-unsigned long __current_tick_count(void);
-void __delay_ms(unsigned int ms);
+uint64_t __current_tick_count(void);
+void __delay_ms(uint32_t ms);

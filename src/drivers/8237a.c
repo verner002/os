@@ -11,23 +11,6 @@
 #include "drivers/8237a.h"
 
 /**
- * __init_dma_controllers
-*/
-
-void __init_dma_controllers(void) {
-    __deactive_master_dma_controller();
-    __deactive_slave_dma_controller();
-
-    __outb(DMA_MASTER_RESET_REGISTER_03, 0xff); // master clear, mask on
-    __outb(DMA_MASTER_RESET_REGISTER_47, 0xff); // master clear, mask on
-    __outb(DMA_MODE_REGISTER_47, 0xc0); // cascade channel 4
-    __outb(DMA_COMMAND_REGISTER_47, 0x10); // channel 4 is used for cascade
-    
-    __active_slave_dma_controller();
-    __active_master_dma_controller();
-}
-
-/**
  * __mask_dma_channels
 */
 
@@ -102,9 +85,9 @@ void __deactive_slave_dma_controller(void) {
 }
 
 /**
- * __wait_for_dma_controllers
+ * __wait_for_dma
 */
 
-void __wait_for_dma_controllers(void) {
+void __wait_for_dma(void) {
     __outb(POST_CODE_REGISTER, 0x00); // dummy write
 }

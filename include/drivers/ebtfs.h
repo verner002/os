@@ -39,21 +39,21 @@ enum _ebtfs_h_errors {
 */
 
 struct _ebtfs_header {
-    dword h_magic;
-    byte h_state;
-    byte h_errors;
-    byte h_log_block_size;
-    dword h_first_data_block;
-    dword h_blocks_count;
-    dword h_inodes_count;
-    dword h_free_blocks_count;
-    dword h_free_inodes_count;
-    dword h_blocks_per_group;
-    dword h_inodes_per_group;
+    uint32_t h_magic;
+    uint8_t h_state;
+    uint8_t h_errors;
+    uint8_t h_log_block_size;
+    uint32_t h_first_data_block;
+    uint32_t h_blocks_count;
+    uint32_t h_inodes_count;
+    uint32_t h_free_blocks_count;
+    uint32_t h_free_inodes_count;
+    uint32_t h_blocks_per_group;
+    uint32_t h_inodes_per_group;
 };
 
 struct _ebtfs_block_group_descriptor {
-    dword g_block_bitmap;
-    dword g_inode_bitmap;
-    dword g_inode_table;
+    uint32_t g_block_bitmap;
+    uint32_t g_inode_bitmap;
+    uint32_t g_inode_table;
 };

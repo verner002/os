@@ -64,21 +64,21 @@ __entry:
     mov si, __data.ok
     call __print_str
 
-    mov si, __data.memory_detect
-    call __print_str
+    ;mov si, __data.memory_detect
+    ;call __print_str
 
-    call __get_mem_size
-    jc __panic
+    ;call __get_mem_size
+    ;jc __panic
 
-    cmp ebx, 0x00008000 ; we need at least 32 MiB
-    jb __panic
+    ;cmp ebx, 0x00004000 ; we need at least 4 MiB //32 MiB
+    ;jb __panic
 
-    mov dword [__data.memory_size], ebx
-    mov eax, ebx
-    call __print_uint
+    ;mov dword [__data.memory_size], ebx
+    ;mov eax, ebx
+    ;call __print_uint
 
-    mov si, __data.kibs
-    call __print_str
+    ;mov si, __data.kibs
+    ;call __print_str
 
     mov si, __data.construct_smap
     call __print_str
@@ -86,7 +86,7 @@ __entry:
     push 0x0000
     pop es
     mov di, __SMAP_OFFSET
-    mov esi, ebx
+    mov esi, 4096*1024 ;ebx
     call __get_smap
     movzx eax, ax
     mov dword [__data.smap_entries_count], eax
@@ -233,7 +233,7 @@ __main:
     push __PD_OFFSET
     push __SMAP_OFFSET ; smap
     push dword [__data.smap_entries_count] ; smap entries
-    push dword [__data.memory_size] ; memory size
+    ;push dword [__data.memory_size] ; memory size
     
     call eax
     add esp, 0x0000001c ; stack cleanup
@@ -293,5 +293,5 @@ __data:
     .ok db `Ok\n\r\0`
     .panic db `PANIC\n\r\0`
     
-    .memory_size dd 0x00000000
+    ;.memory_size dd 0x00000000
     .smap_entries_count dd 0x00000000

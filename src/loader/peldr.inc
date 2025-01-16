@@ -59,7 +59,8 @@ __parse_pe:
     add edi, ebx ; virtual address
     and edi, 0xfffff000 ; make sure address is page aligned
 
-    push eax
+    push edx
+    push eax ; TODO: add 0x0fff to edx and div it by 0x1000
     mov ax, dx
     shr edx, 0x0c ; /4096
     and ax, 0x0fff
@@ -84,6 +85,7 @@ __parse_pe:
     dec edx
     jnz .map_page
     pop edi
+    pop edx
 
     ; what if __SYS_SEGMENT<<4 == virtual address (skip copying)? (unlikely)
 
@@ -94,8 +96,20 @@ __parse_pe:
     mov edi, dword [esi+__section.virtual_address]
     add edi, ebx ; image base
     mov esi, dword [esi+__section.raw_data_ptr]
+    test esi, esi
+    jz .zero ; FIXME: .bss initialization (make it more readable)
     add esi, __SYS_ADDRESS ; FIXME: use eax
     rep movsb ; copy raw data
+    jmp .popall
+
+    .zero:
+    push eax
+    xor al, al
+    mov ecx, edx
+    rep stosb
+    pop eax
+
+    .popall:
     pop esi
     pop edi
     pop ecx
@@ -149,7 +163,7 @@ __skip_sections:
 
     mov edi, .section_tls
     call __match_section
-    jz .return
+    ;jz .return
 
     .return:
     pop edi

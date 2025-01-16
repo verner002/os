@@ -18,6 +18,6 @@
  * Declarations
 */
 
-void __write_cmos_register(byte r, byte v);
-byte __read_cmos_register(byte r);
+void __write_cmos_register(uint8_t r, uint8_t v);
+uint8_t __read_cmos_register(uint8_t r);
 void __wait_for_cmos(void);

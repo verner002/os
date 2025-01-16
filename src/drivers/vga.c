@@ -14,15 +14,15 @@
  * Static Global Variables
 */
 
-static word *video_memory = (word *)VIDEO_MEM;
-static dword
+static uint16_t *video_memory = (uint16_t *)VIDEO_MEM;
+static uint32_t
     cursor_x = 0,
     cursor_y = 0;
-    static byte color = 0x07;
-static unsigned int state = 0;
-static unsigned int value = 0;
-static unsigned int index = 0;
-static unsigned int values[16]; // TODO: define constant
+    static uint8_t color = 0x07;
+static uint32_t state = 0;
+static uint32_t value = 0;
+static uint32_t index = 0;
+static uint32_t values[16]; // TODO: define constant
 
 /**
  * __init_vga
@@ -32,9 +32,9 @@ void __init_vga(void) {
     __outb(VGA_MISCELLANEOUS_OUTPUT_REGISTER_W, __inb(VGA_MISCELLANEOUS_OUTPUT_REGISTER_R) | 0x01); // map crt controller to 0x03dx
     
     __inb(VGA_INPUT_STATUS_1_REGISTER); // reset 0x03c0 flip-flop
-    byte address = __inb(VGA_ATTRIBUTE_ADDRESS_REGISTER); // read address
+    uint8_t address = __inb(VGA_ATTRIBUTE_ADDRESS_REGISTER); // read address
     __outb(VGA_ATTRIBUTE_ADDRESS_REGISTER, 0x10); // select attribute mode control register
-    byte mask = __inb(VGA_ATTRIBUTE_READ_DATA_REGISTER); // read mask
+    uint8_t mask = __inb(VGA_ATTRIBUTE_READ_DATA_REGISTER); // read mask
     __outb(VGA_ATTRIBUTE_WRITE_DATA_REGISTER, mask & 0xf7); // disable blinking
     __outb(VGA_ATTRIBUTE_ADDRESS_REGISTER, address); // restore address
 }
@@ -43,7 +43,7 @@ void __init_vga(void) {
  * __putc
 */
 
-int __putc(byte c) {
+int __putc(uint8_t c) {
     if (state == 0) {
         if (c == '\033') state = 1;
         else {
@@ -54,10 +54,7 @@ int __putc(byte c) {
             } else {
                 if (c < 0x20 || c > 0xfe) c = '?'; // invalid character
 
-                word data = ((word)(color + !color * VIDEO_MEM_DEF_ATTR) << 0x08) | c;
-                    // (a ? a : VIDEO_MEM_DEF_ATTR)
-
-                video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = data;
+                video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = ((uint16_t)color << 8) | (uint16_t)c;
 
                 if (++cursor_x >= VIDEO_MEM_COLS) {
                     ++cursor_y;
@@ -85,9 +82,9 @@ int __putc(byte c) {
         } else if (c == 'm') {
             values[index++] = value;
 
-            for (unsigned int i = 0; i < index; ++i) {
-                byte fgc = color & 0x0f;
-                byte bgc = color & 0xf0;
+            for (uint32_t i = 0; i < index; ++i) {
+                uint8_t fgc = color & 0x0f;
+                uint8_t bgc = color & 0xf0;
 
                 switch (values[i]) {
                     case 30: color = bgc | 0x00; break;
@@ -147,16 +144,16 @@ int __putc(byte c) {
  * __setcurpos
 */
 
-int __setcurpos(dword l, dword c) {
+int __setcurpos(uint32_t l, uint32_t c) {
     cursor_y = l;
     cursor_x = c;
 
-    word index = cursor_y * VIDEO_MEM_COLS + cursor_x;
+    uint16_t index = cursor_y * VIDEO_MEM_COLS + cursor_x;
 
     __outb(VGA_CRT_CONTROLLER_ADDRESS_REGISTER, 0x0f); // cursor location low
-    __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (byte)index);
+    __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)index);
     __outb(VGA_CRT_CONTROLLER_ADDRESS_REGISTER, 0x0e); // cursor location high
-    __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (byte)(index >> 0x08)); // compiler should optimize this to use low and high part of an register
+    __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)(index >> 0x08)); // compiler should optimize this to use low and high part of an register
     
     return 0;
 }
@@ -166,6 +163,6 @@ int __setcurpos(dword l, dword c) {
 */
 
 void __scroll_down(void) {
-    for (unsigned int i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j) video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
-    for (unsigned int i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i) video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
+    for (uint32_t i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j) video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
+    for (uint32_t i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i) video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
 }

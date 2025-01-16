@@ -15,7 +15,7 @@
  * Declarations
 */
 
-void __init_pager(dword *bitmap_ptr, unsigned int pages_count);
+void __init_pager(uint32_t *bitmap_ptr, uint32_t pages_count);
 void *pgalloc(void);
 void pgfree(void *);
-void *pgsalloc(unsigned int n);
+void *pgsalloc(uint32_t n);

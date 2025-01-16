@@ -14,7 +14,7 @@
  * __write_cmos_register
 */
 
-void __write_cmos_register(byte r, byte v) {
+void __write_cmos_register(uint8_t r, uint8_t v) {
     __disable_interrupts();
     __outb(CMOS_ADDRESS_REGISTER, r);
     __wait_for_cmos();
@@ -26,11 +26,11 @@ void __write_cmos_register(byte r, byte v) {
  * __read_cmos_register
 */
 
-byte __read_cmos_register(byte r) {
+uint8_t __read_cmos_register(uint8_t r) {
     __disable_interrupts();
     __outb(CMOS_ADDRESS_REGISTER, r);
     __wait_for_cmos();
-    byte v = __inb(CMOS_SELECTED_REGISTER);
+    uint8_t v = __inb(CMOS_SELECTED_REGISTER);
     __enable_interrupts();
 
     return v;

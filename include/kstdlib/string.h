@@ -17,8 +17,8 @@
  * Declarations
 */
 
-unsigned int strlen(char const *s);
+uint32_t strlen(char const *s);
 char *strcpy(char *d, char const *s);
-char *strncpy(char *d, char const *s, unsigned int n);
-void *memset(void *ptr, int value, unsigned int n);
-void *memcpy(void *destination, void const *source, unsigned int n);
+char *strncpy(char *d, char const *s, uint32_t n);
+void *memset(void *ptr, int value, uint32_t n);
+void *memcpy(void *destination, void const *source, uint32_t n);

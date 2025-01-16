@@ -15,8 +15,8 @@
  * strlen
 */
 
-unsigned int strlen(char const *s) {
-    unsigned int i = __UINT_MAX;
+uint32_t strlen(char const *s) {
+    uint32_t i = __UINT_MAX;
 
     while (s[++i]); // `i' wraps to `0' after first iteration
 
@@ -28,7 +28,7 @@ unsigned int strlen(char const *s) {
 */
 
 char *strcpy(char *d, char const *s) {
-    for (unsigned int i = 0; (d[i] = s[i]); ++i);
+    for (uint32_t i = 0; (d[i] = s[i]); ++i);
 
     return d;
 }
@@ -37,10 +37,10 @@ char *strcpy(char *d, char const *s) {
  * strncpy
 */
 
-char *strncpy(char *d, char const *s, unsigned int n) {
+char *strncpy(char *d, char const *s, uint32_t n) {
     bool t = TRUE;
 
-    for (unsigned int i = 0; i < n; ++i) d[i] = t = t ? s[i] : '\0';
+    for (uint32_t i = 0; i < n; ++i) d[i] = t = t ? s[i] : '\0';
 
     return d;
 }
@@ -49,8 +49,8 @@ char *strncpy(char *d, char const *s, unsigned int n) {
  * memset
 */
 
-void *memset(void *ptr, int value, unsigned int n) {
-    for (unsigned int i = 0; i < n; ++i) ((byte *)ptr)[i] = (byte)value;
+void *memset(void *ptr, int value, uint32_t n) {
+    for (uint32_t i = 0; i < n; ++i) ((uint8_t *)ptr)[i] = (uint8_t)value;
 
     return ptr;
 }
@@ -59,8 +59,8 @@ void *memset(void *ptr, int value, unsigned int n) {
  * memcpy
 */
 
-void *memcpy(void *destination, void const *source, unsigned int n) {
-    for (unsigned int i = 0; i < n; ++i) ((byte *)destination)[i] = ((byte *)source)[i];
+void *memcpy(void *destination, void const *source, uint32_t n) {
+    for (uint32_t i = 0; i < n; ++i) ((uint8_t *)destination)[i] = ((uint8_t *)source)[i];
 
     return destination;
 }

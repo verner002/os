@@ -16,4 +16,4 @@
  * Declarations
 */
 
-unsigned int log10(unsigned int i);
+uint32_t log10(uint32_t i);

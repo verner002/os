@@ -43,8 +43,8 @@ void __stack_chk_fail(void) {
 */
 
 int putc(int c, FILE *stream) {
-    if (stream == stdout) return __putc((byte)c);
-    else if (stream == stderr) return __putc((byte)c);
+    if (stream == stdout) return __putc((uint8_t)c);
+    else if (stream == stderr) return __putc((uint8_t)c);
     
     return -1;
 }
@@ -67,28 +67,28 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
     char c;
     int errno = 0;
 
-    for (unsigned int i = 0; !errno && (c = s[i]); ++i) {
+    for (uint32_t i = 0; !errno && (c = s[i]); ++i) {
         if (c == '%') {
             switch (/*c = */s[++i]) { // variable arguments
                 case 'c': errno = putc(va_arg(args, int), stream); break;
                 case 's': errno = fprintf(stream, va_arg(args, char const *)); break;
                 case 'u': {
-                    unsigned char n[10];
-                    unsigned int u = va_arg(args, unsigned int);
-                    unsigned int j = 0;
+                    uint8_t n[10];
+                    uint32_t u = va_arg(args, uint32_t);
+                    uint32_t j = 0;
 
                     do n[j++] = u % 10 + '0'; while (u /= 10);
                     do errno = putc(n[--j], stream); while (j && !errno);
                     break;
                 }
                 case 'p': {
-                    unsigned int p = va_arg(args, unsigned int);
+                    uint32_t p = va_arg(args, uint32_t);
                     //fprintf(stream, "0x%08x", p); -- implement!!!
                     putc('0', stream);
                     putc('x', stream);
 
-                    for (unsigned int i = 0; i < sizeof(unsigned int) * 2; ++i) {
-                        byte d = ((p = (p << 4) | (p >> 28)) & 0x0f) + '0';
+                    for (uint32_t i = 0; i < sizeof(uint32_t) * 2; ++i) {
+                        uint8_t d = ((p = (p << 4) | (p >> 28)) & 0x0f) + '0';
 
                         if (d > '9') d += 'a' - '9' - 1;
                         
@@ -99,9 +99,9 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
                 case 'l': {
                     switch (/*c = */s[++i]) {
                         case 'u': {
-                            unsigned char n[20];
-                            unsigned long u = va_arg(args, unsigned long);
-                            unsigned int j = 0;
+                            uint8_t n[20];
+                            uint64_t u = va_arg(args, uint64_t);
+                            uint32_t j = 0;
 
                             do n[j++] = u % 10 + '0'; while (u /= 10);
                             do errno = putc(n[--j], stream); while (j && !errno);
@@ -173,21 +173,21 @@ void printk(char const *s, ...) {
     va_list args;
     va_start(args, s);
 
-    unsigned int padding;
-    unsigned long ticks = __current_tick_count();
+    uint32_t padding;
+    uint64_t ticks = __current_tick_count();
 
     printf("\033[32m[");
 
-    if (ticks <= (unsigned long)999999999999) { // we can handle up to about 32 years
-        unsigned int s = ticks / 1000;
-        unsigned int ms = ticks % 1000;
+    if (ticks <= (uint64_t)999999999999) { // we can handle up to about 32 years
+        uint32_t s = ticks / 1000;
+        uint32_t ms = ticks % 1000;
 
         padding = 8 - log10(s);
-        for (unsigned int i = 0; i < padding; ++i) putchar(' ');
+        for (uint32_t i = 0; i < padding; ++i) putchar(' ');
         printf("%u.", s); 
 
         padding = 2 - log10(ms);
-        for (unsigned int i = 0; i < padding; ++i) putchar('0');
+        for (uint32_t i = 0; i < padding; ++i) putchar('0');
         printf("%u", ms);
         
     } else printf("---------.---");

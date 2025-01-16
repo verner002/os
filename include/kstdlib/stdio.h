@@ -27,7 +27,7 @@
  * Types Definitions
 */
 
-typedef unsigned int FILE;
+typedef uint32_t FILE;
 typedef __builtin_va_list va_list;
 
 /**

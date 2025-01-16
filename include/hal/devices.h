@@ -27,7 +27,7 @@ typedef struct _device DEVICE;
 */
 
 struct _device {
-    byte id;
+    uint8_t id;
     char *name;
     void *driver;
     DEVICE **devices;

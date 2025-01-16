@@ -16,5 +16,5 @@
  * Declarations
 */
 
-void __read_sector(byte id, byte lba, byte *buffer);
-void __write_sector(byte id, byte lba, byte *buffer);
+void __read_sector(uint8_t id, uint8_t lba, uint8_t *buffer);
+void __write_sector(uint8_t id, uint8_t lba, uint8_t *buffer);

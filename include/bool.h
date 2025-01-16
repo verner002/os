@@ -10,7 +10,7 @@
  * Types Definitions
 */
 
-typedef unsigned int bool;
+typedef uint32_t bool;
 
 /**
  * Constants

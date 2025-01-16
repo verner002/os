@@ -20,7 +20,7 @@ static CHUNK *first_free_chunk = NULL;
  * __init_heap
 */
 
-void __init_heap(void *p, unsigned int s) {
+void __init_heap(void *p, uint32_t s) {
     CHUNK *heap = (CHUNK *)p;
     heap->free = TRUE;
     heap->size = s - sizeof(CHUNK); // `s' is real size of area reserved for heap
@@ -36,7 +36,7 @@ void __init_heap(void *p, unsigned int s) {
  * NOTE: use AVL tree instead of linked-list?
 */
 
-void *malloc(unsigned int s) {
+void *malloc(uint32_t s) {
     if (!s) return NULL;
 
     CHUNK
@@ -46,9 +46,9 @@ void *malloc(unsigned int s) {
 
     while (chunk) {
         if (chunk->free && chunk->size >= s) {
-            unsigned int remainder = chunk->size - s;
+            uint32_t remainder = chunk->size - s;
             
-            if (remainder > sizeof(CHUNK)) { // split chunk, at least 1 byte can be used
+            if (remainder > sizeof(CHUNK)) { // split chunk, at least 1 uint8_t can be used
                 next_chunk = (CHUNK *)chunk + s;
                 next_chunk->free = TRUE;
                 next_chunk->size = remainder - sizeof(CHUNK); // usable size, without chunk struct
@@ -94,8 +94,8 @@ void free(void *p) {
 static void __swap(void *array, int element_size, int i, int j) {
     if (i == j) return; // in-place swap using xor when i==j would result in 0
     
-    byte *i_pieces = array + element_size * i;
-    byte *j_pieces = array + element_size * j;
+    uint8_t *i_pieces = array + element_size * i;
+    uint8_t *j_pieces = array + element_size * j;
     
     for (int k = 0; k < element_size; ++k) { // in-place swap all pieces
         i_pieces[k] ^= j_pieces[k];
@@ -129,7 +129,7 @@ static void __qsort(void *array, int element_size, int (*compare)(void const *el
     __qsort(array, element_size, compare, p + 1, high);
 }
 
-void qsort(void *array, unsigned int array_size, int element_size, int (*compare)(void const *element1, void const *element2)) {
+void qsort(void *array, uint32_t array_size, int element_size, int (*compare)(void const *element1, void const *element2)) {
     __qsort(array, element_size, compare, 0, array_size - 1);
 }
 
