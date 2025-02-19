@@ -51,8 +51,10 @@ struct __attribute__((__packed__)) _e820_map {
     E820_ENTRY entries[E820_MAX_ENTRIES];
 };
 
-void __init_e820(uint32_t entries_count, E820_ENTRY *map);
+void __add_region(E820_ENTRY entry);
+void __insert_region(E820_ENTRY entry, uint32_t index);
+void __sanitize_e820(uint32_t entries_count, E820_ENTRY *map);
 char const *e820_get_type_string(E820_ENTRY *descriptor);
-void dump_e820(void);
-void *e820_alloc(uint32_t n);
+void __dump_e820(void);
+void *e820_rmalloc(uint32_t n, bool a);
 E820_ENTRY *e820_get_descriptor(uint32_t index);

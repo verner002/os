@@ -9,12 +9,15 @@
 */
 
 #include "types.h"
+#include "kernel/e820.h"
 #include "kstdlib/stdio.h"
+#include "kstdlib/stdlib.h"
 
 /**
  * Types Definitions
 */
 
+typedef struct __cr3 CR3;
 typedef struct __paging_directory_entry PAGING_DIRECTORY_ENTRY;
 typedef struct __paging_table_entry PAGING_TABLE_ENTRY;
 
@@ -23,13 +26,27 @@ typedef struct __paging_table_entry PAGING_TABLE_ENTRY;
 */
 
 enum __page_flags {
-    PAGE_READ_WRITE = 0x01,
-    PAGE_USER = 0x02
+    PAGE_NONE = 0,
+    PAGE_CACHE_ENABLED = 0,
+    PAGE_WRITE_BACK = 0,
+    PAGE_4KIB = 0,
+    PAGE_READ_WRITE = 1,
+    PAGE_USER = 2,
+    PAGE_4MIB = 4,
+    PAGE_CACHE_DISABLED = 8,
+    PAGE_WRITE_THROUGH = 16
 };
 
 /**
  * Structures
 */
+
+/*struct __attribute__((__packed__)) __cr3 {
+    uint32_t reserved1          : 3;
+    uint32_t write_through      : 1;
+    uint32_t cache_disabled     : 1;
+    uint32_t address            : 27;
+};*/
 
 struct __attribute__((__packed__)) __paging_directory_entry {
     uint32_t present            : 1;
@@ -40,7 +57,7 @@ struct __attribute__((__packed__)) __paging_directory_entry {
     uint32_t accessed           : 1;
     uint32_t available1         : 1; // os specific use
     uint32_t granularity        : 1;
-    uint32_t available2         : 4; // is specific use
+    uint32_t available2         : 4; // os specific use
     uint32_t address            : 20; // paging table address
 };
 
@@ -59,7 +76,15 @@ struct __attribute__((__packed__)) __paging_table_entry {
 };
 
 /**
+ * Global Variables
+*/
+
+//extern CR3 page_directory;
+extern uint32_t page_directory;
+
+/**
  * Declarations
 */
 
-uint32_t __mmap(PAGING_DIRECTORY_ENTRY *paging_directory, void *virtual_memory, void *physical_memory, uint8_t flags);
+int32_t __init_vmm(void);
+int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags);

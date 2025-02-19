@@ -22,3 +22,4 @@ char *strcpy(char *d, char const *s);
 char *strncpy(char *d, char const *s, uint32_t n);
 void *memset(void *ptr, int value, uint32_t n);
 void *memcpy(void *destination, void const *source, uint32_t n);
+int32_t strncmp(char const *str1, char const *str2, uint32_t n);

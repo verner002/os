@@ -46,6 +46,18 @@ char *strncpy(char *d, char const *s, uint32_t n) {
 }
 
 /**
+ * strncmp
+*/
+
+int32_t strncmp(char const *str1, char const *str2, uint32_t n) {
+    int32_t c = 0;
+
+    for (uint32_t i = 0; i < n && !c; ++i) c = str1[i] - str2[i];
+
+    return c;
+} 
+
+/**
  * memset
 */
 

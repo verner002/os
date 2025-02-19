@@ -40,6 +40,8 @@ void __disable_interrupts(void) {
 */
 
 void __init_gdt(uint16_t ss0, uint32_t esp0) {
+    printk("\033[33mcpu:\033[37m Initializing GDT... ");
+
     GDT_PTR gdt_ptr = {
         .length = sizeof(gdt) - 1,
         .base = (uint32_t)&gdt
@@ -163,18 +165,27 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
 
     tss.io_map_base = size; // no io bitmap
 
-    tss.cs = 0x0b;
-    tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x13;
+    tss.cs = 0x000b;
+    tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x0013;
 
     asm (
         "lgdt %0"
         :
         : "m" (gdt_ptr)
         :
-    );
+    ); // flush gdt
 
     __flush_tss();
+
+    printf("Ok\n");
 }
+
+/**
+ * __set_kernel_stack
+ * 
+ * Note:
+ *  Sets a kernel stack for each task.
+*/
 
 void __set_kernel_stack(uint32_t stack) {
     tss.esp0 = stack;
@@ -184,11 +195,18 @@ void __set_kernel_stack(uint32_t stack) {
  * __init_idt
 */
 
-void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default_isr)(INTERRUPT_FRAME *frame)) {
-    idt = interrupt_descriptor_table;
+int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
+    printk("\033[33mcpu:\033[37m Initializing IDT... "); // FIXME: use e820_rmm_alloc (real mode memory alloction)
+    
+    idt = (INTERRUPT_DESCRIPTOR *)e820_rmalloc(2048, TRUE);
+
+    if (!idt) {
+        printf("Error\n");
+        return -1;
+    }
 
     IDT_PTR idt_ptr = {
-        .length = 0x07ff,
+        .length = 0x07ff, // 256*sizeof(INTERRUPT_DESCRIPTOR)-1
         .base = (uint32_t)idt
     };
 
@@ -206,7 +224,10 @@ void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default
         :
         : "m" (idt_ptr)
         :
-    );
+    ); // flush idt
+
+    printf("Ok\n");
+    return 0;
 }
 
 /**
@@ -231,61 +252,16 @@ void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*is
 void __init_tick_counter(void) {
     ticks = 0;
 
-    // set pit channel 0 to generate irq
-    // map irq to isr __update_tick_counter
+    // TODO: set pit channel 0 to generate irq
+    // TODO: map irq to isr __update_tick_counter
 }
-
-extern TASK *current_task;
 
 /**
- * __switch_task
+ * __update_tick_counter
 */
 
-void __switch_task(uint32_t eip) {
-    if (!current_task) return; // not initialized yet
-
-    __disable_interrupts();
-
-    uint32_t esp, ebp;
-
-    asm volatile (
-        "mov esp, %0\t\n"
-        "mov ebp, %1\t\n"
-        : "=r" (esp), "=r" (ebp)
-        :
-        :
-    );
-
-    current_task->eip = eip;
-    current_task = current_task->next;
-
-    __set_kernel_stack(0);
-
-    //printk("switching to task with pid %u, eip=%p\n", current_task->id, eip);
-
-    if (!current_task->id) {
-        //__exec_kernelmode(current_task->eip);
-    } else {
-        // usermode
-        //__exec_usermode(current_task->eip);
-    }
-}
-
-__attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame) {
-    //__disable_interrupts();
-    __send_eoi(0x00);
+void __update_tick_counter(void) {
     ++ticks;
-    
-    uint32_t eip;
-
-    asm (
-        "mov %0, dword [ebp+0]"
-        : "=r" (eip)
-        :
-        :
-    );
-
-    //__switch_task(eip);
 }
 
 /**

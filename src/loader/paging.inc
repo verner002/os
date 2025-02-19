@@ -45,6 +45,7 @@ __init_paging:
     mov dword [ebx], edi ; edi contains fmib pt address
     add edi, 0x00001000 ; kern pt address
     mov dword [ebx+512*4], edi ; edi contains kern pt address
+    or ebx, 0x00000008 ; write-through
     mov cr3, ebx ; load pd address and invalidate cache (ebx.high=0)
     popad
     ret

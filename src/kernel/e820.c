@@ -21,7 +21,7 @@ static E820_MAP smap;
  * __add_region
 */
 
-static void __add_region(E820_ENTRY entry) {
+void __add_region(E820_ENTRY entry) {
     if (!entry.size) return;
 
     if (smap.index >= E820_MAX_ENTRIES) {
@@ -36,7 +36,7 @@ static void __add_region(E820_ENTRY entry) {
  * __insert_region
 */
 
-static void __insert_region(E820_ENTRY entry, uint32_t index) {
+void __insert_region(E820_ENTRY entry, uint32_t index) {
     if (!entry.size) return;
 
     if (smap.index >= E820_MAX_ENTRIES) {
@@ -50,7 +50,7 @@ static void __insert_region(E820_ENTRY entry, uint32_t index) {
 }
 
 /**
- * __init_e820
+ * __sanitize_e820
  * 
  * this is the best solution i've came up with
  * if you don't consider the sorting algorithm,
@@ -62,11 +62,34 @@ static void __insert_region(E820_ENTRY entry, uint32_t index) {
  * constructed based on the new order
 */
 
-void __init_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
-    if (entries_count == 1) {
-        __add_region(e820_entries[0]);
-        return;
-    }
+void __sanitize_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
+    printk("\033[33me820:\033[37m Sanitizing E820... ");
+    
+    e820_entries[entries_count++] = (E820_ENTRY) {
+        .base = 0x00000000,
+        .size = 1024+256+22*1024+768,
+        .type = 2
+    }; // IVT, BDA and stack
+
+    e820_entries[entries_count++] = (E820_ENTRY) {
+        .base = 0x0000d000,
+        .size = 3*4096,
+        .type = 2
+    }; // page directory, 1. mib page table and kernel page table
+
+    // TODO: reserve EBDA
+
+    e820_entries[entries_count++] = (E820_ENTRY) {
+        .base = 0x000a0000,
+        .size = 128*1024+32*1024+160*1024+64*1024,
+        .type = 2
+    }; // video memory, video bios, bios expansion, rom bios
+
+    e820_entries[entries_count++] = (E820_ENTRY) {
+        .base = 0x00100000,
+        .size = 4*1024*1024,
+        .type = 2
+    }; // kernel
 
     uint32_t descriptors_count = 0;
 
@@ -94,15 +117,20 @@ void __init_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
                 *previous = *current;
                 *current = temp;
                 check = TRUE;
+            } else if (previous->address == current->address) {
+                if (previous->entry->type < current->entry->type) descriptors[i - 1] = descriptors[--descriptors_count];
+                else descriptors[i] = descriptors[--descriptors_count];
+                
+                check = TRUE;
             }
         }
     } while (check);
 
-    for (uint32_t i = 2; i < descriptors_count; i += 2) { // takes care of merging regions (there is always an even number of descriptors)
+    for (uint32_t i = 1; i < descriptors_count; ++i) { // takes care of merging regions (there is always an even number of descriptors)
         ADDRESS_DESCRIPTOR *previous_end = &descriptors[i - 1];
         ADDRESS_DESCRIPTOR *current_start = &descriptors[i];
 
-        if ((previous_end->address + 1) == current_start->address && previous_end->entry->type == current_start->entry->type) previous_end->end = FALSE;
+        if (!current_start->end && previous_end->end && (previous_end->address + 1) == current_start->address && previous_end->entry->type == current_start->entry->type) previous_end->end = FALSE;
     }
 
     for (uint32_t i = 0; i < descriptors_count; ++i) { // create a new map
@@ -114,7 +142,7 @@ void __init_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
 
             __add_region((E820_ENTRY) {
                 .base = previous->address + 1,
-                .size = current->address - previous->address + 1,
+                .size = current->address - previous->address,
                 .type = current->entry->type
             });
         } else {
@@ -143,6 +171,9 @@ void __init_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
             }
         }
     }
+
+    smap.entries[2].base = 0x10001;
+    printf("Ok\n");
 }
 
 char const *e820_get_type_string(E820_ENTRY *descriptor) {
@@ -158,7 +189,7 @@ char const *e820_get_type_string(E820_ENTRY *descriptor) {
     }
 }
 
-void dump_e820(void) {
+void __dump_e820(void) {
     E820_ENTRY *entries = smap.entries;
     uint32_t entries_count = smap.index;
 
@@ -169,36 +200,53 @@ void dump_e820(void) {
     }
 }
 
-void *e820_alloc(uint32_t n) {
+void *e820_rmalloc(uint32_t n, bool a) {
     if (!n) return NULL;
 
     uint32_t entries_count = smap.index;
     E820_ENTRY *entries = smap.entries;
-    uint32_t size = n * 4096;
-    uint32_t address = 0;
 
     for (uint32_t i = 0; i < entries_count; ++i) {
         E820_ENTRY *entry = &entries[i];
+        uint32_t
+            base = entry->base,
+            fixed_base = base,
+            size = entry->size,
+            diff = 0;
 
-        if (entry->type == 1 && entry->size >= size) {
-            E820_ENTRY remainder = {
-                .base = entry->base + size,
-                .size = entry->size - size,
-                .type = 1 // free
-            };
+        if (a) {
+            fixed_base = (fixed_base + 0x00000fff) & 0xfffff000;
+            diff = fixed_base - base;
+            size -= diff;
+        }
 
-            //printk("\033[33me820:\033[37m updating %p, %u, %s\n", remainder.base, remainder.size, e820_get_type_string(&remainder));
+        if (fixed_base + n > 1024*1024) break; // we're above first mib
+        else if (entry->type == 1 && size >= n) {
+            if (size > n) { // there is a remainder
+                __insert_region((E820_ENTRY) {
+                    .base = fixed_base + n,
+                    .size = size - n,
+                    .type = 1 // free
+                }, i + 1);
+            }
 
-            address = entry->base;
-            entry->size = size;
+            entry->base = fixed_base;
+            entry->size = n;
             entry->type = 2; // reserved
 
-            __insert_region(remainder, i + 1);
-            break;
+            if (diff) {
+                __insert_region((E820_ENTRY) {
+                    .base = base,
+                    .size = diff,
+                    .type = 1 // free
+                }, i);
+            }
+
+            return fixed_base;
         }
     }
 
-    return (void *)address;
+    return NULL;
 }
 
 E820_ENTRY *e820_get_descriptor(uint32_t index) {

@@ -43,7 +43,7 @@ void __init_vga(void) {
  * __putc
 */
 
-int __putc(uint8_t c) {
+int32_t __putc(uint8_t c) {
     if (state == 0) {
         if (c == '\033') state = 1;
         else {
@@ -144,9 +144,9 @@ int __putc(uint8_t c) {
  * __setcurpos
 */
 
-int __setcurpos(uint32_t l, uint32_t c) {
-    cursor_y = l;
-    cursor_x = c;
+void __setcurpos(uint32_t line, uint32_t column) {
+    cursor_y = line;
+    cursor_x = column;
 
     uint16_t index = cursor_y * VIDEO_MEM_COLS + cursor_x;
 
@@ -154,8 +154,6 @@ int __setcurpos(uint32_t l, uint32_t c) {
     __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)index);
     __outb(VGA_CRT_CONTROLLER_ADDRESS_REGISTER, 0x0e); // cursor location high
     __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)(index >> 0x08)); // compiler should optimize this to use low and high part of an register
-    
-    return 0;
 }
 
 /**

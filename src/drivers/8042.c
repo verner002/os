@@ -14,7 +14,9 @@
  * __init_ps2
 */
 
-void __init_ps2(void) {
+int32_t __init_ps2(void) {
+    printk("\033[33mps2:\033[37m Initializing... ");
+
     uint8_t buffer;
 
     __disable_ps2_a_port();
@@ -24,7 +26,10 @@ void __init_ps2(void) {
     __ps2_write_byte(PS2_COMMAND_REGISTER, 0x20); // read config uint8_t
 
     buffer = __ps2_read_byte();
-    if (errno) return;
+    if (errno) {
+        printf("Error\n");
+        return -1;
+    }
 
     uint8_t config_byte = buffer & 0x24; // disable translantion for port a, disable irqs, enable signal for port a
 
@@ -34,27 +39,45 @@ void __init_ps2(void) {
     __ps2_write_byte(PS2_COMMAND_REGISTER, 0xaa); // test ps/2 controller
 
     buffer = __ps2_read_byte();
-    if (errno) return;
+    if (errno) {
+        printf("Error\n");
+        return -1;
+    }
 
-    if (buffer != 0x55) errno = EIO;
+    if (buffer != 0x55) {
+        printf("Error\n");
+        return -1;
+    }
 
     __ps2_write_byte(PS2_COMMAND_REGISTER, 0xab); // test port a
 
     buffer = __ps2_read_byte();
-    if (errno) return;
+    if (errno) {
+        printf("Error\n");
+        return -1;
+    }
 
-    if (buffer) errno = EIO;
+    if (buffer) {
+        printf("Error\n");
+        return -1;
+    }
 
     __ps2_write_byte(PS2_COMMAND_REGISTER, 0x20); // read config uint8_t
 
     buffer = __ps2_read_byte();
-    if (errno) return;
+    if (errno) {
+        printf("Error\n");
+        return -1;
+    }
 
     config_byte = buffer | 0x01; // enable irq for port a
 
     __ps2_write_byte(PS2_COMMAND_REGISTER, 0x60); // write config uint8_t
     __ps2_write_byte(PS2_DATA_PORT_REGISTER, config_byte);
     __enable_ps2_a_port();
+
+    printf("Ok\n");
+    return 0;
 }
 
 /**

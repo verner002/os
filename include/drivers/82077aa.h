@@ -120,4 +120,6 @@ struct _drive {
 void __fdc_outb(uint8_t v);
 uint8_t __fdc_inb(void);
 uint32_t __init_fdc(void);
-uint32_t __recalibrate(void);
+uint32_t __fdc_recalibrate(void);
+uint32_t __fdc_seek(uint32_t head, uint32_t cylinder);
+uint32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer);

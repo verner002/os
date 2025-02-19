@@ -2,7 +2,6 @@ global __get_eip
 global __flush_tss
 global __exec_kernelmode
 global __exec_usermode
-extern test_func
 
 __get_eip:
     pop eax
@@ -13,27 +12,36 @@ __flush_tss:
     ltr ax
     ret
 
+;
+; __exec_kernelmode
+;
+; 00000004 | first argument
+; 00000000 | EIP
+;
+
 __exec_kernelmode:
     cli
     mov ebp, esp
-    mov ebp, dword [ebp+4]
+    mov ebx, dword [ebp+4]
+    mov esp, dword [ebp+8]
+    mov ebp, dword [ebp+12]
     mov ax, (2 * 8) | 0
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
-    ; ss is handled by iret
+    mov ss, ax ; ss not handled by iret
 
-    mov eax, esp
-    push (2 * 8) | 0 ; data selector
-    push eax ; current stack
-    pushf
+    ;mov eax, esp
+    ;push (2 * 8) | 0 ; data selector
+    ;push eax ; current stack pointer
+    pushfd
     pop eax
     or eax, 0x00000200 ; enable interrupts
     push eax ; eflags with if=1
     push (1 * 8) | 0 ; code selector
-    push ebp
-    iret
+    push ebx
+    iretd ; pe=1, nt=0
 
 __exec_usermode:
     cli
@@ -47,6 +55,12 @@ __exec_usermode:
     mov gs, ax
     ; ss is handled by iret
 
+    ; DataSelector
+    ; ESP
+    ; EFLAGS
+    ; CodeSelector
+    ; EIP
+
     mov eax, esp
     push (4 * 8) | 3 ; data selector
     push eax ; current stack
@@ -56,4 +70,4 @@ __exec_usermode:
     push eax ; eflags with if=1
     push (3 * 8) | 3 ; code selector
     push ebp
-    iret
+    iretd

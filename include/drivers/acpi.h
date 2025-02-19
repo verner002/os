@@ -20,7 +20,7 @@
 
 typedef struct __rsdp RSDP;
 typedef struct __xsdp XSDP;
-typedef struct __std_header STD_HEADER;
+typedef struct __sdt_header SDT_HEADER;
 typedef struct __sdt SDT;
 
 /**
@@ -47,10 +47,11 @@ struct __attribute__((__packed__)) __xsdp {
     uint8_t reserved[3];
 };
 
-struct __attribute__((__packed__)) __std_header {
+struct __attribute__((__packed__)) __sdt_header {
     uint8_t signature[4];
     uint32_t length;
     uint8_t revision;
+    uint8_t checksum;
     uint8_t oem_id[6];
     uint8_t oem_table_id[8];
     uint32_t oem_revision;
@@ -59,12 +60,12 @@ struct __attribute__((__packed__)) __std_header {
 };
 
 struct __attribute__((__packed__)) __sdt {
-    STD_HEADER header;
-    void *stds;
+    SDT_HEADER header;
+    uint32_t sdts[];
 };
 
 /**
  * Declarations
 */
 
-uint32_t __init_acpi(void);
+int32_t __init_acpi(void);

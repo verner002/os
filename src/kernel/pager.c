@@ -22,10 +22,13 @@ static uint32_t last_index;
  * init_pager
 */
 
-void __init_pager(uint32_t *bitmap_ptr, uint32_t pages_count) {
+int32_t __init_pager(uint32_t *bitmap_ptr, uint32_t pages_count) {
+    printk("\033[33mpmm:\033[37m Initializing... ");
+    
+    // TODO: calculate pages_count from bitmap_size
     if (pages_count % 16 || pages_count < 32) {
-        //error();
-        return;
+        printf("Failed\n");
+        return -1;
     }
 
     bitmap = bitmap_ptr;
@@ -34,9 +37,12 @@ void __init_pager(uint32_t *bitmap_ptr, uint32_t pages_count) {
 
     for (uint32_t i = 1; i < size; ++i) bitmap[i] = 0;
 
+    // manually alloc first physical page
     bitmap[0] = 0x0001; // NULL cannot be assigned
 
     // TODO: allocate memory occupied by bitmap here?
+    printf("Ok\n");
+    return 0;
 }
 
 /**

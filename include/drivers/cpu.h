@@ -10,9 +10,9 @@
  * Includes
 */
 
-#include "kernel/task.h"
-#include "kernel/userland.h"
+#include "drivers/cpu.h"
 #include "drivers/8259a.h"
+#include "kernel/userland.h"
 #include "kstdlib/string.h"
 #include "kstdlib/stdio.h"
 
@@ -128,10 +128,9 @@ void __enable_interrupts(void);
 void __disable_interrupts(void);
 void __init_gdt(uint16_t ss0, uint32_t esp0);
 void __set_kernel_stack(uint32_t stack);
-void __init_idt(INTERRUPT_DESCRIPTOR *interrupt_descriptor_table, void (*default_isr)(INTERRUPT_FRAME *frame));
+int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame));
 void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*isr)(INTERRUPT_FRAME *frame));
 void __init_tick_counter(void);
-void __switch_task(uint32_t eip);
-__attribute__((interrupt)) void __update_tick_counter(INTERRUPT_FRAME *frame);
+void __update_tick_counter(void);
 uint64_t __current_tick_count(void);
 void __delay_ms(uint32_t ms);

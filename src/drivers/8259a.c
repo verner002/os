@@ -15,6 +15,8 @@
 */
 
 void __init_pics(uint8_t master_vec_offset, uint8_t slave_vec_offset) {
+    printk("\033[33mpic:\033[37m Initializing... ");
+    
     uint8_t
         master_mask = __inb(PIC_MASTER_DATA_REGISTER),
         slave_mask = __inb(PIC_SLAVE_DATA_REGISTER);
@@ -30,22 +32,24 @@ void __init_pics(uint8_t master_vec_offset, uint8_t slave_vec_offset) {
 
     __outb(PIC_SLAVE_DATA_REGISTER, slave_mask); // restore slaves's mask
     __outb(PIC_MASTER_DATA_REGISTER, master_mask); // restore master's mask
+
+    printf("Ok\n");
 }
 
 /**
- * __send_eoi_slave
+ * __send_master_eoi
 */
 
-void __send_eoi_slave(void) {
-    __outb(PIC_SLAVE_COMMAND_REGISTER, 0x20); // end of interrupt command
-}
-
-/**
- * __send_eoi_master
-*/
-
-void __send_eoi_master(void) {
+void __send_master_eoi(void) {
     __outb(PIC_MASTER_COMMAND_REGISTER, 0x20); // end of interrupt command
+}
+
+/**
+ * __send_slave_eoi
+*/
+
+void __send_slave_eoi(void) {
+    __outb(PIC_SLAVE_COMMAND_REGISTER, 0x20); // end of interrupt command
 }
 
 /**
@@ -55,9 +59,9 @@ void __send_eoi_master(void) {
 void __send_eoi(uint8_t irq_number) {
     //if (irq_number > 0x0f) return;
 
-    if (irq_number >= 0x08) __send_eoi_slave();
+    if (irq_number >= 0x08) __send_slave_eoi();
 
-    __send_eoi_master();
+    __send_master_eoi();
 }
 
 /**
@@ -98,4 +102,24 @@ void __disable_irq(uint8_t irq_number) {
 
     __outb(PIC_MASTER_DATA_REGISTER, (uint8_t)mask);
     __outb(PIC_SLAVE_DATA_REGISTER, (uint8_t)(mask >> 0x08));
+}
+
+/**
+ * __read_master_isr
+*/
+
+uint8_t __read_master_isr(void) {
+    // TODO: we don't need to send ocw3 every time, keep track of the last command
+    __outb(PIC_MASTER_COMMAND_REGISTER, 0x0b); // ocw3 read isr
+    return __inb(PIC_MASTER_COMMAND_REGISTER);
+}
+
+/**
+ * __read_slave_isr
+*/
+
+uint8_t __read_slave_isr(void) {
+    // TODO: we don't need to send ocw3 every time, keep track of the last command
+    __outb(PIC_SLAVE_COMMAND_REGISTER, 0x0b); // ocw3 read isr
+    return __inb(PIC_SLAVE_COMMAND_REGISTER);
 }

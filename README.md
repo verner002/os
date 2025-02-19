@@ -23,7 +23,7 @@ This memory map is designed for FAT12 boot loader.
 | `0x0000e000` | `0x0000efff` | 4 KiB | First MiB Page Table
 | `0x0000f000` | `0x0000ffff` | 4 KiB | Kernel Page Table
 | `0x00010000` | `0x0007ffff` | 448 KiB | Kernel Image
-| `0x00080000` | `0x0009ffff` | 128 KiB | Extended BIOS Data Area
+| `0x00080000` | `0x0009ffff` | 128 KiB | Extended BIOS Data Area (mostly)
 | `0x000a0000` | `0x000bffff` | 128 KiB | Video Memory
 | `0x000c0000` | `0x000c7fff` | 32 KiB | Video BIOS
 | `0x000c8000` | `0x000effff` | 160 KiB | BIOS Expansion

@@ -11,6 +11,7 @@
 */
 
 #include "drivers/ports.h"
+#include "kstdlib/stdio.h"
 
 /**
  * Declarations

@@ -11,12 +11,6 @@
 */
 
 #include "null.h"
-#include "kstdlib/errno.h"
-#include "kernel/syms.h"
-#include "kernel/e820.h"
-#include "kernel/pager.h"
-#include "kernel/userland.h"
-#include "kernel/task.h"
 
 #include "drivers/cpu.h"
 #include "drivers/acpi.h"
@@ -26,6 +20,14 @@
 #include "drivers/8237a.h"
 #include "drivers/82077aa.h"
 
+#include "kernel/syms.h"
+#include "kernel/e820.h"
+#include "kernel/pager.h"
+#include "kernel/userland.h"
+#include "kernel/task.h"
+#include "kernel/fat12.h"
+
+#include "kstdlib/errno.h"
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
 
@@ -74,7 +76,11 @@ __attribute__((interrupt)) static void __bounds_check(INTERRUPT_FRAME *frame) {
 }
 
 __attribute__((interrupt)) static void __invalid_opcode(INTERRUPT_FRAME *frame) {
-    printk("fault: invalid opcode!\n");
+    uint32_t eip; // instruction that caused the fault
+    
+    asm volatile ("pop %0" : "=m" (eip));
+
+    printk("fault: invalid opcode at %p!\n", eip);
     for (;;);
 }
 
@@ -98,18 +104,26 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
     for (;;);
 }
 
+__attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
+    __disable_interrupts();
+    
+    __send_eoi(0x00);
+    
+    __update_tick_counter();
+    __switch_task();
+    
+    __enable_interrupts();
+}
+
+
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     __send_eoi(0x01);
     __inb(PS2_DATA_PORT_REGISTER);
     printk("\033[33mkbd:\033[37m reading buffer\n");
 }
 
-__attribute__((interrupt)) static void test(INTERRUPT_FRAME *frame) {
+__attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
     printk("\033[33mkernel:\033[37m syscall\n");
-}
-
-void test_func(void) {
-    asm("int 0x80");
 }
 
 /**
@@ -117,61 +131,24 @@ void test_func(void) {
 */
 
 void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
-    __init_vga();
+    __init_tick_counter(); // reset tick counter
     
+    __init_vga();
     __setcurpos(cursor_y, cursor_x);
+
     printf("\033[97mWelcome to Kernel!\033[37m\n");
 
-    // reset tick counter
-    __init_tick_counter();
-
-    #ifdef __DEBUG
-        printk("e820_entries=%p, regions=%u\n", e820_entries, e820_entries_count);
-        printk("symbol_table=%p, symbols=%u\n", symbol_table, symbols_count);
-        printk("string_table=%p\n", string_table);
-    #endif
-
-    printk("\033[33mvga:\033[37m Initialized\n");
-
-    printk("Loading GDT... ");
     __init_gdt(0x10, 0x7c00);
-    printf("Ok\n");
     
-    printk("Sanitizing E820... ");
-    errno = 0;
-    __init_e820(e820_entries_count, e820_entries);
-    printf("%s\n", errno ? "Error" : "Ok");
+    __sanitize_e820(e820_entries_count, e820_entries);
 
-    dump_e820();
+    __dump_e820();
 
-    E820_ENTRY *first_descriptor = e820_get_descriptor(0);
-
-    if (first_descriptor->type == 1 || first_descriptor->base || first_descriptor->size < 0x00001000) {
-        printk("Reserving memory for IVT and BDA... ");
-
-        e820_alloc(1); // TODO: use insert
-
-        first_descriptor = e820_get_descriptor(0);
-
-        if (first_descriptor->type == 2 && !first_descriptor->base && first_descriptor->size >= 0x00001000) printf("Ok\n");
-        else {
-            printf("Error\n");
-            panic();
-        }
-    }
-
-    printk("\033[33midt:\033[37m Initializing... ");
-    // e820 is page-aligned, so we reserve 1 page even though we're going to use only half of it
-
-    INTERRUPT_DESCRIPTOR *idt = (INTERRUPT_DESCRIPTOR *)e820_alloc(1);
-
-    if (!idt) {
-        printf("Error\n");
+    if (__init_idt(&__default_isr)) {
+        printk("\033[91mFailed to initialize IDT\033[37m\n");
         panic();
     }
 
-    errno = 0; // reset errno
-    __init_idt((INTERRUPT_DESCRIPTOR *)0x00007000, &__default_isr); // TODO: use smap to find suitable region for idt?
     __set_handler(0x00, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__division_by_zero);
     __set_handler(0x02, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__nmi);
     __set_handler(0x04, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__overflow);
@@ -181,62 +158,83 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __set_handler(0x08, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__double_fault);
     __set_handler(0x0d, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__general_protection_fault);
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
-    __disable_irqs();
-    __enable_interrupts();
-    printf("%s\n", errno ? "Error" : "Ok");
+
+    // TODO: calculate pages count from bitmap size
+    if (__init_pager((uint32_t)e820_rmalloc(4096, FALSE), 32)) {
+        panic();
+    }
+
+    // FIXME: don't initialize heap in stdlib
+    __init_heap(pgalloc(), 4096);
+
+    if (__init_vmm()) {
+        panic();
+    }
 
     if (__init_acpi()) {
         printk("\033[91mFailed to initialize ACPI\033[37m\n");
-        // set mode to 8259
-    } // else set mode to acpi (initialize apic)
+        printk("\033[33mkernel:\033[37m \033[96mCannot use APIC => using PIC\033[37m\n");
 
-    printk("Initializing PICs... ");
-    errno = 0; // reset errno
-    __init_pics(0x0020, 0x0070); // irqs 0-7 -> int 20->27, irqs 8-f -> 70->77, sets errno
-    printf("%s\n", errno ? "Error" : "Ok");
+        // initialize pic
+        __init_pics(0x0020, 0x0070); // irqs 0-7 -> int 20->27, irqs 8-f -> 70->77
+        // TODO: irq7 and irq15 must to check isr flag (spurious irqs)
+        __disable_irqs();
+    } else {
+        // initialize apic
+    }
 
-    printk("Initializing PIT... ");
-    errno = 0; // reset errno
+    __enable_interrupts(); // we are ready to receive external interrupts
+    
     __init_pit();
+
     // channel 0 for ticks counter, FIXME: doesn't work in bochs
     __outw(PIT_CHANNEL_0_DATA_REGISTER, 0x001234de / 1000); // channel 0 freq=1kHz
+    
     __disable_interrupts();
-    __send_eoi_master();
-    __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__update_tick_counter);
+    __send_master_eoi();
+    __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__pit_irq0_handler);
     __enable_interrupts();
     __enable_irq(0x00); // irq0
-    printf("%s\n", errno ? "Error" : "Ok");
 
-    printk("Initializing PS/2... ");
-    errno = 0; // reset errno
+    // initialize usb controller first
+    // ps/2 could be emulated (usb
+    // legacy support)
     __init_ps2();
+
     __disable_interrupts();
-    __send_eoi_master();
+    __send_master_eoi();
     __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
     __enable_interrupts();
     __enable_irq(0x01); // irq1
-    printf("%s\n", errno ? "Error" : "Ok");
-
-    /*printk("Initializing DMA... ");
-    __init_dma();
-    printf("Ok\n");*/
 
     if (__init_fdc()) {
         printk("\033[91mFailed to initialize FDC\033[37m\n");
-        // ignore?
+        // ignore? (may be ignored for a while (until we try to mount root))
     }
 
-    printk("Initializing PMM... ");
-    // !!! VALUES USED ARE ONLY FOR TESTING !!!
-    __init_pager((uint32_t *)0x00008000, 32); // TODO: use smap to find suitable region for pmm?
-    printf("Ok\n");
+    /*__fat12_read_fat();
+    __fat12_read_root_dir();
+    __fat12_load_file("KERNEL  SYS", 0x30000);*/
 
-    printk("Initializing heap... ");
-    __init_heap(pgalloc(), 4096);
-    printf("Ok\n");
+    if (__init_tasking()) panic();
+    
+    /*__disable_interrupts();
+    TASK *fdc_daemon = (TASK *)malloc(sizeof(TASK));
 
-    loop:
-    goto loop;
+    fdc_daemon->id = 1;
+    fdc_daemon->state = TASK_STATE_IDLE;
+    fdc_daemon->eip = (uint32_t)&function;
+    fdc_daemon->esp = fdc_daemon->ebp = pgalloc() + 4096;
+    fdc_daemon->kernel_stack = pgalloc() + 4096;
+    fdc_daemon->next = NULL;
+
+    current_task = kernel;
+    __enable_interrupts();*/
+    
+    //printk("kernel: Entering idle loop\n");
+
+    // idle loop
+    for (;;) asm("hlt");
 
     /*printk("waiting 5 seconds...\n");
     __delay_ms(5000);
@@ -265,34 +263,5 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         //__delay_ms(2000);
     }*/
 
-    __set_handler(0x80, 0x0008, 0xee, &test); // FIXME: implement setting dpl, this is stupid
-
-    __disable_interrupts();
-    TASK *system = current_task = (TASK *)malloc(sizeof(TASK));
-    
-    TASK *test = (TASK *)malloc(sizeof(TASK));
-    test->id = 1;
-    test->eip = (uint32_t)&test_func;
-    test->esp = test->ebp = pgalloc() + 4096;
-    test->kernel_stack = pgalloc() + 4096;
-    test->next = system;
-
-    system->id = 0;
-    system->esp = system->ebp = pgalloc() + 4096;
-    system->kernel_stack = pgalloc() + 4096;
-    system->next = test;
-    __enable_interrupts();
-
-    //__switch_task();
-
-    uint32_t eip = __get_eip();
-    printk("cycle\n");
-    __exec_kernelmode(eip);
-
-    printf("kernel\n");
-
-    // idle loop
-    for (;;) {
-        asm("hlt");
-    }
+    //__set_handler(0x80, 0x0008, 0xee, &syscall); // FIXME: implement setting dpl, this is stupid
 }

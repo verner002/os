@@ -230,7 +230,7 @@ uint32_t __fdc_reset(void) {
         __fdc_turn_motor_on();
         __delay_ms(300);
         
-        if (__recalibrate()) {
+        if (__fdc_recalibrate()) {
             __fdc_turn_motor_off();
             continue;
         }
@@ -244,10 +244,10 @@ uint32_t __fdc_reset(void) {
 }
 
 /**
- * __recalibrate
+ * __fdc_recalibrate
 */
 
-uint32_t __recalibrate(void) {
+uint32_t __fdc_recalibrate(void) {
     for (uint32_t i = 0; i < 3; ++i) {
         fdc.irqReceived = FALSE;
 
@@ -271,10 +271,10 @@ uint32_t __recalibrate(void) {
 }
 
 /**
- * __seek
+ * __fdc_seek
 */
 
-uint32_t __seek(uint32_t head, uint32_t cylinder) {
+uint32_t __fdc_seek(uint32_t head, uint32_t cylinder) {
     for (uint32_t i = 0; i < 3; ++i) {
         fdc.irqReceived = FALSE;
 
@@ -357,15 +357,15 @@ void __fdc_dma_prepare_read(void) {
 }
 
 /**
- * __fdc_read
+ * __fdc_read_sector
 */
 
-uint32_t __fdc_read(uint32_t track, uint32_t head, uint32_t sector, uint32_t buffer) {
+uint32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32_t buffer) {
     __outb(FDC_CONFIGURATION_CONTROL_REGISTER, 0x00); // 500 kbit/s for 1.44MB 3.5'
 
-    __recalibrate();
-
     for (uint32_t i = 0; i < 3; ++i) {
+        __fdc_recalibrate();
+
         for (uint32_t j = 0; j < 3; ++j) {
             __init_fdc_dma(buffer, 512);
             __fdc_dma_prepare_read();
@@ -377,7 +377,7 @@ uint32_t __fdc_read(uint32_t track, uint32_t head, uint32_t sector, uint32_t buf
             __fdc_outb((head << 2) | 0);
             if (errno) return -1;
             
-            __fdc_outb(track);
+            __fdc_outb(cylinder);
             if (errno) return -1;
             
             __fdc_outb(head);
@@ -402,18 +402,51 @@ uint32_t __fdc_read(uint32_t track, uint32_t head, uint32_t sector, uint32_t buf
 
             uint8_t st0 = __fdc_inb();
 
-            //printk("st0: %u\n", st0);
-
             if (errno || (st0 & 0xc0) != 0x00) continue;
 
-            for (uint32_t i = 0; i < 6; ++i) /*printk("status byte #%u: %u\n", i + 1, */__fdc_inb()/*)*/;
+            for (uint32_t i = 0; i < 6; ++i) {
+                __fdc_inb();
+
+                if (errno) break;
+            }
+
+            if (errno) continue;
             return 0;
         }
-
-        __recalibrate();
     }
 
     return -1;
+}
+
+/**
+ * __fdc_read_sectors
+*/
+
+uint32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
+    if ((buffer + count * 512 - 1) > 0xfffff) {
+        printk("\033[33mfdc:\033[37m Buffer must resize within the first MiB.\n");
+        return -1;
+    }
+
+    uint8_t cylinder, head, sector;
+
+    __fdc_turn_motor_on();
+    __delay_ms(300);
+
+    for (uint32_t i = 0; i < count; ++i) {
+        cylinder = lba / (2 * 18);
+        head = (lba / 18) % 2;
+        sector = (lba % 18) + 1;
+
+        if (__fdc_read_sector(cylinder, head, sector, buffer)) break;
+
+        ++lba;
+        buffer += 512;
+    }
+
+    __fdc_turn_motor_off();
+
+    return 0;
 }
 
 /**
@@ -440,54 +473,36 @@ char const*__get_drive_type_string(DRIVE drive) {
 */
 
 uint32_t __init_fdc(void) {
-    printk("Initializing FDC...\n");
-    printk("\033[33mfdc:\033[37m Detecting drives... ");
+    //printk("Initializing FDC...\n");
+    //printk("\033[33mfdc:\033[37m Detecting drives... ");
 
     uint8_t drives = __read_cmos_register(0x10);
 
     fdc.type = (DRIVE_TYPE)(drives >> 0x04);
     //fdc.slave.type = (DRIVE_TYPE)(drives & 0x0f);
 
-    printf("Done\n");
+    //printf("Done\n");
 
     if (!fdc.type) {
         printk("\033[33mfdc:\033[37m No drive found\n");
         return 0;
     }
 
-    printk("\033[33mfdc:\033[37m Preparing IRQ6 handler... ");
+    //printk("\033[33mfdc:\033[37m Preparing IRQ6 handler... ");
 
     __disable_interrupts();
-    __send_eoi_master();
+    __send_master_eoi();
     __set_handler(0x26, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__fdc_irq6_handler);
     __enable_interrupts();
     __enable_irq(0x06); // irq6
 
-    printf("Done\n");
+    //printf("Done\n");
 
-    if (__fdc_reset()) return -1;
-
-    ((uint16_t *)0x7dfe)[0] = 0xdead;
-    printk("placed 0xdead at 0x7dfe\n");
-
-    __fdc_turn_motor_on();
-
-    __delay_ms(300); // motor spin-up, 300ms for 3.5', 500ms for 5.25'
-
-    printk("reading (0,0,1) from fd0... ");
-    if (__fdc_read(0, 0, 1, 0x7c00)) {
-        __fdc_turn_motor_off();
-        printf("error\n");
+    if (__fdc_reset()) {
+        printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
         return -1;
     }
 
-    printf("ok\n");
-
-    __fdc_turn_motor_off();
-
-    if (((uint16_t *)0x7dfe)[0] == 0xaa55) {
-        printk("0xaa55 found at 0x7dfe\n");
-    }
-
+    printk("\033[33mfdc:\033[37m Initialized\n");
     return 0;   
 }
