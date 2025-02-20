@@ -62,17 +62,13 @@ int32_t __create_task(uint32_t process) {
     uint32_t stack = pgalloc() + 4096 - sizeof(uint32_t);
     *(uint32_t *)stack = &__quiet_exit;
 
-    printk("quiet exit at=%p\n", &__quiet_exit);
-
     task->esp = task->ebp = stack;
     task->kernel_stack = (uint32_t)pgalloc() + 4096;
     task->eip = process;
     task->next = first_task;
     last_task->next = task;
     last_task = task;
-
-    printk("init task: user-stack=%p, kerne-stack=%p\n", task->esp, task->kernel_stack);
-
+    
     __enable_interrupts();
     return task->pid;
 }

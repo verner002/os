@@ -125,6 +125,12 @@ __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
     printk("\033[33mkernel:\033[37m syscall\n");
 }
 
+void __user_deamon(void) {
+    printk("\033[33muser:\033[37m USER deamon running, PID=%u\n", __get_pid());
+
+    for (;;);
+}
+
 /**
  * entry
 */
@@ -190,7 +196,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __outw(PIT_CHANNEL_0_DATA_REGISTER, 0x001234de / 1000); // channel 0 freq=1kHz
     
     __disable_interrupts();
-    __send_master_eoi();
+    //__send_master_eoi();
     __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__pit_irq0_handler);
     __enable_interrupts();
     __enable_irq(0x00); // irq0
@@ -201,36 +207,27 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __init_ps2();
 
     __disable_interrupts();
-    __send_master_eoi();
+    //__send_master_eoi();
     __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
     __enable_interrupts();
     __enable_irq(0x01); // irq1
 
-    if (__init_tasking()) panic();
+    // TODO: implement mutexes!!!
+    if (__init_tasking())
+        panic();
 
     if (__init_fdc()) {
         printk("\033[91mFailed to initialize FDC\033[37m\n");
-        // ignore? (may be ignored for a while (until we try to mount root))
+        // ignore? (we can ignored for a while (until we try to mount root))
     }
 
-    __fat12_read_fat();
+    __create_task(&__user_deamon);
+
+    /*__fat12_read_fat();
     __fat12_read_root_dir();
-    __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));
+    __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));*/
     
-    /*__disable_interrupts();
-    TASK *fdc_daemon = (TASK *)malloc(sizeof(TASK));
-
-    fdc_daemon->id = 1;
-    fdc_daemon->state = TASK_STATE_IDLE;
-    fdc_daemon->eip = (uint32_t)&function;
-    fdc_daemon->esp = fdc_daemon->ebp = pgalloc() + 4096;
-    fdc_daemon->kernel_stack = pgalloc() + 4096;
-    fdc_daemon->next = NULL;
-
-    current_task = kernel;
-    __enable_interrupts();*/
-    
-    //printk("kernel: Entering idle loop\n");
+    printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
 
     // idle loop
     for (;;) asm("hlt");

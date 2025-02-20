@@ -37,10 +37,9 @@ static void __fdc_deamon(void) {
                 ++motor_off_counter;
         } while (motor_off_counter < 5);
 
-        __fdc_turn_motor_off();
         lock = TRUE;
         motor_off_counter = 0;
-        printk("motor turned off\n");
+        __fdc_turn_motor_off();
     }
 }
 
@@ -138,7 +137,7 @@ __attribute__((interrupt)) void __fdc_irq6_handler(INTERRUPT_FRAME *frame) {
  * __fdc_wait_for_irq6
 */
 
-uint32_t __fdc_wait_for_irq6(void) {
+int32_t __fdc_wait_for_irq6(void) {
     //printk("\033[33mfdc:\033[37m Waiting for IRQ6... ");
 
     for (uint32_t i = 0; i < __FDC_IRQ6_TIMEOUT; ++i) { // wait for irq 6
@@ -158,7 +157,7 @@ uint32_t __fdc_wait_for_irq6(void) {
  * __fdc_software_reset
 */
 
-static uint32_t __fdc_software_reset(void) {
+static int32_t __fdc_software_reset(void) {
     fdc.irqReceived = FALSE;
 
     __fdc_enter_reset_mode();
@@ -174,7 +173,7 @@ static uint32_t __fdc_software_reset(void) {
  * __fdc_sense_interrupt
 */
 
-uint32_t __fdc_sense_interrupt(uint8_t *st0, uint8_t *pcn) {
+int32_t __fdc_sense_interrupt(uint8_t *st0, uint8_t *pcn) {
     __fdc_outb(FDC_COMMAND_SENSE_INTERRUPT);
 
     if (errno) return -1;
@@ -194,7 +193,7 @@ uint32_t __fdc_sense_interrupt(uint8_t *st0, uint8_t *pcn) {
  * __fdc_reset
 */
 
-uint32_t __fdc_reset(void) {
+int32_t __fdc_reset(void) {
     for (uint32_t i = 0; i < 3; ++i) {
         errno = 0; // reset errno
         
@@ -266,7 +265,7 @@ uint32_t __fdc_reset(void) {
  * __fdc_recalibrate
 */
 
-uint32_t __fdc_recalibrate(void) {
+int32_t __fdc_recalibrate(void) {
     for (uint32_t i = 0; i < 3; ++i) {
         fdc.irqReceived = FALSE;
 
@@ -293,7 +292,7 @@ uint32_t __fdc_recalibrate(void) {
  * __fdc_seek
 */
 
-uint32_t __fdc_seek(uint32_t head, uint32_t cylinder) {
+int32_t __fdc_seek(uint32_t head, uint32_t cylinder) {
     for (uint32_t i = 0; i < 3; ++i) {
         fdc.irqReceived = FALSE;
 
@@ -379,7 +378,7 @@ void __fdc_dma_prepare_read(void) {
  * __fdc_read_sector
 */
 
-uint32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32_t buffer) {    
+int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32_t buffer) {    
     __outb(FDC_CONFIGURATION_CONTROL_REGISTER, 0x00); // 500 kbit/s for 1.44MB 3.5'
 
     for (uint32_t i = 0; i < 3; ++i) {
@@ -441,7 +440,7 @@ uint32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint3
  * __fdc_read_sectors
 */
 
-uint32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
+int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
     if ((buffer + count * 512 - 1) > 0xfffff) {
         printk("\033[33mfdc:\033[37m Buffer must resize within the first MiB.\n");
         return -1;
@@ -495,7 +494,7 @@ char const*__get_drive_type_string(DRIVE drive) {
  * __init_fdc
 */
 
-uint32_t __init_fdc(void) {
+int32_t __init_fdc(void) {
     //printk("Initializing FDC...\n");
     //printk("\033[33mfdc:\033[37m Detecting drives... ");
 
@@ -530,7 +529,7 @@ uint32_t __init_fdc(void) {
     motor_off_counter = 0;
     int32_t pid = __create_task(&__fdc_deamon);
 
-    printk("\033[33mfdc:\033[37m deamon running PID=%u\n", pid);
+    printk("\033[33mfdc:\033[37m FDC deamon running, PID=%u\n", pid);
 
     printk("\033[33mfdc:\033[37m Initialized\n");
     return 0;   

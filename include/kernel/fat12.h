@@ -41,6 +41,6 @@ struct __fat12_record {
  * Declarations
 */
 
-uint32_t __fat12_read_fat(void);
-uint32_t __fat12_read_root_dir(void);
-uint32_t __fat12_load_file(char const *filename, uint32_t buffer);
+int32_t __fat12_read_fat(void);
+int32_t __fat12_read_root_dir(void);
+int32_t __fat12_load_file(char const *filename, uint32_t buffer);
