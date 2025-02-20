@@ -14,14 +14,17 @@
  * Static Global Variables
 */
 
-static uint8_t *fat = (uint8_t *)0x00010000;
-static FAT12_RECORD *root_dir = (FAT12_RECORD *)0x00020000;
+static uint8_t *fat = NULL;
+static FAT12_RECORD *root_dir = NULL;
 
 /**
  * __fat12_read_fat
 */
 
 uint32_t __fat12_read_fat(void) {
+    if (!fat)
+        fat = (uint8_t *)e820_rmalloc(9*512, FALSE);
+
     return __fdc_read_sectors(1, 9, (uint32_t)fat);
 }
 
@@ -30,6 +33,9 @@ uint32_t __fat12_read_fat(void) {
 */
 
 uint32_t __fat12_read_root_dir(void) {
+    if (!root_dir)
+        root_dir = (FAT12_RECORD *)e820_rmalloc(224*32, FALSE);
+
     return __fdc_read_sectors(9 * 2 + 1, 224 * 32 / 512, (uint32_t)root_dir);
 }
 

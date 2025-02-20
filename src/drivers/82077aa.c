@@ -25,6 +25,25 @@ static struct {
     DRIVE_TYPE type;
 } fdc; //controller; -- fdc for now
 
+static bool lock;
+static uint32_t motor_off_counter;
+
+static void __fdc_deamon(void) {
+    for (;;) {
+        do {
+            __delay_ms(1000);
+
+            if (!lock)
+                ++motor_off_counter;
+        } while (motor_off_counter < 5);
+
+        __fdc_turn_motor_off();
+        lock = TRUE;
+        motor_off_counter = 0;
+        printk("motor turned off\n");
+    }
+}
+
 /**
  * __update_dor
 */
@@ -360,7 +379,7 @@ void __fdc_dma_prepare_read(void) {
  * __fdc_read_sector
 */
 
-uint32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32_t buffer) {
+uint32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32_t buffer) {    
     __outb(FDC_CONFIGURATION_CONTROL_REGISTER, 0x00); // 500 kbit/s for 1.44MB 3.5'
 
     for (uint32_t i = 0; i < 3; ++i) {
@@ -430,8 +449,13 @@ uint32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
 
     uint8_t cylinder, head, sector;
 
-    __fdc_turn_motor_on();
-    __delay_ms(300);
+    lock = TRUE;
+    motor_off_counter = 0;
+
+    if (!fdc.motorOn) {
+        __fdc_turn_motor_on();
+        __delay_ms(300);
+    }
 
     for (uint32_t i = 0; i < count; ++i) {
         cylinder = lba / (2 * 18);
@@ -444,8 +468,7 @@ uint32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
         buffer += 512;
     }
 
-    __fdc_turn_motor_off();
-
+    lock = FALSE;
     return 0;
 }
 
@@ -502,6 +525,12 @@ uint32_t __init_fdc(void) {
         printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
         return -1;
     }
+
+    lock = TRUE;
+    motor_off_counter = 0;
+    int32_t pid = __create_task(&__fdc_deamon);
+
+    printk("\033[33mfdc:\033[37m deamon running PID=%u\n", pid);
 
     printk("\033[33mfdc:\033[37m Initialized\n");
     return 0;   

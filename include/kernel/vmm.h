@@ -22,6 +22,13 @@ typedef struct __paging_directory_entry PAGING_DIRECTORY_ENTRY;
 typedef struct __paging_table_entry PAGING_TABLE_ENTRY;
 
 /**
+ * Constants
+*/
+
+#define PAGE_SIZE 4096
+#define PAGE_TABLE_SIZE 4096
+
+/**
  * Enumerations
 */
 

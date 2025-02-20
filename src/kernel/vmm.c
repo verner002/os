@@ -76,7 +76,7 @@ int32_t __init_vmm(void) {
 int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags) {
     if (!page_directory || (page_directory & 31) || !physical_memory) return -1;
     
-    uint32_t page = (uint32_t)virtual_memory / 4096;
+    uint32_t page = (uint32_t)virtual_memory / PAGE_SIZE;
 
     PAGING_DIRECTORY_ENTRY *pde = &((PAGING_DIRECTORY_ENTRY *)page_directory)[page / 1024]; // TODO: use ptr arithmetic?
 
@@ -85,11 +85,11 @@ int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags) {
     if (!(pde->address & 0x000fffff)) { // no page table, create one
         // we could use pgalloc but we don't need aligned page,
         // just 4096 bytes
-        page_table = (PAGING_TABLE_ENTRY *)e820_rmalloc(4096, TRUE);
+        page_table = (PAGING_TABLE_ENTRY *)e820_rmalloc(PAGE_TABLE_SIZE, TRUE);
 
         if (!page_table) return -1; // allocation failed
 
-        memset(page_table, 0, 4096);
+        memset(page_table, 0, PAGE_TABLE_SIZE);
 
         pde->address = (uint32_t)page_table >> 12;
         pde->granularity = PAGE_4KIB;
@@ -102,7 +102,7 @@ int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags) {
 
     PAGING_TABLE_ENTRY *pte = &(page_table[page % 1024]);
 
-    // FIXME: do we wat this???
+    // FIXME: do we want this???
     //if (pte->address & 0x000fffff) return -1; // already mapped
 
     pte->address = ((uint32_t)physical_memory >> 12); // must be page-aligned

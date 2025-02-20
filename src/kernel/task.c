@@ -21,6 +21,63 @@ static TASK
     *current_task = NULL;
 
 /**
+ * __get_pid
+*/
+
+int32_t __get_pid(void) {
+    return current_task->pid;
+}
+
+/**
+ * __exit
+*/
+
+int32_t __exit(int32_t code) {
+    current_task->state = TASK_STATE_EXITING;
+    current_task->code = code;
+    for(;;); // idle loop
+}
+
+/**
+ * __quiet_exit
+*/
+
+void __quiet_exit(void) {
+    __exit(0);
+}
+
+/**
+ * __create_task
+*/
+
+int32_t __create_task(uint32_t process) {
+    __disable_interrupts();
+
+    TASK *task = (TASK *)malloc(sizeof(TASK));
+    task->parent_pid = -1;
+    task->pid = next_pid++;
+    task->state = TASK_STATE_IDLE;
+    task->code = -1;
+
+    uint32_t stack = pgalloc() + 4096 - sizeof(uint32_t);
+    *(uint32_t *)stack = &__quiet_exit;
+
+    printk("quiet exit at=%p\n", &__quiet_exit);
+
+    task->esp = task->ebp = stack;
+    task->kernel_stack = (uint32_t)pgalloc() + 4096;
+    task->eip = process;
+    task->next = first_task;
+    last_task->next = task;
+    last_task = task;
+
+    printk("init task: user-stack=%p, kerne-stack=%p\n", task->esp, task->kernel_stack);
+
+    __enable_interrupts();
+    return task->pid;
+}
+
+/**
  * __init_tasking
 */
 
@@ -33,6 +90,7 @@ int32_t __init_tasking(void) {
     first_task->parent_pid = -1;
     first_task->pid = next_pid++;
     first_task->state = TASK_STATE_RUNNING;
+    first_task->code = -1;
     first_task->esp = first_task->ebp = (uint32_t)pgalloc() + 4096;
     first_task->kernel_stack = (uint32_t)pgalloc() + 4096;
     first_task->next = first_task;
@@ -44,15 +102,34 @@ int32_t __init_tasking(void) {
 }
 
 /**
+ * __list_tasks
+*/
+
+void __list_tasks(void) {
+    //__disable_interrupts();
+    
+    TASK *task = first_task;
+    
+    do {
+        printk("task pid=%u, state=%u\n", task->pid, task->state);
+        task = task->next;
+    } while (task != first_task);
+    
+    //__enable_interrupts();
+}
+
+/**
  * __switch_task
 */
 
 void __switch_task(void) {
-    if (!current_task) return; // not initialized yet
+    if (!current_task) return; // not initialized
 
     //if (current_task == current_task->next) return; // only one task
 
-    current_task->state = TASK_STATE_IDLE;
+    // idle current task
+    if (current_task->state == TASK_STATE_RUNNING)
+        current_task->state = TASK_STATE_IDLE;
 
     /**
      * two things can happen here:
@@ -62,7 +139,9 @@ void __switch_task(void) {
 
     uint32_t eip = __get_eip(); // get current eip
 
-    if (current_task->state/* = TASK_STATE_RUNNING*/) return; // resumed task
+    // if the task state is TASK_STATE_RUNNING, task switch happend and
+    // we're being resumed, otherwise we're performing the task switch
+    if (current_task->state == TASK_STATE_RUNNING) return; // resumed task
 
     uint32_t esp, ebp;
 
@@ -74,17 +153,29 @@ void __switch_task(void) {
         :
     );
     
-    current_task->eip = eip; // resume eip
-    current_task->esp = esp; // resume esp
-    current_task->ebp = ebp; // resume ebp
-    //printk("suspended task with pid %u, eip=%p\n", current_task->id, current_task->eip);
+    // store current task state
+    current_task->eip = eip;
+    current_task->esp = esp;
+    current_task->ebp = ebp;
+
+    // move to next task
+    TASK *next_task = current_task->next;
+
+    if (next_task->state == TASK_STATE_EXITING) {
+        printk("task %u exited with code %u\n", next_task->pid, next_task->code);
+
+        current_task->next = next_task->next;
+        pgfree(next_task->esp);
+        pgfree(next_task->kernel_stack);
+        free(next_task);
+    }
 
     current_task = current_task->next;
     current_task->state = TASK_STATE_RUNNING;
 
-    //__set_kernel_stack(current_task->kernel_stack); // associated kernel stack
+    //printk("switching to task=%p, state=%u\n", current_task->eip, current_task->state);
 
-    //printk("switching to task with pid %u, eip=%p\n", current_task->id, current_task->eip);
+    //__set_kernel_stack(current_task->kernel_stack); // associated kernel stack
 
     __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp);
 }

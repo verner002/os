@@ -10,6 +10,7 @@
 
 #include "types.h"
 #include "drivers/82077aa.h"
+#include "kernel/e820.h"
 #include "kstdlib/string.h"
 
 /**

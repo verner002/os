@@ -123,7 +123,6 @@ __entry:
     mov eax, cr0
     or eax, 0x00010021 ; disable paging, write protect and enable protected mode, fpu exceptions are processed by internal mechanism
     and eax, 0x1ffdffff ; enable cache fills, enable write-through, disable align error
-    
     mov cr0, eax
 
     mov eax, cr4
@@ -146,7 +145,7 @@ __gdt:
     db 0x00         ; base
 
     .code:
-    dw 0xffff       ; limit (32 MiB)
+    dw 0xffff       ; limit
     dw 0x0000       ; base
     db 0x00         ; base
     db 10011010b    ; access byte
@@ -154,7 +153,7 @@ __gdt:
     db 0x00         ; base
 
     .data:
-    dw 0xffff       ; limit (32 MiB)
+    dw 0xffff       ; limit
     dw 0x0000       ; base
     db 0x00         ; base
     db 10010010b    ; access byte

@@ -115,7 +115,6 @@ __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
     __enable_interrupts();
 }
 
-
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     __send_eoi(0x01);
     __inb(PS2_DATA_PORT_REGISTER);
@@ -207,16 +206,16 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __enable_interrupts();
     __enable_irq(0x01); // irq1
 
+    if (__init_tasking()) panic();
+
     if (__init_fdc()) {
         printk("\033[91mFailed to initialize FDC\033[37m\n");
         // ignore? (may be ignored for a while (until we try to mount root))
     }
 
-    /*__fat12_read_fat();
+    __fat12_read_fat();
     __fat12_read_root_dir();
-    __fat12_load_file("KERNEL  SYS", 0x30000);*/
-
-    if (__init_tasking()) panic();
+    __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));
     
     /*__disable_interrupts();
     TASK *fdc_daemon = (TASK *)malloc(sizeof(TASK));
