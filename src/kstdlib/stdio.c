@@ -42,7 +42,7 @@ void __stack_chk_fail(void) {
  * putc
 */
 
-int putc(int c, FILE *stream) {
+int32_t putc(int c, FILE *stream) {
     if (stream == stdout) return __putc((uint8_t)c);
     else if (stream == stderr) return __putc((uint8_t)c);
     
@@ -53,7 +53,7 @@ int putc(int c, FILE *stream) {
  * putchar
 */
 
-int putchar(int c) {
+int32_t putchar(int c) {
     return putc(c, stdout);
 }
 
@@ -63,7 +63,7 @@ int putchar(int c) {
  * TODO: implement escape sequences
 */
 
-int vfprintf(FILE *stream, char const *s, va_list args) {
+int32_t vfprintf(FILE *stream, char const *s, va_list args) {
     char c;
     int errno = 0;
 
@@ -123,7 +123,7 @@ int vfprintf(FILE *stream, char const *s, va_list args) {
  * vprintf
 */
 
-int vprintf(char const *s, va_list args) {
+int32_t vprintf(char const *s, va_list args) {
     return vfprintf(stdout, s, args);
 }
 
@@ -131,7 +131,7 @@ int vprintf(char const *s, va_list args) {
  * fprintf
 */
 
-int fprintf(FILE *stream, char const *s, ...) {
+int32_t fprintf(FILE *stream, char const *s, ...) {
     va_list args;
     va_start(args, s);
 
@@ -146,7 +146,10 @@ int fprintf(FILE *stream, char const *s, ...) {
  * printf
 */
 
-int printf(char const *s, ...) {
+int32_t printf(char const *s, ...) {
+    static bool __mutex = FALSE;
+    __mutex_lock(&__mutex);
+    
     va_list args;
     va_start(args, s);
 
@@ -154,6 +157,7 @@ int printf(char const *s, ...) {
 
     va_end(args);
 
+    __mutex_unlock(&__mutex);
     return errno;
 }
 
@@ -161,7 +165,7 @@ int printf(char const *s, ...) {
  * puts
 */
 
-int puts(char const *s) {
+int32_t puts(char const *s) {
     return printf("%s\n\r", s);
 }
 
@@ -170,6 +174,9 @@ int puts(char const *s) {
 */
 
 void printk(char const *s, ...) {
+    static bool __mutex = FALSE;
+    __mutex_lock(&__mutex);
+
     va_list args;
     va_start(args, s);
 
@@ -195,4 +202,6 @@ void printk(char const *s, ...) {
     printf("]\033[37m ");
     vprintf(s, args);
     va_end(args);
+
+    __mutex_unlock(&__mutex);
 }

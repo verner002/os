@@ -382,7 +382,7 @@ int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32
     __outb(FDC_CONFIGURATION_CONTROL_REGISTER, 0x00); // 500 kbit/s for 1.44MB 3.5'
 
     for (uint32_t i = 0; i < 3; ++i) {
-        __fdc_recalibrate();
+        __fdc_seek(head, cylinder);
 
         for (uint32_t j = 0; j < 3; ++j) {
             __init_fdc_dma(buffer, 512);
@@ -431,6 +431,8 @@ int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32
             if (errno) continue;
             return 0;
         }
+
+        __fdc_recalibrate();
     }
 
     return -1;
@@ -456,19 +458,23 @@ int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
         __delay_ms(300);
     }
 
+    int32_t last_opcode;
+
     for (uint32_t i = 0; i < count; ++i) {
         cylinder = lba / (2 * 18);
         head = (lba / 18) % 2;
         sector = (lba % 18) + 1;
 
-        if (__fdc_read_sector(cylinder, head, sector, buffer)) break;
+        last_opcode = __fdc_read_sector(cylinder, head, sector, buffer);
 
         ++lba;
         buffer += 512;
+
+        if (last_opcode) break;
     }
 
     lock = FALSE;
-    return 0;
+    return last_opcode;
 }
 
 /**

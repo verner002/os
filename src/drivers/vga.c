@@ -44,6 +44,9 @@ void __init_vga(void) {
 */
 
 int32_t __putc(uint8_t c) {
+    static bool __mutex = FALSE;
+    __mutex_lock(&__mutex);
+
     if (state == 0) {
         if (c == '\033') state = 1;
         else {
@@ -73,6 +76,8 @@ int32_t __putc(uint8_t c) {
         if (c == '[') state = 2;
         else {
             state = index = 0;
+
+            __mutex_unlock(&__mutex);
             return -1;
         }
     } else if (state == 2) {
@@ -122,7 +127,11 @@ int32_t __putc(uint8_t c) {
                     case 105: color = 0xd0 | fgc; break;
                     case 106: color = 0xb0 | fgc; break;
                     case 107: color = 0xf0 | fgc; break;
-                    default: state = value = index = 0; return -1;
+                    default:
+                        state = value = index = 0;
+
+                        __mutex_unlock(&__mutex);
+                        return -1;
                 }
             }
 
@@ -130,6 +139,8 @@ int32_t __putc(uint8_t c) {
         } else {
             if (c < '0' || c > '9') {
                 state = value = index = 0;
+
+                __mutex_unlock(&__mutex);
                 return -1;
             }
 
@@ -137,6 +148,7 @@ int32_t __putc(uint8_t c) {
         }
     }
 
+    __mutex_unlock(&__mutex);
     return 0;
 }
 
@@ -145,6 +157,9 @@ int32_t __putc(uint8_t c) {
 */
 
 void __setcurpos(uint32_t line, uint32_t column) {
+    static bool __mutex = FALSE;
+    __mutex_lock(&__mutex);
+
     cursor_y = line;
     cursor_x = column;
 
@@ -154,6 +169,8 @@ void __setcurpos(uint32_t line, uint32_t column) {
     __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)index);
     __outb(VGA_CRT_CONTROLLER_ADDRESS_REGISTER, 0x0e); // cursor location high
     __outb(VGA_CRT_CONTROLLER_DATA_REGISTER, (uint8_t)(index >> 0x08)); // compiler should optimize this to use low and high part of an register
+
+    __mutex_unlock(&__mutex);
 }
 
 /**
@@ -161,6 +178,11 @@ void __setcurpos(uint32_t line, uint32_t column) {
 */
 
 void __scroll_down(void) {
+    static bool __mutex = FALSE;
+    __mutex_lock(&__mutex);
+
     for (uint32_t i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j) video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
     for (uint32_t i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i) video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
+
+    __mutex_unlock(&__mutex);
 }

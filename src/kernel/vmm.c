@@ -27,6 +27,7 @@ struct __avl_node {
     uint32_t start; // base address
     uint32_t size; // size in pages
     bool free;
+    uint32_t height;
     AVL_NODE *left;
     AVL_NODE *right;
 };
@@ -62,6 +63,7 @@ int32_t __init_vmm(void) {
     root->start = 0;
     root->size = 1024*1024;
     root->free = TRUE;
+    root->height = 0;
     root->left = NULL;
     root->right = NULL;
 
@@ -129,18 +131,123 @@ int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags) {
 }
 
 /**
+ * __left_left_rotation
+*/
+
+static AVL_NODE *__left_left_rotation(AVL_NODE *parent) {
+    AVL_NODE *child = parent->right;
+    parent->right = child->left;
+    child->left = parent;
+    return child; // return new root
+}
+
+/**
+ * __right_right_rotation
+*/
+
+static AVL_NODE *__right_right_rotation(AVL_NODE *parent) {
+    AVL_NODE *child = parent->left;
+    parent->left = child->right;
+    child->right = parent;
+    return child; // return new root
+}
+
+/**
+ * __left_right_rotation
+*/
+
+static AVL_NODE *__left_right_rotation(AVL_NODE *parent) {
+    parent->left = __left_left_rotation(parent->left);
+    return __right_right_rotation(parent);
+}
+
+/**
+ * __right_left_rotation
+*/
+
+static AVL_NODE *__right_left_rotation(AVL_NODE *parent) {
+    parent->right = __right_right_rotation(parent->right);
+    return __left_left_rotation(parent);
+}
+
+/**
+ * __rebalance_regions_tree
+*/
+
+static void __rebalance_regions_tree(AVL_NODE *node) {
+
+}
+
+/**
+ * __rebalance_tree
+*/
+
+static void __rebalance_tree(void) {
+    __rebalance_regions_tree(root);
+}
+
+/**
+ * __insert_node
+*/
+
+static AVL_NODE *__insert_node(AVL_NODE *node, uint32_t start, uint32_t size, bool free) {
+    AVL_NODE *child;
+
+    if (!node) return NULL;
+    else if (node->size <= size) child = __insert_node(node->right, start, size, free);
+    else child = __insert_node(node->left, start, size, free);
+
+    return child ? child : node;
+}
+
+/**
+ * __insert
+*/
+
+static void __insert(uint32_t start, uint32_t size, bool free) {
+    AVL_NODE *parent = __insert_node(root, start, size, free);
+    AVL_NODE *child = (AVL_NODE *)malloc(sizeof(AVL_NODE));
+
+    if (!child) {
+        // failed
+        return;
+    }
+
+    *child = (AVL_NODE) {
+        .start = start,
+        .size = size,
+        .free = free,
+        .height = 0,
+        .left = NULL,
+        .right = NULL
+    };
+
+    if (size >= parent->size) parent->right = child;
+    else parent->left = child;
+}
+
+/**
+ * __find_best_fit_region
+*/
+
+static AVL_NODE * __find_best_fit_region(AVL_NODE *node, uint32_t size) {
+    AVL_NODE *child;
+
+    // let's use best-fit strategy
+    if (!node) return NULL;
+    else if (node->size < size) child = __find_best_fit_region(node->right, size);
+    else if (node->size > size) child = __find_best_fit_region(node->left, size);
+    else child = node;
+    
+    return child ? child : node;
+}
+
+/**
  * __find_best_fit
 */
 
-static AVL_NODE *__find_best_fit(AVL_NODE *node, uint32_t size) {
-    // let's use best-fit strategy
-    if (node->size < size) return __find_best_fit(node->right, size);
-    else if (node->size > size) {
-        AVL_NODE *better_node = __find_best_fit(node->left, size);
-        return better_node ? better_node : node;
-    }
-    
-    return node;
+static AVL_NODE *__find_best_fit(uint32_t size) {
+    return __find_best_fit_region(root, size);
 }
 
 /**
@@ -150,7 +257,7 @@ static AVL_NODE *__find_best_fit(AVL_NODE *node, uint32_t size) {
 int32_t __alloc_region(uint32_t size) {
     
 }
-
+;
 /**
  * __mmap
 */

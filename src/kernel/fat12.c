@@ -55,10 +55,11 @@ int32_t __fat12_load_file(char const *filename, uint32_t buffer) {
 
         if (!strncmp(record->filename, filename, 11)) {
             uint32_t cluster = record->first_cluster;
+            uint32_t last_opcode;
 
             do {
                 uint32_t lba = ((cluster - 2) * 1) + 1 + (2 * 9) + (224 * 32 / 512);
-                __fdc_read_sectors(lba, 1, buffer);
+                last_opcode = __fdc_read_sectors(lba, 1, buffer);
                 uint32_t next_cluster = *(uint16_t *)(fat + cluster + cluster / 2);
 
                 if (cluster & 1) next_cluster >>= 4;
@@ -66,9 +67,9 @@ int32_t __fat12_load_file(char const *filename, uint32_t buffer) {
                 next_cluster &= 0x00000fff;
                 cluster = next_cluster;
                 buffer += 512;
-            } while (cluster < 0x00000ff8);
+            } while (!last_opcode && cluster < 0x00000ff8);
 
-            return 0;
+            return last_opcode;
         }
     }
 

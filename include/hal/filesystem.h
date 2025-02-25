@@ -11,10 +11,40 @@
 */
 
 #include "types.h"
+#include "hal/devices.h"
+#include "kstdlib/stdio.h"
+#include "kstdlib/stdlib.h"
+
+/**
+ * Types Definitions
+*/
+
+typedef struct __device DEVICE;
+typedef struct __mount_point MOUNT_POINT;
+
+/**
+ * Constants
+*/
+
+#define MOUNT_POINTS_DEFAULT 8
+
+#define MOUNT_POINT_MOUNTED 1
+#define MOUNT_POINT_READ_ONLY 2
+
+/**
+ * Structures
+*/
+
+struct __mount_point {
+    DEVICE *dev;
+    char const *path;
+    uint8_t flags;
+    MOUNT_POINT *mount_points;
+};
 
 /**
  * Declarations
 */
 
-void __read_sector(uint8_t id, uint8_t lba, uint8_t *buffer);
-void __write_sector(uint8_t id, uint8_t lba, uint8_t *buffer);
+int32_t __mount();
+int32_t __unmount();

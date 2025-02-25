@@ -222,10 +222,15 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     __create_task(&__user_deamon);
+    __create_task(&__user_deamon);
 
     /*__fat12_read_fat();
     __fat12_read_root_dir();
-    __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));*/
+
+
+    printk("Reading file...\n");
+    int32_t last_opcode = __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));
+    printk("Done: %u\n", last_opcode);*/
     
     printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
 

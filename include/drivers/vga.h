@@ -13,6 +13,7 @@
 #include "types.h"
 #include "bool.h"
 #include "drivers/ports.h"
+#include "kernel/mutex.h"
 
 /**
  * Constants

@@ -26,10 +26,7 @@ typedef struct _device DEVICE;
  * Structures
 */
 
-struct _device {
-    uint8_t id;
-    char *name;
-    void *driver;
-    DEVICE **devices;
-    int status;
+struct __device {
+    char const *name;
+    DEVICE *parent;
 };
