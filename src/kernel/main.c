@@ -165,7 +165,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
 
     // TODO: calculate pages count from bitmap size
-    if (__init_pager((uint32_t)e820_rmalloc(4096, FALSE), 32)) {
+    if (__init_pager((uint32_t *)e820_rmalloc(4096, FALSE), 32)) {
         panic();
     }
 
@@ -221,8 +221,8 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         // ignore? (we can ignored for a while (until we try to mount root))
     }
 
-    __create_task(&__user_deamon);
-    __create_task(&__user_deamon);
+    __create_task((uint32_t)&__user_deamon);
+    __create_task((uint32_t)&__user_deamon);
 
     /*__fat12_read_fat();
     __fat12_read_root_dir();

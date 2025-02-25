@@ -12,6 +12,7 @@
 
 #include "drivers/cpu.h"
 #include "drivers/8259a.h"
+#include "kernel/e820.h"
 #include "kernel/userland.h"
 #include "kstdlib/string.h"
 #include "kstdlib/stdio.h"

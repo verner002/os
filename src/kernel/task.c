@@ -59,8 +59,8 @@ int32_t __create_task(uint32_t process) {
     task->state = TASK_STATE_IDLE;
     task->code = -1;
 
-    uint32_t stack = pgalloc() + 4096 - sizeof(uint32_t);
-    *(uint32_t *)stack = &__quiet_exit;
+    uint32_t stack = (uint32_t)pgalloc() + 4096 - sizeof(uint32_t);
+    *(uint32_t *)stack = (uint32_t)&__quiet_exit;
 
     task->esp = task->ebp = stack;
     task->kernel_stack = (uint32_t)pgalloc() + 4096;
@@ -161,8 +161,8 @@ void __switch_task(void) {
         printk("task %u exited with code %u\n", next_task->pid, next_task->code);
 
         current_task->next = next_task->next;
-        pgfree(next_task->esp);
-        pgfree(next_task->kernel_stack);
+        pgfree((void *)next_task->esp);
+        pgfree((void *)next_task->kernel_stack);
         free(next_task);
     }
 

@@ -94,4 +94,4 @@ extern uint32_t page_directory;
 */
 
 int32_t __init_vmm(void);
-int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags);
+int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags);

@@ -242,7 +242,7 @@ void *e820_rmalloc(uint32_t n, bool a) {
                 }, i);
             }
 
-            return fixed_base;
+            return (void *)fixed_base;
         }
     }
 

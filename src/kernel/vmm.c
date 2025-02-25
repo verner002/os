@@ -75,7 +75,7 @@ int32_t __init_vmm(void) {
  * __map_page
 */
 
-int32_t __map_page(void *virtual_memory, void *physical_memory, uint8_t flags) {
+int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags) {
     if (!page_directory || (page_directory & 31) || !physical_memory) return -1;
     
     uint32_t page = (uint32_t)virtual_memory / PAGE_SIZE;

@@ -24,24 +24,8 @@ static struct {
     bool motorOn;
     DRIVE_TYPE type;
 } fdc; //controller; -- fdc for now
-
-static bool lock;
+static bool motor_mutex;
 static uint32_t motor_off_counter;
-
-static void __fdc_deamon(void) {
-    for (;;) {
-        do {
-            __delay_ms(1000);
-
-            if (!lock)
-                ++motor_off_counter;
-        } while (motor_off_counter < 5);
-
-        lock = TRUE;
-        motor_off_counter = 0;
-        __fdc_turn_motor_off();
-    }
-}
 
 /**
  * __update_dor
@@ -448,9 +432,10 @@ int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
         return -1;
     }
 
+    __mutex_lock(&motor_mutex);
+
     uint8_t cylinder, head, sector;
 
-    lock = TRUE;
     motor_off_counter = 0;
 
     if (!fdc.motorOn) {
@@ -473,7 +458,7 @@ int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
         if (last_opcode) break;
     }
 
-    lock = FALSE;
+    __mutex_unlock(&motor_mutex);
     return last_opcode;
 }
 
@@ -494,6 +479,24 @@ char const*__get_drive_type_string(DRIVE drive) {
     if ((uint32_t)drive.type >= sizeof(names) / sizeof(char *)) return "Unknown";
 
     return names[(uint32_t)drive.type];
+}
+
+static void __fdc_deamon(void) {
+    for (;;) {
+        while (!fdc.motorOn);
+
+        do {
+            __mutex_lock(&motor_mutex);
+            __delay_ms(1000);
+            ++motor_off_counter;
+            __mutex_unlock(&motor_mutex);
+        } while (motor_off_counter < 5);
+
+        __mutex_lock(&motor_mutex);
+        motor_off_counter = 0;
+        __fdc_turn_motor_off();
+        __mutex_unlock(&motor_mutex);
+    }
 }
 
 /**
@@ -531,9 +534,11 @@ int32_t __init_fdc(void) {
         return -1;
     }
 
-    lock = TRUE;
+    /*__mutex_lock(&motor_mutex);
     motor_off_counter = 0;
-    int32_t pid = __create_task(&__fdc_deamon);
+    __mutex_unlock(&motor_mutex);*/
+
+    int32_t pid = __create_task((uint32_t)&__fdc_deamon);
 
     printk("\033[33mfdc:\033[37m FDC deamon running, PID=%u\n", pid);
 

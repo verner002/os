@@ -1,6 +1,29 @@
 # OS
 Operating system written in x86 Assembly and C for the i486 architecture or later revisions.
 
+# Building the project
+## Dependencies
+At least these versions of listed packages are required:
+```
+gcc >= 14.2.1
+ld >= 2.44
+nasm >= 2.16.03
+make >= 4.4.1
+dd >= 9.6
+mkfs.fat >= 4.2
+```
+
+## Build
+To build the project use:
+```
+$ make
+```
+
+To create a bootable image use:
+```
+$ make image
+```
+
 # Boot Loader
 
 ## Physical Memory Map

@@ -17,6 +17,7 @@
 #include "drivers/cmos.h"
 #include "drivers/8237a.h"
 #include "kstdlib/errno.h"
+#include "kernel/mutex.h"
 #include "kernel/task.h"
 
 /**
