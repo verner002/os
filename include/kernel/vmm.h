@@ -9,9 +9,10 @@
 */
 
 #include "types.h"
-#include "kernel/e820.h"
+#include "kernel/pager.h"
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
+#include "kstdlib/math.h"
 
 /**
  * Types Definitions
@@ -95,3 +96,5 @@ extern uint32_t page_directory;
 
 int32_t __init_vmm(void);
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags);
+void *__alloc(uint32_t size);
+void *__mmap(void * physical_memory, uint32_t length, uint8_t flags);

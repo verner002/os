@@ -16,9 +16,9 @@
 */
 
 uint32_t strlen(char const *s) {
-    uint32_t i = __UINT_MAX;
+    uint32_t i = 0;
 
-    while (s[++i]); // `i' wraps to `0' after first iteration
+    while (s[i++]);
 
     return i;
 }
@@ -43,6 +43,20 @@ char *strncpy(char *d, char const *s, uint32_t n) {
     for (uint32_t i = 0; i < n; ++i) d[i] = t = t ? s[i] : '\0';
 
     return d;
+}
+
+/**
+ * strcmp
+*/
+
+int32_t strcmp(char const *s1, char const *s2) {
+    int32_t c;
+    
+    do
+        c = *s1 - *s2;
+    while (!c && *s1++ && *s2++);
+
+    return c;
 }
 
 /**
@@ -73,6 +87,22 @@ void *memset(void *ptr, int value, uint32_t n) {
 
 void *memcpy(void *destination, void const *source, uint32_t n) {
     for (uint32_t i = 0; i < n; ++i) ((uint8_t *)destination)[i] = ((uint8_t *)source)[i];
+
+    return destination;
+}
+
+/**
+ * memmove
+*/
+
+void *memmove(void *destination, void const *source, uint32_t n) {
+    uint8_t *buffer = e820_malloc(n); // TODO: call __kmalloc
+
+    if (buffer) {
+        memcpy(buffer, source, n);
+        memcpy(destination, buffer, n);
+        // e820_free(buffer), leaks memory now
+    }
 
     return destination;
 }

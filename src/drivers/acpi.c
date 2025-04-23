@@ -202,7 +202,8 @@ int32_t __init_acpi(void) {
 
             printf("                      - PAS=%p, VAS=%p, SIGN=", ptrs[i], sdt_h);
 
-            for (uint32_t j = 0; j < 4; ++j) putchar(sdt_h->signature[j]);
+            for (uint32_t j = 0; j < 4; ++j)
+                putchar(sdt_h->signature[j]);
 
             putchar('\n');
         }

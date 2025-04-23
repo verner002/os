@@ -11,6 +11,27 @@
 #include "kstdlib/math.h"
 
 /**
+ * max
+*/
+
+int32_t max(int32_t n, int32_t m) {
+    return n >= m ? n : m;
+}
+
+/**
+ * log2_b
+*/
+
+uint32_t log2_b(uint32_t n) {
+    return
+        (((n & 0xaaaaaaaa) != 0) << 0) |
+        (((n & 0xcccccccc) != 0) << 1) |
+        (((n & 0xf0f0f0f0) != 0) << 2) |
+        (((n & 0xff00ff00) != 0) << 3) |
+        (((n & 0xffff0000) != 0) << 4);
+}
+
+/**
  * log10
 */
 

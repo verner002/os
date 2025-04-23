@@ -172,8 +172,15 @@ void __sanitize_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
         }
     }
 
-    smap.entries[2].base = 0x10001;
     printf("Ok\n");
+}
+
+/**
+ * __get_system_memory
+*/
+
+E820_ENTRY *__get_last_entry(void) {
+    return &smap.entries[smap.index - 1];
 }
 
 char const *e820_get_type_string(E820_ENTRY *descriptor) {
@@ -200,6 +207,68 @@ void __dump_e820(void) {
     }
 }
 
+/**
+ * e820_amalloc
+*/
+
+void *e820_amalloc(uint32_t n, bool a) {
+    if (!n)
+        return NULL;
+
+    uint32_t entries_count = smap.index;
+    E820_ENTRY *entries = smap.entries;
+
+    for (uint32_t i = 0; i < entries_count; ++i) {
+        E820_ENTRY *entry = &entries[i];
+        uint32_t
+            base = entry->base,
+            fixed_base = base,
+            size = entry->size,
+            diff = 0;
+
+        if (a) {
+            fixed_base = (fixed_base + 0x00000fff) & 0xfffff000;
+            diff = fixed_base - base;
+            size -= diff;
+        }
+
+        if (entry->type == 1 && size >= n) {
+            if (size > n) { // there is a remainder
+                __insert_region((E820_ENTRY) {
+                    .base = fixed_base + n,
+                    .size = size - n,
+                    .type = 1 // free
+                }, i + 1);
+            }
+
+            entry->base = fixed_base;
+            entry->size = n;
+            entry->type = 2; // reserved
+
+            if (diff) {
+                __insert_region((E820_ENTRY) {
+                    .base = base,
+                    .size = diff,
+                    .type = 1 // free
+                }, i);
+            }
+
+            return (void *)fixed_base;
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * e820_malloc
+*/
+
+void *e820_malloc(uint32_t n) {
+    e820_amalloc(n, FALSE);
+}
+
+// TODO: merge with e820_malloc!!!
 void *e820_rmalloc(uint32_t n, bool a) {
     if (!n) return NULL;
 

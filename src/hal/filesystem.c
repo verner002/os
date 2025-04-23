@@ -25,7 +25,7 @@ static MOUNT_POINT *mount_points;
 
 int32_t __init_fsm(void) {
     mount_points_count = 0;
-    mount_points_capacity = MOUNT_POINT_MOUNTED;
+    mount_points_capacity = MOUNT_POINTS_DEFAULT;
 
     mount_points = (MOUNT_POINT *)malloc(sizeof(MOUNT_POINT) * mount_points_capacity);
 
@@ -35,7 +35,6 @@ int32_t __init_fsm(void) {
     }
 
     memset(mount_points, 0, sizeof(MOUNT_POINT) * mount_points_capacity);
-
     return 0;
 }
 
@@ -44,7 +43,7 @@ int32_t __init_fsm(void) {
 */
 
 int32_t __mount(DEVICE *dev, char const *path) {
-    __mutex_lock(fsm_mutex);
+    __mutex_lock(&fsm_mutex);
 
     if (mount_points_count >= mount_points_capacity) {
         printk("Cannot mount device, no free slots\n");
@@ -58,7 +57,7 @@ int32_t __mount(DEVICE *dev, char const *path) {
         .mount_points = NULL
     };
 
-    __mutex_unlock(fsm_mutex);
+    __mutex_unlock(&fsm_mutex);
     return 0;
 }
 
@@ -67,8 +66,8 @@ int32_t __mount(DEVICE *dev, char const *path) {
 */
 
 int32_t __unmount(char const *path) {
-    __mutex_lock(fsm_mutex);
+    __mutex_lock(&fsm_mutex);
 
-    __mutex_unlock(fsm_mutex);
+    __mutex_unlock(&fsm_mutex);
     return 0;
 }

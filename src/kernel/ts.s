@@ -1,11 +1,21 @@
-global __get_eip
+;
+; Switch Task
+;
+; Author: verner002
+;
+
+;
+; Exports
+;
+
+global __read_eip
 global __flush_tss
 global __exec_kernelmode
 global __exec_usermode
 
-__get_eip:
-    pop eax
-    jmp eax
+;
+; __flush_tss
+;
 
 __flush_tss:
     mov ax, (5 * 8) | 0
@@ -13,18 +23,24 @@ __flush_tss:
     ret
 
 ;
-; __exec_kernelmode
+; __read_ip
 ;
-; 00000004 | first argument
-; 00000000 | EIP
+
+__read_eip:
+    pop eax
+    jmp eax
+
+;
+; __exec_kernelmode
 ;
 
 __exec_kernelmode:
     cli
     mov ebp, esp
-    mov ebx, dword [ebp+4]
-    mov esp, dword [ebp+8]
-    mov ebp, dword [ebp+12]
+    mov ebx, dword [ebp+4] ; eip
+    mov esp, dword [ebp+8] ; esp
+    mov ebp, dword [ebp+12] ; ebp
+
     mov ax, (2 * 8) | 0
     mov ds, ax
     mov es, ax
@@ -43,10 +59,16 @@ __exec_kernelmode:
     push ebx
     iretd ; pe=1, nt=0
 
+;
+; __exec_usermode
+;
+
 __exec_usermode:
     cli
     mov ebp, esp
-    mov ebp, dword [ebp+4]
+    mov ebx, dword [ebp+4] ; eip
+    mov esp, dword [ebp+8] ; esp
+    mov ebp, dword [ebp+12] ; ebp
 
     mov ax, (4 * 8) | 3
     mov ds, ax
@@ -69,5 +91,5 @@ __exec_usermode:
     or eax, 0x00000200 ; enable interrupts
     push eax ; eflags with if=1
     push (3 * 8) | 3 ; code selector
-    push ebp
+    push ebx
     iretd

@@ -1,5 +1,5 @@
 /**
- * Devices
+ * Device Manager
  * 
  * Author: verner002
 */
@@ -14,16 +14,65 @@
  * Static Global Variables
 */
 
-DEVICE root = {
+DEVICE_NODE computer = {
+    .name = "Computer",
+    .device = NULL,
+    .subdevices = NULL
+};
+
+/**
+ * __init_devman
+*/
+
+int32_t __init_devman(void) {
+    uint32_t const capacity = 16;
+    computer.subdevices_capacity = capacity;
+    computer.subdevices_count = 0;
+    
+    DEVICE_NODE **subdevices = (DEVICE_NODE **)malloc(sizeof(DEVICE_NODE *) * capacity);
+
+    if (!subdevices) {
+        printk("Failed to allocate memory for subdevices\n");
+        return -1;
+    }
+
+    memset(subdevices, 0, sizeof(DEVICE_NODE *) * capacity);
+    computer.subdevices = subdevices;
+    return 0;
+}
+
+/**
+ * __add_device
+*/
+
+int32_t __add_device(DEVICE_NODE *parent, DEVICE_NODE *child) {
+    uint32_t capacity = parent->subdevices_capacity;
+
+    if (parent->subdevices_count >= capacity) { // reallocate array
+        capacity = capacity * 2; // use some kind of GROWTH_FACTOR constant
+        DEVICE_NODE **subdevices = (DEVICE_NODE **)realloc(parent->subdevices, capacity);
+
+        if (!subdevices)
+            return -1;
+
+        parent->subdevices = subdevices;
+        parent->subdevices_capacity = capacity;
+    }
+
+    parent->subdevices[parent->subdevices_count++] = child;
+    return 0;
+}
+
+/*DEVICE root = {
     .id = 0,
     .driver = NULL
-};
+};*/
 
 /**
  * __init_devs
 */
 
-void __init_devs(void) {
+/*void __init_devs(void) {
     root.devices = (DEVICE **)malloc(sizeof(DEVICE));
 
     DEVICE cpu = {
@@ -43,4 +92,4 @@ void __init_devs(void) {
     // try to initialize it
     // change status to value in errno
     // repeate until all devices are listed
-}
+}*/

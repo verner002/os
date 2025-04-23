@@ -19,7 +19,6 @@
  * Types Definitions
 */
 
-typedef struct __device DEVICE;
 typedef struct __mount_point MOUNT_POINT;
 
 /**
@@ -46,5 +45,6 @@ struct __mount_point {
  * Declarations
 */
 
-int32_t __mount();
+int32_t __init_fsm(void);
+int32_t __mount(DEVICE *dev, char const *path);
 int32_t __unmount();

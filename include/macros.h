@@ -16,6 +16,9 @@
  * Macros
 */
 
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 #define lambda(lambda_ret, lambda_args, lambda_body) {  \
     lambda_ret lambda_func lambda_args lambda_body      \
     &lambda_func;                                       \

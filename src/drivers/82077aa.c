@@ -538,7 +538,7 @@ int32_t __init_fdc(void) {
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_task((uint32_t)&__fdc_deamon);
+    int32_t pid = __create_task((uint32_t)&__fdc_deamon, TASK_EXEC_KERNEL);
 
     printk("\033[33mfdc:\033[37m FDC deamon running, PID=%u\n", pid);
 

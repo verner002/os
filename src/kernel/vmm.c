@@ -20,23 +20,32 @@ typedef struct __avl_node AVL_NODE;
  * Structures
 */
 
+// we could use the paging directory and
+// the paging tables but that would be too
+// slow to use, avl trees are much better
 // let's use avl instead of red-black trees
 // we'll be doing many and many lookups and
-// that's what are avl trees good at
+// that's what avl trees are good at
 struct __avl_node {
     uint32_t start; // base address
     uint32_t size; // size in pages
     bool free;
-    uint32_t height;
+    int32_t height;
     AVL_NODE *left;
     AVL_NODE *right;
+    AVL_NODE *previous;
+    AVL_NODE *next;
+    uint32_t free_c;
+    AVL_NODE *free_n; // free nodes with the same size
+    uint32_t used_c;
+    AVL_NODE *used_n;
 };
 
 /**
  * Global Static Variables
 */
 
-// TODO: only for one page directory!!!
+// TODO: only for one page directory, keep track of all avl trees!!!
 static AVL_NODE *root;
 
 /**
@@ -60,8 +69,8 @@ int32_t __init_vmm(void) {
         return -1;
     }
 
-    root->start = 0;
-    root->size = 1024*1024;
+    root->start = 0x80000000;
+    root->size = 2*1024*1024; // the whole virtual memory
     root->free = TRUE;
     root->height = 0;
     root->left = NULL;
@@ -85,11 +94,10 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     PAGING_TABLE_ENTRY *page_table;
 
     if (!(pde->address & 0x000fffff)) { // no page table, create one
-        // we could use pgalloc but we don't need aligned page,
-        // just 4096 bytes
-        page_table = (PAGING_TABLE_ENTRY *)e820_rmalloc(PAGE_TABLE_SIZE, TRUE);
+        page_table = (PAGING_TABLE_ENTRY *)pgalloc();
 
-        if (!page_table) return -1; // allocation failed
+        if (!page_table)
+            return -1; // allocation failed
 
         memset(page_table, 0, PAGE_TABLE_SIZE);
 
@@ -131,6 +139,28 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
 }
 
 /**
+ * __height
+*/
+
+int32_t __height(AVL_NODE *node) {
+    if (!node)
+        return 0;
+
+    return node->height;
+}
+
+/**
+ * __balance
+*/
+
+int32_t __balance(AVL_NODE *node) {
+    /*if (!node)
+        return 0;*/
+
+    return __height(node->left) - __height(node->right);
+}
+
+/**
  * __left_left_rotation
 */
 
@@ -138,6 +168,17 @@ static AVL_NODE *__left_left_rotation(AVL_NODE *parent) {
     AVL_NODE *child = parent->right;
     parent->right = child->left;
     child->left = parent;
+    
+    parent->height = max(
+        __height(parent->left),
+        __height(parent->right)
+    ) + 1;
+
+    child->height = max(
+        __height(child->left),
+        __height(child->right)
+    ) + 1;
+
     return child; // return new root
 }
 
@@ -149,6 +190,17 @@ static AVL_NODE *__right_right_rotation(AVL_NODE *parent) {
     AVL_NODE *child = parent->left;
     parent->left = child->right;
     child->right = parent;
+
+    parent->height = max(
+        __height(parent->left),
+        __height(parent->right)
+    ) + 1;
+
+    child->height = max(
+        __height(child->left),
+        __height(child->right)
+    ) + 1;
+
     return child; // return new root
 }
 
@@ -170,60 +222,96 @@ static AVL_NODE *__right_left_rotation(AVL_NODE *parent) {
     return __left_left_rotation(parent);
 }
 
-/**
- * __rebalance_regions_tree
-*/
+static AVL_NODE *new_node(uint32_t start, uint32_t size, bool free) {
+    AVL_NODE *node = (AVL_NODE *)malloc(sizeof(AVL_NODE));
 
-static void __rebalance_regions_tree(AVL_NODE *node) {
+    if (!node)
+        return NULL;
 
+    node->start = start;
+    node->size = size;
+    node->free = free;
+    node->height = 1;
+    node->left = NULL;
+    node->right = NULL;
+    node->previous = NULL;
+    node->next = NULL;
+    node->free_c = 0;
+    node->free_n = NULL;
+    node->used_c = 0;
+    node->used_n = NULL;
+
+    return node;
 }
 
-/**
- * __rebalance_tree
-*/
+AVL_NODE *insert_node(AVL_NODE *node, uint32_t start, uint32_t size, bool free) {
+    if (!node) 
+        return new_node(start, size, free);
 
-static void __rebalance_tree(void) {
-    __rebalance_regions_tree(root);
-}
+    uint32_t node_size = node->size;
 
-/**
- * __insert_node
-*/
+    if (size > node_size)
+        node->right = insert_node(node->right, start, size, free);
+    else if (size < node_size)
+        node->left = insert_node(node->left, start, size, free);
+    else {
+        AVL_NODE *item = new_node(start, size, free);
 
-static AVL_NODE *__insert_node(AVL_NODE *node, uint32_t start, uint32_t size, bool free) {
-    AVL_NODE *child;
+        if (free) {
+            item->right = node->free_n;
+            node->free_n = item;
+            ++node->free_c;
+        } else {
+            item->right = node->used_n;
+            node->used_n = item;
+            ++node->used_c;
+        }
 
-    if (!node) return NULL;
-    else if (node->size <= size) child = __insert_node(node->right, start, size, free);
-    else child = __insert_node(node->left, start, size, free);
-
-    return child ? child : node;
-}
-
-/**
- * __insert
-*/
-
-static void __insert(uint32_t start, uint32_t size, bool free) {
-    AVL_NODE *parent = __insert_node(root, start, size, free);
-    AVL_NODE *child = (AVL_NODE *)malloc(sizeof(AVL_NODE));
-
-    if (!child) {
-        // failed
-        return;
+        return node;
     }
 
-    *child = (AVL_NODE) {
-        .start = start,
-        .size = size,
-        .free = free,
-        .height = 0,
-        .left = NULL,
-        .right = NULL
-    };
+    node->height = max(
+        __height(node->left),
+        __height(node->right)
+    ) + 1;
 
-    if (size >= parent->size) parent->right = child;
-    else parent->left = child;
+    int balance = __balance(node);
+
+    if (balance > 1) {
+        if (size < node->left->size)
+            return __right_right_rotation(node);
+        else
+            return __left_right_rotation(node);
+    } else if (balance < -1) {
+        if (size > node->right->size)
+            return __left_left_rotation(node);
+        else
+            return __right_left_rotation(node);
+    }   
+
+    // balance is within the interval [-1; 1]
+    return node;
+}
+
+AVL_NODE *delete_node(AVL_NODE *node, AVL_NODE *nodeToBeDeleted) {
+    if (!node)
+        return NULL; // not found
+
+    if (nodeToBeDeleted->size > node->size)
+        delete_node(node->right, nodeToBeDeleted);
+    else if (nodeToBeDeleted->size < node->size)
+        delete_node(node->left, nodeToBeDeleted);
+    else { // we've found the node with the same size
+        if (node->left && node->right) {
+            // find inorder successor in right subtree
+        } else if (node->left) {
+            // only left child
+        } else if (node->right) {
+            // only right child
+        } else {
+            // no child
+        }
+    }
 }
 
 /**
@@ -251,17 +339,52 @@ static AVL_NODE *__find_best_fit(uint32_t size) {
 }
 
 /**
- * __alloc_region
+ * __alloc
 */
 
-int32_t __alloc_region(uint32_t size) {
-    
+void *__alloc(uint32_t size) {
+    AVL_NODE *node = __find_best_fit(size);
+
+    if (node->free_c > 0) {
+        AVL_NODE *free_n = node->free_n->right;
+        node->free_n->right = node->used_n;
+        node->used_n = node->free_n;
+        node->free_n = free_n;
+        --node->free_c;
+        ++node->used_c;
+        node = node->used_n;
+    }
+
+    if (node > size) { // node > size + 16
+        // split
+        AVL_NODE *remainder = new_node(node->start + size, node->size - size, TRUE);
+        remainder->previous = node;
+        node->next = remainder;
+
+        insert_node(root, node->start, size, FALSE);
+        insert_node(root, node->start + size, node->size - size, TRUE);
+        //delete_node(node);
+    }
+
+    if (!node)
+        return NULL;
+
+    // split node if larger
+    return node->start;
 }
-;
+
 /**
  * __mmap
 */
 
 void *__mmap(void *physical_memory, uint32_t length, uint8_t flags) {
+    // get the first free va with required length
+}
 
+/**
+ * __memcore
+*/
+
+void __memcore(void) {
+    // enlarge the heap (realized using linked-list)
 }

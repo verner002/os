@@ -16,11 +16,13 @@ BIN ?= ./bin
 
 BOOT_SRC ?= $(SRC)/boot
 DRIVERS_SRC ?= $(SRC)/drivers
+HAL_SRC ?= $(SRC)/hal
 KSTDLIB_SRC ?= $(SRC)/kstdlib
 LOADER_SRC = $(SRC)/loader
 KERNEL_SRC ?= $(SRC)/kernel
 
 DRIVERS_BUILD ?= $(BUILD)/drivers
+HAL_BUILD ?= $(BUILD)/hal
 KSTDLIB_BUILD ?= $(BUILD)/kstdlib
 LOADER_BUILD ?= $(BUILD)/loader
 KERNEL_BUILD ?= $(BUILD)/kernel
@@ -28,11 +30,11 @@ KERNEL_BUILD ?= $(BUILD)/kernel
 DRIVERS_SRCS := $(shell find $(DRIVERS_SRC) -name *.c -exec basename {} .c \;)
 DRIVERS_OBJS := $(DRIVERS_SRCS:%=$(DRIVERS_BUILD)/%.o)
 
+HAL_SRCS := $(shell find $(HAL_SRC) -name *.c -exec basename {} .c \;)
+HAL_OBJS := $(HAL_SRCS:%=$(HAL_BUILD)/%.o)
+
 KSTDLIB_SRCS := $(shell find $(KSTDLIB_SRC) -name *.c -exec basename {} .c \;)
 KSTDLIB_OBJS := $(KSTDLIB_SRCS:%=$(KSTDLIB_BUILD)/%.o)
-
-#LOADER_SRCS := $(shell find $(LOADER_SRC) -name *.c -exec basename {} .c \;)
-#LOADER_OBJS := $(LOADER_SRCS:%=$(LOADER_BUILD)/%.o)
 
 KERNEL_SRCS := $(shell find $(KERNEL_SRC) -name *.c -exec basename {} .c \;)
 KERNEL_OBJS := $(KERNEL_SRCS:%=$(KERNEL_BUILD)/%.o)
@@ -45,11 +47,12 @@ C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -
 
 MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
 
-all: dirs boot drivers kstdlib loader kernel
+all: dirs boot drivers hal kstdlib loader kernel
 
 dirs:
 	$(MKDIR) $(BUILD)
 	$(MKDIR) $(DRIVERS_BUILD)
+	$(MKDIR) $(HAL_BUILD)
 	$(MKDIR) $(KSTDLIB_BUILD)
 	$(MKDIR) $(LOADER_BUILD)
 	$(MKDIR) $(KERNEL_BUILD)
@@ -59,18 +62,22 @@ boot:
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/main.asm -o $(BIN)/$(BOOT_TARGET)
 	$(ASM) $(ASM_FLAGS) $(BOOT_SRC)/header.asm -o $(BIN)/header.bin
 
-loader: #$(LOADER_OBJS) # produces raw binary file (loader objs must come first!!!)
-#$(CL) $(LOADER_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) -m16 -Ttext=0x00010000 --oformat=binary -m elf_i386 -e entry -o $(BIN)/$(LOADER_TARGET)
+loader:
 	$(ASM) $(ASM_FLAGS) -I$(SRC)/loader $(LOADER_SRC)/main.asm -o $(BIN)/$(LOADER_TARGET)
 
 kernel: $(KERNEL_OBJS) # temporarily changed image base so i can load kernel even without page manager
-	$(ASM) $(KERNEL_SRC)/userland.asm -felf -o $(KERNEL_BUILD)/userland.o
+	$(ASM) $(KERNEL_SRC)/ts.s -felf -o $(KERNEL_BUILD)/ts.o
 	$(ASM) $(KERNEL_SRC)/tas.s -felf -o $(KERNEL_BUILD)/tas.o
-	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(KSTDLIB_OBJS) $(KERNEL_BUILD)/userland.o $(KERNEL_BUILD)/tas.o --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o $(BIN)/$(KERNEL_TARGET) -g
+	$(CL) $(KERNEL_OBJS) $(DRIVERS_OBJS) $(HAL_OBJS) $(KSTDLIB_OBJS) $(KERNEL_BUILD)/ts.o $(KERNEL_BUILD)/tas.o --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o $(BIN)/$(KERNEL_TARGET) -g
 
 drivers: $(DRIVERS_OBJS)
 
 $(DRIVERS_BUILD)/%.o: $(DRIVERS_SRC)/%.c
+	$(CC) $(C_FLAGS) -c $< -o $@
+
+hal: $(HAL_OBJS)
+
+$(HAL_BUILD)/%.o: $(HAL_SRC)/%.c
 	$(CC) $(C_FLAGS) -c $< -o $@
 
 kstdlib: $(KSTDLIB_OBJS)

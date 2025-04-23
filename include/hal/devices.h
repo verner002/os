@@ -14,13 +14,15 @@
 #include "types.h"
 #include "kstdlib/errno.h"
 #include "drivers/cpu.h"
+#include "hal/driver.h"
 #include "kstdlib/stdlib.h"
 
 /**
  * Types Definitions
 */
 
-typedef struct _device DEVICE;
+typedef struct __device DEVICE;
+typedef struct __device_node DEVICE_NODE;
 
 /**
  * Structures
@@ -29,4 +31,13 @@ typedef struct _device DEVICE;
 struct __device {
     char const *name;
     DEVICE *parent;
+    DRIVER *driver;
+};
+
+struct __device_node {
+    char const *name;
+    DEVICE *device;
+    uint32_t subdevices_count;
+    uint32_t subdevices_capacity;
+    DEVICE_NODE **subdevices;
 };

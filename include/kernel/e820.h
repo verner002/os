@@ -26,9 +26,22 @@
  * Types Definitions
 */
 
+typedef enum __region_type REGION_TYPE;
 typedef struct __address_descriptor ADDRESS_DESCRIPTOR;
 typedef struct _e820_entry E820_ENTRY;
 typedef struct _e820_map E820_MAP;
+
+/**
+ * Enumerations
+*/
+
+enum __region_type {
+    REGION_FREE = 1,
+    REGION_RESERVED = 2,
+    REGION_ACPI_RECLAIMABLE = 3,
+    REGION_ACPI_NVS = 4,
+    REGION_BAD = 5
+};
 
 /**
  * Structures
@@ -54,7 +67,10 @@ struct __attribute__((__packed__)) _e820_map {
 void __add_region(E820_ENTRY entry);
 void __insert_region(E820_ENTRY entry, uint32_t index);
 void __sanitize_e820(uint32_t entries_count, E820_ENTRY *map);
+E820_ENTRY *__get_last_entry(void);
 char const *e820_get_type_string(E820_ENTRY *descriptor);
 void __dump_e820(void);
+void *e820_amalloc(uint32_t n, bool a);
+void *e820_malloc(uint32_t n);
 void *e820_rmalloc(uint32_t n, bool a);
 E820_ENTRY *e820_get_descriptor(uint32_t index);

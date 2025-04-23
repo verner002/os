@@ -20,10 +20,14 @@
 #include "drivers/8237a.h"
 #include "drivers/82077aa.h"
 
-#include "kernel/syms.h"
+#include "hal/driver.h"
+#include "hal/devices.h"
+#include "hal/filesystem.h"
+
+//#include "kernel/syms.h"
 #include "kernel/e820.h"
 #include "kernel/pager.h"
-#include "kernel/userland.h"
+#include "kernel/ts.h"
 #include "kernel/task.h"
 #include "kernel/fat12.h"
 
@@ -95,7 +99,7 @@ __attribute__((interrupt)) static void __double_fault(INTERRUPT_FRAME *frame) {
 }
 
 __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAME *frame) {
-    printk("fault: general protection fault!\n");
+    printk("fault: general protection fault, task %u!\n", current_task->pid);
     for (;;);
 }
 
@@ -126,7 +130,7 @@ __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
 }
 
 void __user_deamon(void) {
-    printk("\033[33muser:\033[37m USER deamon running, PID=%u\n", __get_pid());
+    //printk("\033[33muser:\033[37m USER deamon running, PID=%u\n", __get_pid());
 
     for (;;);
 }
@@ -143,7 +147,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
 
     printf("\033[97mWelcome to Kernel!\033[37m\n");
 
-    __init_gdt(0x10, 0x7c00);
+    __init_gdt(0x0010, 0x00007c00);
     
     __sanitize_e820(e820_entries_count, e820_entries);
 
@@ -164,24 +168,25 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __set_handler(0x0d, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__general_protection_fault);
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
 
-    // TODO: calculate pages count from bitmap size
-    if (__init_pager((uint32_t *)e820_rmalloc(4096, FALSE), 32)) {
+    if (__init_pager()) {
+        printk("\033[91mFailed to initialize PMM\033[37m\n");
+        panic();
+    }
+
+    if (__init_vmm()) {
+        printk("\033[91mFailed to initialize VMM\033[37m\n");
         panic();
     }
 
     // FIXME: don't initialize heap in stdlib
-    __init_heap(pgalloc(), 4096);
-
-    if (__init_vmm()) {
-        panic();
-    }
+    __init_heap(e820_rmalloc(8192, TRUE), 8192);
 
     if (__init_acpi()) {
         printk("\033[91mFailed to initialize ACPI\033[37m\n");
         printk("\033[33mkernel:\033[37m \033[96mCannot use APIC => using PIC\033[37m\n");
 
         // initialize pic
-        __init_pics(0x0020, 0x0070); // irqs 0-7 -> int 20->27, irqs 8-f -> 70->77
+        __init_pics(0x20, 0x70); // irqs 0-7 -> int 20->27, irqs 8-f -> 70->77
         // TODO: irq7 and irq15 must to check isr flag (spurious irqs)
         __disable_irqs();
     } else {
@@ -212,17 +217,21 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __enable_interrupts();
     __enable_irq(0x01); // irq1
 
-    // TODO: implement mutexes!!!
+    // NOTE: vmm test
+    void *p = __alloc(4096);
+    printf("ptr=%p\n", p);
+    panic();
+
     if (__init_tasking())
         panic();
 
     if (__init_fdc()) {
         printk("\033[91mFailed to initialize FDC\033[37m\n");
-        // ignore? (we can ignored for a while (until we try to mount root))
+        // ignore? (we can ignore it for a while (until we try to mount root))
     }
 
-    __create_task((uint32_t)&__user_deamon);
-    __create_task((uint32_t)&__user_deamon);
+    //__create_task((uint32_t)&__user_deamon, TASK_EXEC_USER);
+    //__create_task((uint32_t)&__user_deamon);
 
     /*__fat12_read_fat();
     __fat12_read_root_dir();
@@ -232,6 +241,45 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     int32_t last_opcode = __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));
     printk("Done: %u\n", last_opcode);*/
     
+    if (__init_fsm()) {
+        printk("Failed to initialize FSM\n");
+        panic();
+    }
+
+    DRIVER *fdc_driver = (DRIVER *)malloc(sizeof(DRIVER));
+
+    if (!fdc_driver) {
+        printk("Failed to allocate memory for the FDC driver\n");
+        panic();
+    }
+
+    fdc_driver->symbols = (SYMBOL *)malloc(sizeof(SYMBOL) * 3);
+    fdc_driver->symbols[0] = (SYMBOL) {
+        .name = "__init",
+        .address = &__init_fdc
+    };
+
+    printk("fdc::__init: %p\n", __link_symbol(fdc_driver, "__init"));
+
+    // we should be ready to mount root
+    DEVICE *root = (DEVICE *)malloc(sizeof(DEVICE));
+
+    if (!root) {
+        printk("Failed to allocate memory for root device\n");
+        panic();
+    }
+
+    root->name = "fd0";
+    root->parent = NULL;
+    root->driver = fdc_driver;
+
+    char const *root_mp = "/";
+
+    if (__mount(root, root_mp)) {
+        printk("Failed to mount device %s to %s\n", root->name, root_mp);
+        panic();
+    }
+
     printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
 
     // idle loop

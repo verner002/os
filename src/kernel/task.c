@@ -15,6 +15,7 @@
 */
 
 static int32_t next_pid = 0;
+static bool mutex = FALSE;
 static TASK
     *first_task,
     *last_task,
@@ -50,13 +51,14 @@ void __quiet_exit(void) {
  * __create_task
 */
 
-int32_t __create_task(uint32_t process) {
-    __disable_interrupts();
+int32_t __create_task(uint32_t process, TASK_EXEC_MODE mode) {
+    __mutex_lock(&mutex);
 
     TASK *task = (TASK *)malloc(sizeof(TASK));
     task->parent_pid = -1;
     task->pid = next_pid++;
     task->state = TASK_STATE_IDLE;
+    task->mode = mode;
     task->code = -1;
 
     uint32_t stack = (uint32_t)pgalloc() + 4096 - sizeof(uint32_t);
@@ -69,7 +71,7 @@ int32_t __create_task(uint32_t process) {
     last_task->next = task;
     last_task = task;
     
-    __enable_interrupts();
+    __mutex_unlock(&mutex);
     return task->pid;
 }
 
@@ -78,22 +80,21 @@ int32_t __create_task(uint32_t process) {
 */
 
 int32_t __init_tasking(void) {
+    __mutex_lock(&mutex);
     printk("Initializing tasking... ");
-
-    __disable_interrupts();
 
     first_task = last_task = current_task = (TASK *)malloc(sizeof(TASK));
     first_task->parent_pid = -1;
     first_task->pid = next_pid++;
     first_task->state = TASK_STATE_RUNNING;
+    first_task->mode = TASK_EXEC_KERNEL;
     first_task->code = -1;
     first_task->esp = first_task->ebp = (uint32_t)pgalloc() + 4096;
     first_task->kernel_stack = (uint32_t)pgalloc() + 4096;
     first_task->next = first_task;
 
-    __enable_interrupts();
-
     printf("Ok\n");
+    __mutex_unlock(&mutex);
     return 0;
 }
 
@@ -102,16 +103,16 @@ int32_t __init_tasking(void) {
 */
 
 void __list_tasks(void) {
-    //__disable_interrupts();
+    __mutex_lock(&mutex);
     
     TASK *task = first_task;
     
     do {
-        printk("task pid=%u, state=%u\n", task->pid, task->state);
+        printk("task pid=%u, state=%u, mode=%u\n", task->pid, task->state, task->mode);
         task = task->next;
     } while (task != first_task);
     
-    //__enable_interrupts();
+    __mutex_unlock(&mutex);
 }
 
 /**
@@ -129,11 +130,11 @@ void __switch_task(void) {
 
     /**
      * two things can happen here:
-     * 1) __get_eip returned the current processes address and we're going to do task switch
+     * 1) __read_eip returned the current processes address and we're going to do task switch
      * 2) the task switch just happened and the old process is being resumed
     */
 
-    uint32_t eip = __get_eip(); // get current eip
+    uint32_t eip = __read_eip(); // get current eip
 
     // if the task state is TASK_STATE_RUNNING, task switch happend and
     // we're being resumed, otherwise we're performing the task switch
@@ -173,7 +174,10 @@ void __switch_task(void) {
 
     //__set_kernel_stack(current_task->kernel_stack); // associated kernel stack
 
-    __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp);
+    if (current_task->mode)
+        __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp);
+    else
+        __exec_usermode(current_task->eip, current_task->esp, current_task->ebp);
 }
 
 /**
@@ -188,12 +192,13 @@ int32_t fork(void) {
     task->parent_pid = parent_task->pid;
     task->pid = next_pid;
     task->state = TASK_STATE_IDLE;
+    task->mode = TASK_EXEC_USER;
     task->kernel_stack = (uint32_t)pgalloc() + 4096;
     task->next = first_task;
     last_task->next = task;
     last_task = task;
 
-    uint32_t eip = __get_eip();
+    uint32_t eip = __read_eip();
 
     /**
      * the `parent_task' will be always the same

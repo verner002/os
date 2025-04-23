@@ -13,7 +13,7 @@
 #include "types.h"
 #include "drivers/cpu.h"
 #include "kernel/pager.h"
-#include "kernel/userland.h"
+#include "kernel/ts.h"
 #include "kstdlib/stdlib.h"
 
 #include "kstdlib/stdio.h"
@@ -23,6 +23,7 @@
 */
 
 typedef enum __task_state TASK_STATE;
+typedef enum __task_exec_mode TASK_EXEC_MODE;
 typedef struct __task TASK;
 
 /**
@@ -35,6 +36,11 @@ enum __task_state {
     TASK_STATE_EXITING = 2
 };
 
+enum __task_exec_mode {
+    TASK_EXEC_USER = 0,
+    TASK_EXEC_KERNEL = 1
+};
+
 /**
  * Structures
 */
@@ -43,6 +49,7 @@ struct __task {
     int32_t parent_pid;
     int32_t pid;
     TASK_STATE state;
+    TASK_EXEC_MODE mode;
     int32_t code;
     uint32_t eip;
     uint32_t esp;
@@ -56,7 +63,7 @@ struct __task {
  * Declarations
 */
 
-int32_t __create_task(uint32_t process);
+int32_t __create_task(uint32_t process, TASK_EXEC_MODE mode);
 int32_t __get_pid(void);
 int32_t __exit(int32_t code);
 void __list_tasks(void);
