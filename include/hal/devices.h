@@ -15,7 +15,7 @@
 #include "kstdlib/errno.h"
 #include "drivers/cpu.h"
 #include "hal/driver.h"
-#include "kstdlib/stdlib.h"
+#include "kernel/heap.h"
 
 /**
  * Types Definitions

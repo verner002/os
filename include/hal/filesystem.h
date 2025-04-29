@@ -13,7 +13,7 @@
 #include "types.h"
 #include "hal/devices.h"
 #include "kstdlib/stdio.h"
-#include "kstdlib/stdlib.h"
+#include "kernel/heap.h"
 
 /**
  * Types Definitions

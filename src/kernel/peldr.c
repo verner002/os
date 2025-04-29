@@ -57,7 +57,7 @@ void *__parse_image(uint8_t *image, uint32_t address) {
         string_table = symbol_table + symbols_count * sizeof(SYMBOL);
 
     SECTION *section_table =
-        (uint32_t)_pe_h + sizeof(_pe_h->pe_s) + sizeof(_coff_h) + _coff_h->opt_h_size;
+        (SECTION *)(_pe_h + sizeof(_pe_h->pe_s) + sizeof(_coff_h) + _coff_h->opt_h_size);
 
     for (uint32_t i = 0; i < sections_count; ++i) {
         SECTION *section = &section_table[i];
@@ -106,7 +106,7 @@ void *__parse_image(uint8_t *image, uint32_t address) {
         if (
             __map_page(
                 virtual_address,
-                page,
+                (uint32_t)page,
                 PAGE_NONE
             )
         ) {
@@ -117,10 +117,10 @@ void *__parse_image(uint8_t *image, uint32_t address) {
         uint32_t raw_data_size = section->raw_data_size;
 
         if (raw_data_size)
-            memcpy(virtual_address, section->raw_data_ptr, section->raw_data_size);
+            memcpy((void *)virtual_address, (void *)section->raw_data_ptr, section->raw_data_size);
         else
-            memset(virtual_address, 0, virtual_size);
+            memset((void *)virtual_address, 0, virtual_size);
 
-        return image_base;
+        return (void *)image_base;
     }
 }

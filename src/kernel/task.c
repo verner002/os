@@ -54,7 +54,7 @@ void __quiet_exit(void) {
 int32_t __create_task(uint32_t process, TASK_EXEC_MODE mode) {
     __mutex_lock(&mutex);
 
-    TASK *task = (TASK *)malloc(sizeof(TASK));
+    TASK *task = (TASK *)kmalloc(sizeof(TASK));
     task->parent_pid = -1;
     task->pid = next_pid++;
     task->state = TASK_STATE_IDLE;
@@ -83,7 +83,7 @@ int32_t __init_tasking(void) {
     __mutex_lock(&mutex);
     printk("Initializing tasking... ");
 
-    first_task = last_task = current_task = (TASK *)malloc(sizeof(TASK));
+    first_task = last_task = current_task = (TASK *)kmalloc(sizeof(TASK));
     first_task->parent_pid = -1;
     first_task->pid = next_pid++;
     first_task->state = TASK_STATE_RUNNING;
@@ -164,7 +164,7 @@ void __switch_task(void) {
         current_task->next = next_task->next;
         pgfree((void *)next_task->esp);
         pgfree((void *)next_task->kernel_stack);
-        free(next_task);
+        kfree(next_task);
     }
 
     current_task = current_task->next;
@@ -188,7 +188,7 @@ int32_t fork(void) {
     __disable_interrupts();
 
     TASK *parent_task = current_task;
-    TASK *task = (TASK *)malloc(sizeof(TASK));
+    TASK *task = (TASK *)kmalloc(sizeof(TASK));
     task->parent_pid = parent_task->pid;
     task->pid = next_pid;
     task->state = TASK_STATE_IDLE;

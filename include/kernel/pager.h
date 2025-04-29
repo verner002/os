@@ -17,6 +17,7 @@
 */
 
 int32_t __init_pager(void);
+void pgreserve(void *p);
 void *pgalloc(void);
 void pgfree(void *);
 void *pgsalloc(uint32_t n);

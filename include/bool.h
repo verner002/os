@@ -7,6 +7,12 @@
 #pragma once
 
 /**
+ * Includes
+*/
+
+#include "types.h"
+
+/**
  * Types Definitions
 */
 

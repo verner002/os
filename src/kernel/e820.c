@@ -75,7 +75,7 @@ void __sanitize_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
         .base = 0x0000d000,
         .size = 3*4096,
         .type = 2
-    }; // page directory, 1. mib page table and kernel page table
+    }; // page directory, 1st mib page table and kernel page table
 
     // TODO: reserve EBDA
 
@@ -265,10 +265,10 @@ void *e820_amalloc(uint32_t n, bool a) {
 */
 
 void *e820_malloc(uint32_t n) {
-    e820_amalloc(n, FALSE);
+    return e820_amalloc(n, FALSE);
 }
 
-// TODO: merge with e820_malloc!!!
+// TODO: merge with e820_amalloc!!!
 void *e820_rmalloc(uint32_t n, bool a) {
     if (!n) return NULL;
 

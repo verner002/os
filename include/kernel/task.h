@@ -14,7 +14,7 @@
 #include "drivers/cpu.h"
 #include "kernel/pager.h"
 #include "kernel/ts.h"
-#include "kstdlib/stdlib.h"
+#include "kernel/heap.h"
 
 #include "kstdlib/stdio.h"
 

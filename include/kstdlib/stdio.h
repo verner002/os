@@ -14,6 +14,7 @@
 #include "drivers/cpu.h"
 #include "drivers/vga.h"
 #include "kernel/mutex.h"
+#include "kernel/heap.h"
 #include "kstdlib/math.h"
 
 /**
@@ -24,12 +25,28 @@
 #define va_arg(v, l) __builtin_va_arg(v, l)
 #define va_end(v) __builtin_va_end(v)
 
+#define FILE_EOF 1
+
 /**
  * Types Definitions
 */
 
-typedef uint32_t FILE;
+typedef struct __file FILE;
 typedef __builtin_va_list va_list;
+
+/**
+ * Structures
+*/
+
+struct __file {
+    char *__base; // buffer base
+    char *__ptr; // read ptr
+    uint32_t __index; // write index
+    uint32_t __count; // chars in buffer
+    uint32_t __flags; // flags
+    uint32_t __size; // buffer size
+    char *__fname; // filename
+};
 
 /**
  * Global Variables
@@ -44,6 +61,8 @@ extern FILE
  * Declarations
 */
 
+bool feof(FILE *stream);
+int getc(FILE *stream);
 int putc(int c, FILE *stream);
 int putchar(int c);
 int vfprintf(FILE *stream, char const *s, va_list args);

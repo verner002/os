@@ -3,7 +3,7 @@
  * 
  * Author: verner002
  * 
- * TOOO:
+ * NOTE:
  *  let's use a bitmap allocator for a while
  *  and move to an avl-tree base later
 */

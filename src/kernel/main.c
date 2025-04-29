@@ -33,7 +33,7 @@
 
 #include "kstdlib/errno.h"
 #include "kstdlib/stdio.h"
-#include "kstdlib/stdlib.h"
+#include "kernel/heap.h"
 
 /**
  * Global Variables
@@ -119,10 +119,70 @@ __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
     __enable_interrupts();
 }
 
+static bool
+    extended,
+    released,
+    shift = FALSE;
+
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
+    static uint32_t state = 0;
+
     __send_eoi(0x01);
-    __inb(PS2_DATA_PORT_REGISTER);
-    printk("\033[33mkbd:\033[37m reading buffer\n");
+    uint8_t data = __inb(PS2_DATA_PORT_REGISTER);
+
+    if (state == 0 && data == 0xe0) {
+        extended = TRUE;
+        ++state;
+    } else if ((state == 0 || state == 1) && data == 0xf0) {
+        released = TRUE;
+        ++state;
+    } else if (state == 0 || state == 1 || state == 2) {
+        if (released) {
+            // key released
+            switch (data) {
+                case 0x12:
+                    shift = FALSE;
+                    break;
+            }
+
+            released = FALSE;
+        } else {
+            // key pressed
+            switch (data) {
+                case 0x12:
+                    shift = TRUE;
+                    break;
+                
+                default:
+                    if (data >= TABLE_SIZE) {
+                        printf("ps2: cannot translate scan code 0x%04x\n", data);
+                        return;
+                    }
+                    
+                    if (putc(shift ? table_shift[data] : table_normal[data], stdin))
+                        printk("ps2: failed to fetch character into stdin\n"); // TODO: realloc buffer
+                    break;
+            }
+        }
+
+        state = 0;
+    } else {
+        printk("ps2: port-a: unknown scan codes sequence\n");
+        printk("ps2: port-a: disabling scanning\n");
+
+        errno = 0;
+        __ps2_disable_scanning();
+
+        if (errno) {
+            printk("ps2: port-a: failed to disable scanning\n");
+            printk("ps2: port-a: dettaching keyboard handler\n");
+
+            __disable_interrupts();
+            __disable_irq(1);
+            __set_handler(0x01, 0x0008, INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE | INTERRUPT_DESCRIPTOR_PRESENT, &__default_isr);
+            __enable_interrupts();
+        }
+    }
 }
 
 __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
@@ -136,28 +196,10 @@ void __user_deamon(void) {
 }
 
 /**
- * entry
+ * __init_handlers
 */
 
-void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
-    __init_tick_counter(); // reset tick counter
-    
-    __init_vga();
-    __setcurpos(cursor_y, cursor_x);
-
-    printf("\033[97mWelcome to Kernel!\033[37m\n");
-
-    __init_gdt(0x0010, 0x00007c00);
-    
-    __sanitize_e820(e820_entries_count, e820_entries);
-
-    __dump_e820();
-
-    if (__init_idt(&__default_isr)) {
-        printk("\033[91mFailed to initialize IDT\033[37m\n");
-        panic();
-    }
-
+void __init_handlers(void) {
     __set_handler(0x00, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__division_by_zero);
     __set_handler(0x02, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__nmi);
     __set_handler(0x04, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__overflow);
@@ -167,19 +209,84 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __set_handler(0x08, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__double_fault);
     __set_handler(0x0d, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__general_protection_fault);
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
+}
 
+/**
+ * entry
+*/
+
+void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
+    // reset tick counter
+    __init_tick_counter();
+    
+    // initialize vga
+    __init_vga();
+    __setcurpos(cursor_y, cursor_x);
+
+    printf("\033[97mWelcome to Kernel!\033[37m\n");
+
+    // initialize global descriptor table
+    __init_gdt(0x0010, 0x00007c00);
+    
+    // fix memory map
+    __sanitize_e820(e820_entries_count, e820_entries);
+
+    // dump the map
+    __dump_e820();
+
+    // initialize interrupt descriptor table
+    if (__init_idt(&__default_isr)) {
+        printk("\033[91mFailed to initialize IDT\033[37m\n");
+        panic();
+    }
+
+    // set default handlers
+    __init_handlers();
+
+    // initialize physical page frame allocator
     if (__init_pager()) {
         printk("\033[91mFailed to initialize PMM\033[37m\n");
         panic();
     }
 
+    // initialize virtual memory manager
     if (__init_vmm()) {
         printk("\033[91mFailed to initialize VMM\033[37m\n");
         panic();
     }
 
+    // initialize kernel heap manager
     // FIXME: don't initialize heap in stdlib
     __init_heap(e820_rmalloc(8192, TRUE), 8192);
+
+    uint32_t const __stdin_size = 10;
+    char *__stdin_base = kmalloc(__stdin_size * sizeof(char));
+
+    if (!__stdin_base) {
+        printk("stdio: failed to allocate memory for stdin\n");
+        panic();
+    }
+
+    *stdin = (FILE){
+        .__base = __stdin_base,
+        .__ptr = __stdin_base,
+        .__index = 0,
+        .__count = 0,
+        .__flags = 0,
+        .__size = __stdin_size,
+        .__fname = "stdin"
+    };
+
+    /**
+     * initialize devices
+     * 
+     * supported devices:
+     *  - acpi
+     *  - pic(s)
+     *  - pit
+     *  - ps/2
+     *  - fdc
+    */
 
     if (__init_acpi()) {
         printk("\033[91mFailed to initialize ACPI\033[37m\n");
@@ -215,12 +322,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     //__send_master_eoi();
     __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
     __enable_interrupts();
-    __enable_irq(0x01); // irq1
-
-    // NOTE: vmm test
-    void *p = __alloc(4096);
-    printf("ptr=%p\n", p);
-    panic();
+    __enable_irq(0x01); // irq0
 
     if (__init_tasking())
         panic();
@@ -246,23 +348,23 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         panic();
     }
 
-    DRIVER *fdc_driver = (DRIVER *)malloc(sizeof(DRIVER));
+    DRIVER *fdc_driver = (DRIVER *)kmalloc(sizeof(DRIVER));
 
     if (!fdc_driver) {
         printk("Failed to allocate memory for the FDC driver\n");
         panic();
     }
 
-    fdc_driver->symbols = (SYMBOL *)malloc(sizeof(SYMBOL) * 3);
-    fdc_driver->symbols[0] = (SYMBOL) {
+    fdc_driver->symbols = (SYMBOL *)kmalloc(sizeof(SYMBOL) * 3);
+    fdc_driver->symbols[fdc_driver->symbols_count++] = (SYMBOL){
         .name = "__init",
-        .address = &__init_fdc
+        .address = (uint32_t)&__init_fdc
     };
 
     printk("fdc::__init: %p\n", __link_symbol(fdc_driver, "__init"));
 
     // we should be ready to mount root
-    DEVICE *root = (DEVICE *)malloc(sizeof(DEVICE));
+    DEVICE *root = (DEVICE *)kmalloc(sizeof(DEVICE));
 
     if (!root) {
         printk("Failed to allocate memory for root device\n");
@@ -281,6 +383,13 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
+
+    while (1) {
+        char c = getc(stdin);
+
+        if (c)
+            putchar(c);
+    }
 
     // idle loop
     for (;;) asm("hlt");

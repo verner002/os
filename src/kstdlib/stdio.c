@@ -17,9 +17,11 @@
 */
 
 static FILE
-    _stdin = 0,
-    _stdout = 1,
-    _stderr = 2;
+    _stdin,
+    _stdout = (FILE){
+    },
+    _stderr = (FILE){
+    };
 
 /**
  * Global Variables
@@ -38,13 +40,44 @@ void __stack_chk_fail(void) {
     printf("Stack overflow\n");
 }
 
+bool feof(FILE *stream) {
+    return stream->__flags & FILE_EOF;
+}
+
+/**
+ * getc
+*/
+
+int getc(FILE *stream) {
+    if (!stream->__count) {
+        stream->__flags |= FILE_EOF;
+        return 0;
+    }
+
+    --stream->__count;
+
+    int c = *stream->__ptr;
+    stream->__ptr = (stream->__ptr - stream->__base + 1) % stream->__size + stream->__base;
+    return c;
+}
+
 /**
  * putc
 */
 
 int32_t putc(int c, FILE *stream) {
-    if (stream == stdout) return __putc((uint8_t)c);
-    else if (stream == stderr) return __putc((uint8_t)c);
+    if (stream == stdout)
+        return __putc((uint8_t)c);
+    else if (stream == stderr)
+        return __putc((uint8_t)c);
+    else if (stream == stdin) {
+        if (stream->__count < stream->__size) {
+            ++stream->__count;
+
+            stream->__base[stream->__index++ % stream->__size] = c;
+            return 0;
+        }   
+    }
     
     return -1;
 }
@@ -87,7 +120,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                     putc('0', stream);
                     putc('x', stream);
 
-                    for (uint32_t i = 0; i < sizeof(uint32_t) * 2; ++i) {
+                    for (uint32_t j = 0; j < sizeof(uint32_t) * 2; ++j) {
                         uint8_t d = ((p = (p << 4) | (p >> 28)) & 0x0f) + '0';
 
                         if (d > '9') d += 'a' - '9' - 1;
@@ -107,11 +140,41 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                             do errno = putc(n[--j], stream); while (j && !errno);
                             break;
                         }
-                        default: return -1;
+                        default:
+                            return -1;
                     }
                     break;
                 }
-                default: return -1;
+                case '0': { // TODO: use variable arguments, if (s[i] >= '0' && s[i] <= '9')
+                    switch (s[++i]) {
+                        case '4': {
+                            switch (s[++i]) {
+                                case 'x': {
+                                    uint8_t n = va_arg(args, uint32_t);
+
+                                    for (uint32_t j = 0; j < sizeof(uint8_t) * 2; ++j) {
+                                        // n = rotate_left(n)
+                                        uint8_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
+
+                                        if (d > '9')
+                                            d += 'a' - '9' - 1;
+                                        
+                                        putc(d, stream);
+                                    }
+                                    break;
+                                }
+                                default:
+                                    return -1;
+                            }
+                            break;
+                        }
+                        default:
+                            return -1;
+                    }
+                    break;
+                }
+                default:
+                    return -1;
             }
         } else errno = putc(c, stream);
     }

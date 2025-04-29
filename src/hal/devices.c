@@ -29,7 +29,7 @@ int32_t __init_devman(void) {
     computer.subdevices_capacity = capacity;
     computer.subdevices_count = 0;
     
-    DEVICE_NODE **subdevices = (DEVICE_NODE **)malloc(sizeof(DEVICE_NODE *) * capacity);
+    DEVICE_NODE **subdevices = (DEVICE_NODE **)kmalloc(sizeof(DEVICE_NODE *) * capacity);
 
     if (!subdevices) {
         printk("Failed to allocate memory for subdevices\n");
@@ -50,7 +50,7 @@ int32_t __add_device(DEVICE_NODE *parent, DEVICE_NODE *child) {
 
     if (parent->subdevices_count >= capacity) { // reallocate array
         capacity = capacity * 2; // use some kind of GROWTH_FACTOR constant
-        DEVICE_NODE **subdevices = (DEVICE_NODE **)realloc(parent->subdevices, capacity);
+        DEVICE_NODE **subdevices = (DEVICE_NODE **)krealloc(parent->subdevices, capacity);
 
         if (!subdevices)
             return -1;
@@ -73,7 +73,7 @@ int32_t __add_device(DEVICE_NODE *parent, DEVICE_NODE *child) {
 */
 
 /*void __init_devs(void) {
-    root.devices = (DEVICE **)malloc(sizeof(DEVICE));
+    root.devices = (DEVICE **)kmalloc(sizeof(DEVICE));
 
     DEVICE cpu = {
         .id = 1,

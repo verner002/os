@@ -21,9 +21,9 @@ uint32_t __link_symbol(DRIVER *driver, char const *name) {
     for (uint32_t i = 0; i < symbols_count; ++i) {
         SYMBOL *symbol = &symbols[i];
 
-        if (!strcmp(symbol->name, name))
+        if (!strcmp((char const *)symbol->name, name))
             return symbol->address;
     }
 
-    return NULL;
+    return 0;
 }

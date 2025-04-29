@@ -27,7 +27,7 @@ int32_t __init_fsm(void) {
     mount_points_count = 0;
     mount_points_capacity = MOUNT_POINTS_DEFAULT;
 
-    mount_points = (MOUNT_POINT *)malloc(sizeof(MOUNT_POINT) * mount_points_capacity);
+    mount_points = (MOUNT_POINT *)kmalloc(sizeof(MOUNT_POINT) * mount_points_capacity);
 
     if (!mount_points) {
         printk("Failed to initialize FSM\n");

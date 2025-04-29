@@ -62,7 +62,7 @@ uint32_t page_directory;
 int32_t __init_vmm(void) {
     printk("\033[33mvmm:\033[37m Initializing... ");
 
-    root = (AVL_NODE *)malloc(sizeof(AVL_NODE));
+    /*root = (AVL_NODE *)e820_malloc(sizeof(AVL_NODE));
 
     if (!root) {
         printf("Error\n");
@@ -70,11 +70,11 @@ int32_t __init_vmm(void) {
     }
 
     root->start = 0x80000000;
-    root->size = 2*1024*1024; // the whole virtual memory
+    root->size = 2*1024*1024; // half of the virtual memory
     root->free = TRUE;
     root->height = 0;
     root->left = NULL;
-    root->right = NULL;
+    root->right = NULL;*/
 
     printf("Ok\n");
     return 0;
@@ -223,7 +223,7 @@ static AVL_NODE *__right_left_rotation(AVL_NODE *parent) {
 }
 
 static AVL_NODE *new_node(uint32_t start, uint32_t size, bool free) {
-    AVL_NODE *node = (AVL_NODE *)malloc(sizeof(AVL_NODE));
+    AVL_NODE *node = (AVL_NODE *)kmalloc(sizeof(AVL_NODE));
 
     if (!node)
         return NULL;
@@ -370,7 +370,7 @@ void *__alloc(uint32_t size) {
         return NULL;
 
     // split node if larger
-    return node->start;
+    return (void *)node->start;
 }
 
 /**

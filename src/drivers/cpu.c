@@ -217,7 +217,8 @@ int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
         .offset_high = (uint16_t)(((uint32_t)default_isr >> 16) & 0xffff)
     };
 
-    for (uint32_t i = 0; i < 256; ++i) idt[i] = __default_descriptor;
+    for (uint32_t i = 0; i < 256; ++i)
+        idt[i] = __default_descriptor;
 
     asm (
         "lidt %0"
