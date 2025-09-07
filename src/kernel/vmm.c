@@ -94,10 +94,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     PAGING_TABLE_ENTRY *page_table;
 
     if (!(pde->address & 0x000fffff)) { // no page table, create one
-        page_table = (PAGING_TABLE_ENTRY *)pgalloc();
-
-        if (!page_table)
-            return -1; // allocation failed
+        page_table = (PAGING_TABLE_ENTRY *)e820_rmalloc(4096, TRUE)/*pgalloc()*/;
 
         memset(page_table, 0, PAGE_TABLE_SIZE);
 

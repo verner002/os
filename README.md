@@ -24,34 +24,77 @@ To create a bootable image use:
 $ make image
 ```
 
-# Boot Loader
+# Stage 1
 
 ## Physical Memory Map
-A minimum of 32 MiB of RAM is required for booting.\
-This memory map is designed for FAT12 boot loader. 
+This is a memory map for Stage 1 that assumes there is at most 1 MiB of memory.\
+The main goal of this stage is to load `loader` and `kernel` binaries and pass control to the second stage.
 
-| Start | End | Size | Description |
-|:-----:|:---:|:----:|-------------|
-| `0x00000000` | `0x000003ff` | 1 KiB | Interrupt Vector Table
-| `0x00000400` | `0x000004ff` | 256 B | BIOS Data Area
-| `0x00000500` | `0x00005fff` | 22.75 KiB | Boot Loader Stack
-| `0x00006000` | `0x000069ff` | 2.5 KiB | Free
-| `0x00006a00` | `0x00007bff` | 4.5 KiB | File Allocation Table (up to 9 sectors)
-| `0x00007c00` | `0x00007dff` | 512 B | Boot Loader
-| `0x00007e00` | `0x00007fff` | 512 B | Free
-| `0x00008000` | `0x00009bff` | 7 KiB | Root Directory
-| `0x00008000` | `0x0000bfff` | 16 KiB | Loader
-| `0x0000c000` | `0x0000cfff` | 4 KiB | SMAP (up to 341 12-byte address range descriptors)
-| `0x0000d000` | `0x0000dfff` | 4 KiB | Page Directory
-| `0x0000e000` | `0x0000efff` | 4 KiB | First MiB Page Table
-| `0x0000f000` | `0x0000ffff` | 4 KiB | Kernel Page Table
-| `0x00010000` | `0x0007ffff` | 448 KiB | Kernel Image
-| `0x00080000` | `0x0009ffff` | 128 KiB | Extended BIOS Data Area (mostly)
-| `0x000a0000` | `0x000bffff` | 128 KiB | Video Memory
-| `0x000c0000` | `0x000c7fff` | 32 KiB | Video BIOS
-| `0x000c8000` | `0x000effff` | 160 KiB | BIOS Expansion
-| `0x000f0000` | `0x000fffff` | 64 KiB | ROM BIOS
-| `0x00100000` | `0x004fffff` | 4 MiB | Kernel
-| `0x00500000` | `0x00efffff` | 10 MiB | Free
+| Start | End | Size | Type | Description |
+|:-----:|:---:|:----:|------|-------------|
+| `0x00000000` | `0x000003ff` | 1 KiB | Reserved | Interrupt Vector Table
+| `0x00000400` | `0x000004ff` | 256 B | Reserved | BIOS Data Area
+| `0x00000500` | `0x000077ff` | 29440 B | Free | Usable Memory
+| `0x00007800` | `0x00007bff` | 1 KiB | Stage 1 | Stack
+| `0x00007c00` | `0x00007dff` | 512 B | Stage 1 | Stage 1 (first part)
+| `0x00007e00` | `0x00007fff` | 512 B | Stage 1 | Stage 1 (second part, optinal)
+| `0x00008000` | `0x00008fff` | 4 KiB | Stage 2 | Stage 2
+| `0x00009000` | `0x0000ffff` | 28 KiB | Free | Usable Memory
+| `0x00010000` | `0x0007ffff` | 448 KiB | Stage 2 | Kernel Image
+| `0x00080000` | `0x0009ffff` | 128 KiB | Reserved | Extended BIOS Data Area (mostly)
+| `0x000a0000` | `0x000bffff` | 128 KiB | Reserved | Video Memory
+| `0x000c0000` | `0x000c7fff` | 32 KiB | Reserved | Video BIOS
+| `0x000c8000` | `0x000effff` | 160 KiB | Reserved | BIOS Expansion
+| `0x000f0000` | `0x000fffff` | 64 KiB | Reserved | ROM BIOS
+
+# Stage 2
+
+## Physical Memory Map
+The memory map for Stage 2 slightly differs from the first one because now we are able to detect the available system memory. The memory used by Stage 1 (type Stage 1) can be used to whatever we want to.
+
+| Start | End | Size | Type | Description |
+|:-----:|:---:|:----:|------|-------------|
+| `0x00000000` | `0x000003ff` | 1 KiB | Reserved | Interrupt Vector Table
+| `0x00000400` | `0x000004ff` | 256 B | Reserved | BIOS Data Area
+| `0x00000500` | `0x00007bff` | 30464 B | Free | Usable Memory
+| `0x00007c00` | `0x00007fff` | 1 KiB | Stage 2 | Stack
+| `0x00008000` | `0x00008fff` | 4 KiB | Stage 2 | Stage 2
+| `0x00009000` | `0x0000ffff` | 28 KiB | Free | Usable Memory
+| `0x00010000` | `0x0007ffff` | 448 KiB | Stage 2 | Kernel Image
+| `0x00080000` | `0x0009ffff` | 128 KiB | Reserved | Extended BIOS Data Area (mostly)
+| `0x000a0000` | `0x000bffff` | 128 KiB | Reserved | Video Memory
+| `0x000c0000` | `0x000c7fff` | 32 KiB | Reserved | Video BIOS
+| `0x000c8000` | `0x000effff` | 160 KiB | Reserved | BIOS Expansion
+| `0x000f0000` | `0x000fffff` | 64 KiB | Reserved | ROM BIOS
+| `0x00100000` | `0x004fffff` | 4 MiB | Kernel | Kernel
+| `0x00500000` | `0x00efffff` | 10 MiB | Free | Usable Memory
 | `0x00f00000` | `0x00ffffff` | 1 MiB | ISA Memory Hole (possibly memory mapped hardware)
-| `0x01000000` | `0xffffffff` | 4080 MiB | Free and memory mapped hardware
+| `0x01000000` | `0x01ffffff` | 16 MiB | Free & MMIO | Usable Memory & Memory Mapped Hardware
+| `0x02000000` | `0xffffffff` | 4064 MiB | Free & MMIO (Extra) | Usable Memory & Memory Mapped Hardware (Extra Memory)
+
+# Kernel
+
+## Physical Memory Map
+The memory map for Stage 2 slightly differs from the first one because now we are able to detect the available system memory. The memory used by Stage 1 (type Stage 1) can be used to whatever we want to.
+
+| Start | End | Size | Type | Description |
+|:-----:|:---:|:----:|------|-------------|
+| `0x00000000` | `0x000003ff` | 1 KiB | Reserved | Interrupt Vector Table
+| `0x00000400` | `0x000004ff` | 256 B | Reserved | BIOS Data Area
+| `0x00000500` | `0x0007ffff` | 523008 B | Free | Usable Memory
+| `0x00080000` | `0x0009ffff` | 128 KiB | Reserved | Extended BIOS Data Area (mostly)
+| `0x000a0000` | `0x000bffff` | 128 KiB | Reserved | Video Memory
+| `0x000c0000` | `0x000c7fff` | 32 KiB | Reserved | Video BIOS
+| `0x000c8000` | `0x000effff` | 160 KiB | Reserved | BIOS Expansion
+| `0x000f0000` | `0x000fffff` | 64 KiB | Reserved | ROM BIOS
+| `0x00100000` | `0x004fffff` | 4 MiB | Kernel | Kernel
+| `0x00500000` | `0x00efffff` | 10 MiB | Free | Usable Memory
+| `0x00f00000` | `0x00ffffff` | 1 MiB | ISA Memory Hole (possibly memory mapped hardware)
+| `0x01000000` | `0x01ffffff` | 16 MiB | Free & MMIO | Usable Memory & Memory Mapped Hardware
+| `0x02000000` | `0xffffffff` | 4064 MiB | Free & MMIO (Extra) | Usable Memory & Memory Mapped Hardware (Extra Memory)
+
+## Virtual Memory Map
+| Start | End | Size | Type | Description |
+|:-----:|:---:|:----:|------|-------------|
+| `0x00000000` | `0x000fffff` | 1 MiB | Reserved | First MiB
+| `0x80000000` | `0x80400000` | 4 MiB | Kernel | Kernel

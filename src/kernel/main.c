@@ -2,6 +2,8 @@
  * Kernel
  * 
  * Author: verner002
+ * 
+ * j+k=<3
 */
 
 //#define __DEBUG
@@ -21,8 +23,7 @@
 #include "drivers/82077aa.h"
 
 #include "hal/driver.h"
-#include "hal/devices.h"
-#include "hal/filesystem.h"
+#include "hal/vfs.h"
 
 //#include "kernel/syms.h"
 #include "kernel/e820.h"
@@ -33,13 +34,22 @@
 
 #include "kstdlib/errno.h"
 #include "kstdlib/stdio.h"
+#include "kstdlib/stdlib.h"
 #include "kernel/heap.h"
+
+#include "drivers/pci.h"
+#include "kernel/kdev.h"
+#include "kernel/config.h"
+#include "kernel/fs.h"
 
 /**
  * Global Variables
 */
 
 TASK *current_task = NULL;
+uint32_t f_systems_count = 0;
+struct __fs f_systems[256];
+//VFS_DIR_NODE *root;
 
 /**
  * panic
@@ -49,8 +59,8 @@ void panic(void) {
     printk("\033[31mKERNEL PANIC\n");
 
     for (;;) {
-        asm("cli");
-        asm("hlt");
+        __asm__("cli");
+        __asm__("hlt");
     }
 }
 
@@ -82,7 +92,7 @@ __attribute__((interrupt)) static void __bounds_check(INTERRUPT_FRAME *frame) {
 __attribute__((interrupt)) static void __invalid_opcode(INTERRUPT_FRAME *frame) {
     uint32_t eip; // instruction that caused the fault
     
-    asm volatile ("pop %0" : "=m" (eip));
+    __asm__ volatile ("pop %0" : "=m" (eip));
 
     printk("fault: invalid opcode at %p!\n", eip);
     for (;;);
@@ -104,25 +114,37 @@ __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAM
 }
 
 __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
-    printk("fault: page fault!\n");
+    printk("Page fault\n");
+
+    if (current_task) {
+        printk(" Process %s, PID %u\n", current_task->name, current_task->pid);
+        printk(" ESP=%p\n", current_task->esp);
+    }
     for (;;);
 }
 
 __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
-    __disable_interrupts();
-    
+    //__disable_interrupts();
     __send_eoi(0x00);
-    
     __update_tick_counter();
     __switch_task();
-    
-    __enable_interrupts();
+    //__enable_interrupts();
+}
+
+void __f1_handler(void) {
+    printf("[F1]");
+}
+
+void __up_handler(void) {
+    printf("[UP]");
 }
 
 static bool
     extended,
     released,
     shift = FALSE;
+
+static int32_t wake_task = -1; // TODO: use list for "tasks to wake"
 
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     static uint32_t state = 0;
@@ -145,6 +167,7 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
                     break;
             }
 
+            extended = FALSE;
             released = FALSE;
         } else {
             // key pressed
@@ -155,14 +178,40 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
                 
                 default:
                     if (data >= TABLE_SIZE) {
-                        printf("ps2: cannot translate scan code 0x%04x\n", data);
+                        printf("ps2: cannot translate scan code 0x%02x\n", data);
                         return;
                     }
-                    
-                    if (putc(shift ? table_shift[data] : table_normal[data], stdin))
-                        printk("ps2: failed to fetch character into stdin\n"); // TODO: realloc buffer
+
+                    if (extended) {
+                        uint32_t fn = table_extended[data];
+
+                        if (fn & 0xffffff00)
+                            ((void (*)(void))fn)(); // call the handler
+                    } else {
+                        uint32_t c = shift ? table_shift[data] : table_normal[data];
+
+                        if (c & 0xffffff00) {
+                            ((void (*)(void))c)(); // call the handler
+                            break;
+                        }
+
+                        // is the char printable?
+                        if (!c)
+                            break;
+
+                        if (putc(c, stdin))
+                            printk("ps2: stdin full\n"); // TODO: realloc buffer
+
+                        putchar(c);
+                        
+                        if (c == '\n' && wake_task != -1)
+                            __wake_task(wake_task);
+                    }
+
                     break;
             }
+
+            extended = FALSE;
         }
 
         state = 0;
@@ -173,6 +222,7 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
         errno = 0;
         __ps2_disable_scanning();
 
+        // RFC: change `state' to blocked and print error message?
         if (errno) {
             printk("ps2: port-a: failed to disable scanning\n");
             printk("ps2: port-a: dettaching keyboard handler\n");
@@ -189,8 +239,215 @@ __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
     printk("\033[33mkernel:\033[37m syscall\n");
 }
 
-void __user_deamon(void) {
-    //printk("\033[33muser:\033[37m USER deamon running, PID=%u\n", __get_pid());
+/**
+ * xatoi
+*/
+
+int32_t xatoi(char const *s) {
+    if (!s)
+        return 0;
+
+    while (*s == ' ') ++s; // skip whitespaces
+
+    int32_t value = 0;
+
+    for (char c; ((c = *s) >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); ++s) {
+        c -= '0';
+
+        if (c > 9)
+            c -= 'a' - '9' - 1;
+
+        value = 16 * value + c;
+    }
+
+    return value;
+}
+
+void __terminal_task(void) {
+    printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
+
+    char *pwd = "/";
+
+    while (1) {
+        printf("[root@null /]$ ");
+        unsigned int size = 16; // base size
+        unsigned int index = 0;
+        char *input_buffer = (char *)kmalloc(sizeof(char) * size);
+
+        char chr;
+
+        while ((chr = getchar()) != EOF && chr != '\n') {
+            if (index + 1 >= size) {
+                size *= 2; //size = size * 1.5f + 0.5f; // growth factor
+                input_buffer = (char *)krealloc(input_buffer, size);
+
+                if (!input_buffer) {
+                    printk("terminal: failed to reallocate input buffer\n");
+                    __exit(-1);
+                }
+            }
+            
+            input_buffer[index++] = chr;
+        }
+
+        if (chr == EOF && !feof(stdin)) {
+            printf("terminal: failed to read stdin\n");
+
+            /*int32_t terminal_pid = __create_task("terminal", (uint32_t)&__terminal_task, TASK_EXEC_KERNEL);
+            wake_task = terminal_pid; // FIXME: mutex should be used!!!
+
+            if (terminal_pid == -1)
+                printk("failed to start terminal\n");*/
+
+            __exit(-1);
+        }
+
+        input_buffer[index] = '\0';
+
+        char *cmd = strtok(input_buffer, " ");
+
+        if (!strcmp(cmd, "heap")) {
+            __dump_heap();
+        } else if (!strcmp(cmd, "clear")) {
+            __clear();
+        } else if (!strcmp(cmd, "ps")) {
+            __list_tasks();
+        } else if (!strcmp(cmd, "e820")) {
+            __dump_e820();
+        } else if (!strcmp(cmd, "ls")) {
+            //DIR *dir = opendir(pwd);
+            __fat12_list_rootdir();
+        } else if (!strcmp(cmd, "hexdump")) {
+            char *address = strtok(NULL, " ");
+
+            if (!address) {
+                printf("hexdump: expected address\n");
+                kfree(input_buffer);
+                continue;
+            }
+            
+            char *count = strtok(NULL, " ");
+
+            if (!count) {
+                printf("hexdump: expected count\n");
+                kfree(input_buffer);
+                continue;
+            }
+            uint32_t addr = xatoi(address);
+            uint32_t max = atoi(count);
+
+            printf("dumping %u byte(s) from %p (%u):\n", max, addr, addr);
+            printf("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F %c 0123456789ABCDEF\n", (char)179);
+            printf("------------------------------------------------------------------\n");
+
+            for (uint32_t i = 0; i < (max / 16); ++i) {
+                char buffer[16];
+
+                for (uint32_t j = 0; j < 16; ++j) {
+                    uint32_t index = 16 * i + j;
+
+                    uint8_t data = ((uint8_t *)addr)[index];
+
+                    buffer[j] = data;
+                    printf("%02x ", data);
+                }
+
+                putchar((char)179);
+                putchar(' ');
+
+                for (uint32_t j = 0; j < 16; ++j) {
+                    char ch = buffer[j];
+
+                    switch (ch) {
+                        case '\n':
+                        case '\b':
+                        case '\e':
+                        case '\t':
+                        case '\r':
+                            putchar('?');
+                            break;
+
+                        default:
+                            putchar(ch);
+                            break;
+                    }
+                }
+
+                putchar('\n');
+            }
+
+            if (max % 16) {
+                char buffer[16];
+
+                for (uint32_t i = 0; i < (max % 16); ++i) {
+                    uint32_t index = (max & 0xfffffff0) + i;
+                    uint8_t data = ((uint8_t *)addr)[i];
+
+                    buffer[i] = data;
+                    printf("%02x ", data);
+                }
+
+                for (uint32_t i = 0; i < (16 - (max % 16)); ++i) {
+                    printf("   ");
+                }
+
+                putchar((char)179);
+                putchar(' ');
+
+                for (uint32_t i = 0; i < (max % 16); ++i) {
+                    char ch = buffer[i];
+
+                    switch (ch) {
+                        case '\n':
+                        case '\b':
+                        case '\e':
+                        case '\t':
+                        case '\r':
+                            putchar('?');
+                            break;
+
+                        default:
+                            putchar(ch);
+                            break;
+                    }
+                }
+
+                putchar('\n');
+            }
+        } else if (!strcmp(cmd, "lsblk")) {
+            //printk("NAME     DRIVER    TYPE      MOUNTPOINT\n");
+
+            /*printf("NAME");
+
+            uint32_t spaces;
+
+            if (longest_dev_name < 5)
+                spaces = 1;
+            else
+                spaces = longest_dev_name - 4;
+
+            for (uint32_t i = 0; i < spaces; ++i)
+                putchar(' ');
+
+            printf("MAJ:MIN\n");
+
+            for (uint32_t i = 0; i < devs_count; ++i)
+                printf("%s %u:%u %s (address=%p)\n", devs[i].name, devs[i].major, devs[i].minor, devs[i].driver->module_name, devs[i].driver);*/
+        } else if (!strcmp(cmd, "help"))
+            printf(
+                " heap - dumps heap                 clear - clears window\n"
+                " ps - lists tasks                  e820 - dumps bios memory map\n"
+                " help - prints help\n"
+            );
+        else if (index)
+            printf("terminal: %s: command not found\n", cmd);
+
+        kfree(input_buffer);
+    }
+}
+
+void __user_daemon(void) {
+    //printk("\033[33muser:\033[37m USER daemon running, PID=%u\n", __get_pid());
 
     for (;;);
 }
@@ -211,11 +468,15 @@ void __init_handlers(void) {
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
 }
 
+static char command_line[255];
+uint16_t root_dev = NO_DEV;
+char *envs[16];
+
 /**
  * entry
 */
 
-void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
+void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, uint32_t boot_drv, uint32_t fs_type, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
     // reset tick counter
     __init_tick_counter();
     
@@ -225,9 +486,12 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
 
     printf("\033[97mWelcome to Kernel!\033[37m\n");
 
+    // copy command line to buffer
+    strcpy(command_line, (char const *)0x00007e00);
+
     // initialize global descriptor table
-    __init_gdt(0x0010, 0x00007c00);
-    
+    __init_gdt(0x0010, 0x00007c00); // RFC: can we set the esp0 latter?
+
     // fix memory map
     __sanitize_e820(e820_entries_count, e820_entries);
 
@@ -243,6 +507,13 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     // set default handlers
     __init_handlers();
 
+    __parse_config(command_line);
+
+    if (root_dev == NO_DEV) {
+        printk("kernel: error: unknown root dev\n");
+        panic();
+    }
+
     // initialize physical page frame allocator
     if (__init_pager()) {
         printk("\033[91mFailed to initialize PMM\033[37m\n");
@@ -256,10 +527,16 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // initialize kernel heap manager
-    // FIXME: don't initialize heap in stdlib
-    __init_heap(e820_rmalloc(8192, TRUE), 8192);
+    void *heap = e820_rmalloc(8192, TRUE);
 
-    uint32_t const __stdin_size = 10;
+    if (!heap) {
+        printk("kernel: error: failed to allocate memory for heap\n");
+        panic();
+    }
+
+    __init_heap(heap, 8192);
+
+    uint32_t const __stdin_size = 128;
     char *__stdin_base = kmalloc(__stdin_size * sizeof(char));
 
     if (!__stdin_base) {
@@ -284,7 +561,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
      *  - acpi
      *  - pic(s)
      *  - pit
-     *  - ps/2
+     *  - ps/2 (initialize usb subsystem first)
      *  - fdc
     */
 
@@ -313,6 +590,12 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __enable_interrupts();
     __enable_irq(0x00); // irq0
 
+    // TODO: load from configuration
+    __set_scancode_handler(table_normal, F1_SCANCODE, (uint32_t)&__f1_handler);
+    __set_scancode_handler(table_extended, 0x75, (uint32_t)&__up_handler);
+    //__set_scancode_handler(table_normal, F2_SCANCODE, (uint32_t)&__f2_handler);
+    //table_shift[F1_SCAN_CODE] = (uint32_t)&__f1_handler;
+
     // initialize usb controller first
     // ps/2 could be emulated (usb
     // legacy support)
@@ -327,76 +610,29 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     if (__init_tasking())
         panic();
 
-    if (__init_fdc()) {
-        printk("\033[91mFailed to initialize FDC\033[37m\n");
-        // ignore? (we can ignore it for a while (until we try to mount root))
-    }
+    if (__init_fdc())
+        printk("kernel: info: fdc not initialized\n");
 
-    //__create_task((uint32_t)&__user_deamon, TASK_EXEC_USER);
-    //__create_task((uint32_t)&__user_deamon);
+    __init_pci();
 
-    /*__fat12_read_fat();
-    __fat12_read_root_dir();
+    int32_t terminal_pid = __create_task("terminal", (uint32_t)&__terminal_task, TASK_EXEC_KERNEL);
+    wake_task = terminal_pid;
 
-
-    printk("Reading file...\n");
-    int32_t last_opcode = __fat12_load_file("KERNEL  SYS", e820_rmalloc(72*1024, FALSE));
-    printk("Done: %u\n", last_opcode);*/
-    
-    if (__init_fsm()) {
-        printk("Failed to initialize FSM\n");
+    if (terminal_pid == -1) {
+        printk("failed to start terminal\n");
         panic();
     }
 
-    DRIVER *fdc_driver = (DRIVER *)kmalloc(sizeof(DRIVER));
+    //__create_task((uint32_t)&__user_daemon, TASK_EXEC_USER);
+    //__create_task((uint32_t)&__user_daemon);
 
-    if (!fdc_driver) {
-        printk("Failed to allocate memory for the FDC driver\n");
-        panic();
-    }
-
-    fdc_driver->symbols = (SYMBOL *)kmalloc(sizeof(SYMBOL) * 3);
-    fdc_driver->symbols[fdc_driver->symbols_count++] = (SYMBOL){
-        .name = "__init",
-        .address = (uint32_t)&__init_fdc
-    };
-
-    printk("fdc::__init: %p\n", __link_symbol(fdc_driver, "__init"));
-
-    // we should be ready to mount root
-    DEVICE *root = (DEVICE *)kmalloc(sizeof(DEVICE));
-
-    if (!root) {
-        printk("Failed to allocate memory for root device\n");
-        panic();
-    }
-
-    root->name = "fd0";
-    root->parent = NULL;
-    root->driver = fdc_driver;
-
-    char const *root_mp = "/";
-
-    if (__mount(root, root_mp)) {
-        printk("Failed to mount device %s to %s\n", root->name, root_mp);
-        panic();
-    }
+    // TODO: bios device id list starts with 0 so we could use
+    //  an array to map device id to the actual DEVICE structure
 
     printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
 
-    while (1) {
-        char c = getc(stdin);
-
-        if (c)
-            putchar(c);
-    }
-
     // idle loop
-    for (;;) asm("hlt");
-
-    /*printk("waiting 5 seconds...\n");
-    __delay_ms(5000);
-    printk("done!\n");*/
+    for (;;) __asm__("hlt");
 
     /*for (uint32_t i = 0; i < symbols_count; ++i) {
         SYMBOL *symbol = &symbol_table[i];
@@ -422,4 +658,8 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }*/
 
     //__set_handler(0x80, 0x0008, 0xee, &syscall); // FIXME: implement setting dpl, this is stupid
+}
+
+int32_t open(char const *path, char const *mode) {
+    
 }

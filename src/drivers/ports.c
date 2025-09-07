@@ -54,3 +54,33 @@ void __outw(uint16_t r, uint16_t v) {
         :
     );
 }
+
+/**
+ * __ind
+*/
+
+uint32_t __ind(uint16_t r) {
+    uint32_t v;
+
+    asm (
+        "in eax, dx"
+        : "=a" (v)
+        : "d" (r)
+        :
+    );
+
+    return v;
+}
+
+/**
+ * __outd
+*/
+
+void __outd(uint16_t r, uint32_t v) {
+    asm (
+        "out dx, eax\n\t"
+        :
+        : "d" (r), "a" (v)
+        :
+    );
+}

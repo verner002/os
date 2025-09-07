@@ -29,6 +29,7 @@
 */
 
 void __init_vga(void);
+int32_t __clear(void);
 int32_t __putc(uint8_t c);
 void __setcurpos(uint32_t line, uint32_t column);
 void __scroll_down(void);

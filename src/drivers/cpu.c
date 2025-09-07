@@ -277,17 +277,17 @@ uint64_t __current_tick_count(void) {
  * __sleep_ms
  * 
  * Note:
- *  Another task is begin processed.
+ *  Another task is being processed.
  *  Sleeps the task for a given period of time.
  *  (Remove task from queue and let timer fire an
- *  interrupt after a given time to return it?)
+ *  interrupt after a given time to wake it up?)
 */
 
 /**
  * __delay_ms
  * 
  * Note:
- *  The same task is begin processed.
+ *  The same task is being processed.
 */
 
 void __delay_ms(uint32_t ms) {

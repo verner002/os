@@ -43,7 +43,7 @@ INCS := $(INC)
 INC_FLAGS := $(addprefix -I,$(INCS))
 
 ASM_FLAGS ?= -I$(INC)/asm
-C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables -save-temps=obj -g -mgeneral-regs-only -fno-builtin
+C_FLAGS ?= $(INC_FLAGS) -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables -save-temps=obj -g -mgeneral-regs-only -fno-builtin -std=gnu17
 
 MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
 
@@ -100,10 +100,15 @@ image: all
 
 	sudo mkdir /mnt/$(MOUNT)
 	sudo mount ./fdd.img /mnt/$(MOUNT)
+	sudo mkdir /mnt/$(MOUNT)/etc
 	sudo cp ./bin/loader.sys /mnt/$(MOUNT)/loader.sys
 	sudo cp ./bin/kernel.sys /mnt/$(MOUNT)/kernel.sys
+	ls -l /mnt/$(MOUNT)
 	sudo umount /mnt/$(MOUNT)
 	sudo rm -rf /mnt/$(MOUNT)
+
+run-qemu:
+	qemu-system-x86_64 -fda ./fdd.img -device piix3-ide,id=ide -drive id=disk,file=disk.img,format=raw,if=none -device ide-hd,drive=disk,bus=ide.0
 
 debug-gdb:
 	qemu-system-i386 -fda ./fdd.img -S -s & gdb --quiet -x $(DEBUG)/config.gdb ./$(BIN)/$(KERNEL_TARGET)

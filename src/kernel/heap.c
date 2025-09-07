@@ -9,6 +9,7 @@
 */
 
 #include "kernel/heap.h"
+#include "kstdlib/stdio.h"
 
 /**
  * Types Definitions
@@ -33,6 +34,9 @@ struct __chunk {
  * Static Global Variables
 */
 
+static bool mutex = FALSE;
+static bool init = FALSE;
+static CHUNK *first_chunk = NULL;
 static CHUNK *first_free_chunk = NULL;
 
 /**
@@ -40,6 +44,10 @@ static CHUNK *first_free_chunk = NULL;
 */
 
 void __init_heap(void *p, uint32_t s) {
+    if (init)
+        return;
+
+    __mutex_lock(&mutex);
     CHUNK *heap = (CHUNK *)p;
     heap->free = TRUE;
     heap->size = s - sizeof(CHUNK); // `s' is real size of area reserved for heap
@@ -47,45 +55,94 @@ void __init_heap(void *p, uint32_t s) {
     heap->next_chunk = NULL;
 
     first_free_chunk = heap;
+    first_chunk = heap;
+    init = TRUE;
+    __mutex_unlock(&mutex);
 }
 
 /**
- * kmalloc
+ * __dump_heap
+*/
+
+void __dump_heap(void) {
+    __mutex_lock(&mutex);
+    CHUNK *chunk = first_chunk;
+    uint32_t chunk_i = 0;
+
+    while (chunk) {
+        printk("chunk=%u | ptr=%p | free=%u | size=%u\n", chunk_i++, chunk, chunk->free, chunk->size);
+        chunk = chunk->next_chunk;
+    }
+
+    printk("start=%p | total=%u\n", first_chunk, chunk_i);
+    __mutex_unlock(&mutex);
+}
+
+/**
+ * __merge_chunks
+*/
+
+static CHUNK *__merge_chunks(CHUNK *chunk) {
+    CHUNK *prev_chunk = chunk->previous_chunk;
+
+    if (prev_chunk && prev_chunk->free) {
+        prev_chunk->size += chunk->size + sizeof(CHUNK);
+        prev_chunk->next_chunk = chunk->next_chunk;
+
+        if (chunk->next_chunk)
+            chunk->next_chunk->previous_chunk = prev_chunk;
+
+        chunk = prev_chunk;
+    }
+
+    CHUNK *next_chunk = chunk->next_chunk;
+
+    if (next_chunk && next_chunk->free) {
+        chunk->size += next_chunk->size + sizeof(CHUNK);
+        chunk->next_chunk = next_chunk->next_chunk;
+
+        if (next_chunk->next_chunk)
+            next_chunk->next_chunk->previous_chunk = chunk;
+    }
+
+    return chunk;
+}
+
+/**
+ * __kmalloc
  * 
  * NOTE: use AVL tree instead of linked-list?
 */
 
-void *kmalloc(uint32_t n) {
-    if (!n) return NULL;
+void *__kmalloc(uint32_t n) {
+    if (!n)
+        return NULL;
 
-    CHUNK
-        *previous_chunk = NULL,
-        *chunk = (CHUNK *)first_free_chunk,
-        *next_chunk = NULL;
+    CHUNK *chunk = (CHUNK *)first_free_chunk;
 
     while (chunk) {
         if (chunk->free && chunk->size >= n) {
+            CHUNK *next_chunk = chunk->next_chunk;
+
             uint32_t remainder = chunk->size - n;
             
-            if (remainder > sizeof(CHUNK)) { // split chunk, at least 1 uint8_t can be used
+            if (remainder > sizeof(CHUNK)) { // split chunk
                 next_chunk = (CHUNK *)chunk + n;
                 next_chunk->free = TRUE;
                 next_chunk->size = remainder - sizeof(CHUNK); // usable size, without metadata
                 next_chunk->previous_chunk = chunk;
-                next_chunk->next_chunk = NULL;
+                next_chunk->next_chunk = chunk->next_chunk;
+
+                chunk->size = n;
+                chunk->next_chunk = next_chunk;
             }
 
             first_free_chunk = next_chunk;
-
             chunk->free = FALSE;
-            chunk->size = n;
-            chunk->previous_chunk = previous_chunk;
-            chunk->next_chunk = next_chunk;
 
-            return chunk + sizeof(CHUNK);
+            return (void *)((uint32_t)chunk + (uint32_t)sizeof(CHUNK));
         }
 
-        previous_chunk = chunk;
         chunk = chunk->next_chunk;
     }
 
@@ -93,110 +150,215 @@ void *kmalloc(uint32_t n) {
 }
 
 /**
+ * __kfree
+*/
+
+void __kfree(void *p) {
+    if (!p)
+        return;
+
+    CHUNK *curr_chunk = (CHUNK *)((uint32_t)p - (uint32_t)sizeof(CHUNK));
+
+    if (curr_chunk->free)
+        return;
+
+    curr_chunk->free = TRUE;
+    curr_chunk = __merge_chunks(curr_chunk);
+
+    if ((uint32_t)curr_chunk < (uint32_t)first_free_chunk)
+        first_free_chunk = curr_chunk;
+}
+
+/**
+ * kmalloc
+*/
+
+void *kmalloc(uint32_t n) {
+    __mutex_lock(&mutex);
+    void *ptr = __kmalloc(n);
+    __mutex_unlock(&mutex);
+    return ptr;
+}
+
+/**
  * krealloc
- * 
- * RFC: does this work? (i can't remember) :-D
  * TODO: some parts of code looks similar, merge them if possible
+ * FIXME: we must update first_free_chunk
 */
 
 void *krealloc(void *p, uint32_t n) {
-    // null ptr or zero size
-    if (!p || !n)
-        return p; // do nothing (we don't want to take the system down :-P)
+    __mutex_lock(&mutex);
+
+    if (!p || !n) {
+        __mutex_unlock(&mutex);
+        return p;
+    }
+
+    CHUNK *curr_chunk = (CHUNK *)((uint32_t)p - (uint32_t)sizeof(CHUNK));
+
+    // you can not realloc something that
+    // is not even allocated
+    if (curr_chunk->free) {
+        __mutex_unlock(&mutex);
+        return NULL; // TODO: throw an error?
+    }
+
+    uint32_t curr_chunk_size = curr_chunk->size;
+
+    if (n == curr_chunk->size) {
+        __mutex_unlock(&mutex);
+        return p;
+    }
 
     CHUNK
-        *current_chunk = (CHUNK *)(p - sizeof(CHUNK)),
-        *previous_chunk = current_chunk->previous_chunk,
-        *next_chunk = current_chunk->next_chunk;
-    
-    uint32_t current_chunk_size = current_chunk->size;
+        *prev_chunk = curr_chunk->previous_chunk,
+        *next_chunk = curr_chunk->next_chunk;
 
-    if (n > current_chunk_size) { // we're going to grow in size
-        uint32_t required_bytes = n - current_chunk_size;
+    if (n < curr_chunk_size) {
+        uint32_t extra_bytes = curr_chunk_size - n;
 
-        bool previous_chunk_check =
-            previous_chunk &&
-            previous_chunk->free;
+        // first let's try to enlarge prev or next
+        // chunk we want to avoid fragmentation, if
+        // that isn't possible we can try to split
+        // the chunk into the one we use and into the
+        // remainder, if that is not possible, let
+        // the chunk as it is, changing the size
+        // would corrupt heap
+        if (prev_chunk && prev_chunk->free) {
+            prev_chunk->size += extra_bytes;
+            curr_chunk->size = n;
+            CHUNK *new_chunk = (CHUNK *)((uint32_t)curr_chunk + extra_bytes);
+            //memmove((void *)new_chunk, (void *)curr_chunk, n + sizeof(CHUNK));
 
-        bool next_chunk_check =
-            next_chunk &&
-            next_chunk->free;
+            uint32_t n_total = n + sizeof(CHUNK);
 
-        // TODO: merge _chunk && _chunk->size (+ sizeof(CHUNK)) part
-        if (previous_chunk_check && previous_chunk->size > required_bytes) {
-            CHUNK *old_current_chunk = current_chunk;
-            current_chunk = (void *)current_chunk - required_bytes;
-            current_chunk->size += required_bytes;
-            // move the current chunk
-            memmove(current_chunk, old_current_chunk, old_current_chunk->size);
-            previous_chunk->next_chunk = current_chunk;
-            previous_chunk->size -= required_bytes;
-            p = (void *)current_chunk + sizeof(CHUNK);
-        } else if (previous_chunk_check && (previous_chunk->size + sizeof(CHUNK)) >= required_bytes) {
-            uint32_t new_size = previous_chunk->size + sizeof(CHUNK);
-            memcpy(previous_chunk, current_chunk, current_chunk->size);
-            current_chunk = previous_chunk;
-            current_chunk->size += new_size;
-            next_chunk->previous_chunk = current_chunk;
-            p = (void *)current_chunk + sizeof(CHUNK);
-        } else if (next_chunk_check && next_chunk->size >= required_bytes) {
-            CHUNK *old_next_chunk = next_chunk;
-            next_chunk = (void *)next_chunk + required_bytes;
-            next_chunk->size -= required_bytes;
-            memmove(next_chunk, old_next_chunk, next_chunk->size);
-            current_chunk->next_chunk = next_chunk;
-            current_chunk->size += required_bytes;
-        } else if (next_chunk_check && next_chunk->size + sizeof(CHUNK) >= required_bytes) {
-            current_chunk->size += next_chunk->size + sizeof(CHUNK);
-            next_chunk->next_chunk->previous_chunk = current_chunk;
-            current_chunk->next_chunk = next_chunk->next_chunk;
-        } else {
-            void *old_p = p;
-            p = (void *)kmalloc(n);
-            uint32_t chunk_size = current_chunk->size;
-            memcpy(p, old_p, n > chunk_size ? chunk_size : n);
-            kfree(old_p);
-        }
+            uint8_t *buffer = (uint8_t *)__kmalloc(sizeof(uint8_t) * n_total);
 
-        p = (void *)current_chunk + sizeof(CHUNK);
-    } else if (n < current_chunk_size) { // let's shrink the chunk
-        // if we cannot split the chunk,
-        // let's just return the 'p' and
-        // pretend the chunk is smaller
-        // everything else would corrupt
-        // the heap
-        uint32_t free_bytes = current_chunk_size - n; // number of free bytes we can use
+            if (buffer) {
+                memcpy(buffer, (void *)curr_chunk, n_total);
+                memcpy((void *)new_chunk, buffer, n_total);
+                __kfree(buffer);
+            }
 
-        if (previous_chunk && previous_chunk->free) { // we can enlarge the previous chunk
-            CHUNK *old_current_chunk = current_chunk;            
-            current_chunk = (CHUNK *)((void *)current_chunk + free_bytes);
-            current_chunk->size -= free_bytes;
-            memmove(current_chunk, old_current_chunk, current_chunk->size);
-            // update references
-            previous_chunk->next_chunk = current_chunk;
-            previous_chunk->size += free_bytes;
-        } else if (next_chunk && next_chunk->free) { // we can enlarge the next chunk
-            CHUNK *old_next_chunk = current_chunk;
-            next_chunk = (CHUNK *)((void *)next_chunk - free_bytes);
-            next_chunk->size += free_bytes;
-            memmove(next_chunk, old_next_chunk, old_next_chunk->size);
-            // update reference and size
-            current_chunk->next_chunk = next_chunk;
-            current_chunk->size -= free_bytes;
-        } else if (free_bytes > sizeof(CHUNK)) { // we can split the current chunk
-            // create new chunk following the current one
-            CHUNK *new_chunk = (void *)current_chunk + current_chunk->size - free_bytes;
+            p = (void *)((uint32_t)new_chunk + (uint32_t)sizeof(CHUNK));
+            prev_chunk->next_chunk = new_chunk; // update ptr
+
+            if (next_chunk)
+                next_chunk->previous_chunk = new_chunk;
+        } else if (next_chunk && next_chunk->free) {
+            next_chunk->size += extra_bytes;
+            curr_chunk->size = n;
+            CHUNK *new_chunk = (CHUNK *)((uint32_t)next_chunk - extra_bytes);
+            //memmove((void *)new_chunk, (void *)next_chunk, next_chunk->size + sizeof(CHUNK));
+
+            uint32_t n_total = next_chunk->size + sizeof(CHUNK);
+
+            uint8_t *buffer = (uint8_t *)__kmalloc(sizeof(uint8_t) * n_total);
+
+            if (buffer) {
+                memcpy(buffer, (void *)next_chunk, n_total);
+                memcpy((void *)new_chunk, buffer, n_total);
+                __kfree(buffer);
+            }
+
+            curr_chunk->next_chunk = new_chunk; // update ptr
+
+            next_chunk = next_chunk->next_chunk;
+
+            if (next_chunk)
+                next_chunk->previous_chunk = new_chunk;
+        } else if (extra_bytes > sizeof(CHUNK)) {
+            curr_chunk->size = n;
+            CHUNK *new_chunk = (CHUNK *)((uint32_t)curr_chunk + n);
             new_chunk->free = TRUE;
-            new_chunk->size = free_bytes - sizeof(CHUNK);
-            // update references and size
-            new_chunk->next_chunk = current_chunk->next_chunk;
-            new_chunk->previous_chunk = current_chunk;
-            new_chunk->next_chunk->previous_chunk = new_chunk;
-            current_chunk->next_chunk = new_chunk;
-            current_chunk->size -= free_bytes; // new size
-        } // else ... do nothing
+            new_chunk->size = extra_bytes - sizeof(CHUNK);
+            new_chunk->previous_chunk = curr_chunk;
+            new_chunk->next_chunk = next_chunk;
+            next_chunk->previous_chunk = new_chunk;
+            curr_chunk->next_chunk = new_chunk;
+        }
+    } else/* if (n > curr_chunk_size)*/ {
+        uint32_t required_bytes = n - curr_chunk_size;
+
+        bool
+            prev_chunk_free = prev_chunk && prev_chunk->free,
+            next_chunk_free = next_chunk && next_chunk->free;
+
+        if (next_chunk_free && next_chunk->size > required_bytes) {
+            next_chunk->size -= required_bytes;
+            curr_chunk->size = n;
+            CHUNK *new_chunk = (CHUNK *)((uint32_t)next_chunk + required_bytes);
+            //memmove((void *)new_chunk, (void *)next_chunk, /*next_chunk->size + */sizeof(CHUNK));
+
+            uint32_t n_total = sizeof(CHUNK);
+
+            uint8_t *buffer = (uint8_t *)__kmalloc(sizeof(uint8_t) * n_total);
+
+            if (buffer) {
+                memcpy(buffer, (void *)next_chunk, n_total);
+                memcpy((void *)new_chunk, buffer, n_total);
+                __kfree(buffer);
+            }
+
+            curr_chunk->next_chunk = new_chunk;
+
+            next_chunk = next_chunk->next_chunk;
+
+            if (next_chunk)
+                next_chunk->previous_chunk = new_chunk;
+        } else if (next_chunk_free && next_chunk->size + sizeof(CHUNK) >= required_bytes) {
+            curr_chunk->size += next_chunk->size + sizeof(CHUNK);
+            next_chunk = next_chunk->next_chunk;
+            curr_chunk->next_chunk = next_chunk;
+
+            if (next_chunk)
+                next_chunk->previous_chunk = curr_chunk;
+        } else if (prev_chunk_free && prev_chunk->size > required_bytes) {
+            prev_chunk->size -= required_bytes;
+            curr_chunk->size = n;
+            CHUNK *new_chunk = (CHUNK *)((uint32_t)curr_chunk - required_bytes);
+            //memmove((void *)new_chunk, (void *)curr_chunk, curr_chunk->size + sizeof(CHUNK));
+
+            uint32_t n_total = curr_chunk->size + sizeof(CHUNK);
+
+            uint8_t *buffer = (uint8_t *)__kmalloc(sizeof(uint8_t) * n_total);
+
+            if (buffer) {
+                memcpy(buffer, (void *)curr_chunk, n_total);
+                memcpy((void *)new_chunk, buffer, n_total);
+                __kfree(buffer);
+            }
+
+            p = (void *)((uint32_t)new_chunk + (uint32_t)sizeof(CHUNK));
+            prev_chunk->next_chunk = new_chunk; // update ptr
+
+            if (new_chunk)
+                next_chunk->previous_chunk = new_chunk;
+        } else if (prev_chunk_free && prev_chunk->size + sizeof(CHUNK) >= required_bytes) {
+            curr_chunk->previous_chunk = prev_chunk->previous_chunk;
+            uint32_t bonus_bytes = prev_chunk->size + sizeof(CHUNK);
+            memcpy((void *)prev_chunk, (void *)curr_chunk, curr_chunk->size + sizeof(CHUNK));
+            p = (void *)((uint32_t)curr_chunk + (uint32_t)sizeof(CHUNK));
+            curr_chunk = prev_chunk;
+            curr_chunk->size += bonus_bytes;
+
+            if (next_chunk)
+                next_chunk->previous_chunk = curr_chunk;
+        } else {
+            void *new_p = __kmalloc(n);
+
+            if (!new_p) {
+                __mutex_unlock(&mutex);
+                return NULL;
+            }
+
+            memcpy(new_p, p, curr_chunk->size);
+            __kfree(p);
+            p = new_p;
+        }
     }
-    
+
+    __mutex_unlock(&mutex);
     return p;
 }
 
@@ -205,11 +367,7 @@ void *krealloc(void *p, uint32_t n) {
 */
 
 void kfree(void *p) {
-    if (!p) return;
-
-    CHUNK *chunk = (CHUNK *)p - sizeof(CHUNK);
-
-    if (chunk->free) return;
-
-    // TODO: merge free chunks, set `first_free_chunk' if `chunk' < `first_free_chunk'
+    __mutex_lock(&mutex);
+    __kfree(p);
+    __mutex_unlock(&mutex);
 }

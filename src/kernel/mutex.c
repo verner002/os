@@ -15,7 +15,7 @@
 */
 
 void __mutex_lock(bool *lock) {
-    while (__tas(lock));
+    while (__test_set(lock));
 }
 
 /**

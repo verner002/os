@@ -40,19 +40,31 @@ void __stack_chk_fail(void) {
     printf("Stack overflow\n");
 }
 
+/**
+ * feof
+*/
+
 bool feof(FILE *stream) {
     return stream->__flags & FILE_EOF;
 }
 
 /**
  * getc
+ * 
+ * NOTE:
+ *  THIS IS A BLOCKING IMPLEMENTATION OF GETC
 */
 
 int getc(FILE *stream) {
-    if (!stream->__count) {
-        stream->__flags |= FILE_EOF;
-        return 0;
-    }
+    // buffer empty -> sleep the task
+    if (!stream->__count)
+        __sleep_me();
+
+    /*if (!stream->__count) {
+        // no data available
+        errno = EAGAIN; // EWOULDBLOCK
+        return -1;
+    }*/
 
     --stream->__count;
 
@@ -62,7 +74,18 @@ int getc(FILE *stream) {
 }
 
 /**
+ * getchar
+*/
+
+int getchar(void) {
+    return getc(stdin);
+}
+
+/**
  * putc
+ * 
+ * NOTE:
+ *  THIS IS NON-CANONICAL IMPLEMENTATION OF PUTC
 */
 
 int32_t putc(int c, FILE *stream) {
@@ -71,9 +94,15 @@ int32_t putc(int c, FILE *stream) {
     else if (stream == stderr)
         return __putc((uint8_t)c);
     else if (stream == stdin) {
-        if (stream->__count < stream->__size) {
-            ++stream->__count;
+        if (c == '\b') {
+            if (stream->__count) {
+                --stream->__count;
+                --stream->__index;
+            }
 
+            return 0;
+        } else if (stream->__count < stream->__size) {
+            ++stream->__count;
             stream->__base[stream->__index++ % stream->__size] = c;
             return 0;
         }   
@@ -105,6 +134,31 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
             switch (/*c = */s[++i]) { // variable arguments
                 case 'c': errno = putc(va_arg(args, int), stream); break;
                 case 's': errno = fprintf(stream, va_arg(args, char const *)); break;
+                case '.': {
+                    switch (s[++i]) {
+                        case '*': {
+                            uint32_t limit = va_arg(args, uint32_t);
+
+                            switch (s[++i]) {
+                                case 's': {
+                                    char const *string = va_arg(args, char const *);
+
+                                    for (uint32_t j = 0; j < limit; ++j)
+                                        putchar(string[j]);
+                                    break;
+                                }
+
+                                default:
+                                    return -1;
+                            }
+                            break;
+                        }
+
+                        default:
+                            return -1;
+                    }
+                    break;
+                }
                 case 'u': {
                     uint8_t n[10];
                     uint32_t u = va_arg(args, uint32_t);
@@ -147,7 +201,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                 }
                 case '0': { // TODO: use variable arguments, if (s[i] >= '0' && s[i] <= '9')
                     switch (s[++i]) {
-                        case '4': {
+                        case '2': {
                             switch (s[++i]) {
                                 case 'x': {
                                     uint8_t n = va_arg(args, uint32_t);
@@ -155,6 +209,27 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                                     for (uint32_t j = 0; j < sizeof(uint8_t) * 2; ++j) {
                                         // n = rotate_left(n)
                                         uint8_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
+
+                                        if (d > '9')
+                                            d += 'a' - '9' - 1;
+                                        
+                                        putc(d, stream);
+                                    }
+                                    break;
+                                }
+                                default:
+                                    return -1;
+                            }
+                            break;
+                        }
+                        case '4': {
+                            switch (s[++i]) {
+                                case 'x': {
+                                    uint16_t n = va_arg(args, uint32_t);
+
+                                    for (uint32_t j = 0; j < sizeof(uint16_t) * 2; ++j) {
+                                        // n = rotate_left(n)
+                                        uint16_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
 
                                         if (d > '9')
                                             d += 'a' - '9' - 1;
@@ -267,4 +342,52 @@ void printk(char const *s, ...) {
     va_end(args);
 
     __mutex_unlock(&__mutex);
+}
+
+/**
+ * fopen
+*/
+
+FILE *fopen(char const *path, char const *mode) {
+
+}
+
+/**
+ * fseek
+*/
+
+int32_t fseek(FILE *file, uint32_t offset, uint8_t mode) {
+
+}
+
+/**
+ * fread
+*/
+
+int32_t fread(FILE *file, char *buffer, uint32_t count) {
+
+}
+
+/**
+ * fwrite
+*/
+
+int32_t fwrite(FILE *file, char const *buffer, uint32_t count) {
+
+}
+
+/**
+ * fclose
+*/
+
+int32_t fclose(FILE *file) {
+    
+}
+
+/**
+ * opendir
+*/
+
+DIR *opendir(char const *path, char const *mode) {
+
 }

@@ -15,7 +15,9 @@
 #include "drivers/vga.h"
 #include "kernel/mutex.h"
 #include "kernel/heap.h"
+#include "kernel/task.h"
 #include "kstdlib/math.h"
+#include "kstdlib/errno.h"
 
 /**
  * Constants
@@ -25,13 +27,15 @@
 #define va_arg(v, l) __builtin_va_arg(v, l)
 #define va_end(v) __builtin_va_end(v)
 
-#define FILE_EOF 1
+#define EOF 0
+#define FILE_EOF 1 // eof flag
 
 /**
  * Types Definitions
 */
 
 typedef struct __file FILE;
+typedef struct __dir DIR;
 typedef __builtin_va_list va_list;
 
 /**
@@ -46,6 +50,11 @@ struct __file {
     uint32_t __flags; // flags
     uint32_t __size; // buffer size
     char *__fname; // filename
+};
+
+struct __dir {
+    char *__buffer; // buffer base
+    char *__dname; // dirname
 };
 
 /**
@@ -63,6 +72,7 @@ extern FILE
 
 bool feof(FILE *stream);
 int getc(FILE *stream);
+int getchar(void);
 int putc(int c, FILE *stream);
 int putchar(int c);
 int vfprintf(FILE *stream, char const *s, va_list args);

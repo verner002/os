@@ -36,6 +36,7 @@ typedef struct _e820_map E820_MAP;
 */
 
 enum __region_type {
+    REGION_UNKNOWN = 0,
     REGION_FREE = 1,
     REGION_RESERVED = 2,
     REGION_ACPI_RECLAIMABLE = 3,
@@ -50,13 +51,12 @@ enum __region_type {
 struct __address_descriptor {
     uint32_t address;
     E820_ENTRY *entry;
-    bool end;
 };
 
 struct __attribute__((__packed__)) _e820_entry {
     uint32_t base;
     uint32_t size;
-    uint32_t type;
+    uint32_t type; // TODO: use REGION_TYPE..?
 };
 
 struct __attribute__((__packed__)) _e820_map {
@@ -66,7 +66,7 @@ struct __attribute__((__packed__)) _e820_map {
 
 void __add_region(E820_ENTRY entry);
 void __insert_region(E820_ENTRY entry, uint32_t index);
-void __sanitize_e820(uint32_t entries_count, E820_ENTRY *map);
+void __sanitize_e820(uint32_t count, E820_ENTRY *map);
 E820_ENTRY *__get_last_entry(void);
 char const *e820_get_type_string(E820_ENTRY *descriptor);
 void __dump_e820(void);

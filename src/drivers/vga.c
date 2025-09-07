@@ -40,6 +40,17 @@ void __init_vga(void) {
 }
 
 /**
+ * __clear
+*/
+
+int32_t __clear(void) {
+    for (uint32_t i = 0; i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i)
+        video_memory[i] = ((uint16_t)color << 8) | (uint16_t)' ';
+
+    __setcurpos(0, 0);
+}
+
+/**
  * __putc
 */
 
@@ -54,6 +65,17 @@ int32_t __putc(uint8_t c) {
             else if (c == '\n') {
                 ++cursor_y;
                 cursor_x = 0;
+            } else if (c == '\b') {
+                if (cursor_x || cursor_y) {
+                    if (cursor_x)
+                        --cursor_x;
+                    else if (cursor_y) {
+                        cursor_x = VIDEO_MEM_COLS - 1;
+                        --cursor_y;
+                    }
+
+                    video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = ((uint16_t)color << 8) | (uint16_t)' ';
+                }
             } else {
                 if (c < 0x20 || c > 0xfe) c = '?'; // invalid character
 
@@ -181,8 +203,11 @@ void __scroll_down(void) {
     static bool __mutex = FALSE;
     __mutex_lock(&__mutex);
 
-    for (uint32_t i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j) video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
-    for (uint32_t i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i) video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
+    for (uint32_t i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j)
+        video_memory[i] = video_memory[j]; // j = i + VIDEO_MEM_COLS
+    
+    for (uint32_t i = VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i)
+        video_memory[i] = (VIDEO_MEM_DEF_ATTR << 8) + ' ';
 
     __mutex_unlock(&__mutex);
 }

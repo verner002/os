@@ -91,7 +91,8 @@
 #define FDC_DATA_FIFO                           0x03f5
 #define FDC_DIGITAL_INPUT_REGISTER              0x03f7 // write
 #define FDC_CONFIGURATION_CONTROL_REGISTER      0x03f7 // read
-
+#define PCI_CONFIG_ADDRESS                      0x0cf8
+#define PCI_CONFIG_DATA                         0x0cfc
 
 /**
  * Declarations
@@ -100,3 +101,5 @@
 void __outb(uint16_t r, uint8_t v);
 uint8_t __inb(uint16_t r);
 void __outw(uint16_t r, uint16_t v);
+uint32_t __ind(uint16_t r);
+void __outd(uint16_t r, uint32_t v);

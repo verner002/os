@@ -15,6 +15,6 @@
  * Declarations
 */
 
-bool __tas(bool *lock);
+bool __test_set(bool *lock);
 void __mutex_lock(bool *lock);
 void __mutex_unlock(bool *lock);

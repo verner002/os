@@ -41,9 +41,12 @@ int32_t __init_pager(void) {
     size = pages_count / 32;
 
     // initialize bitmap
-    bitmap[0] = 0x00000001;
+    // FIXME: synchronize e820 with pager!!!
+    //bitmap[0] = 0xffffffff; //0x00000001;
+    for (uint32_t i = 0; i < 10; ++i)
+        bitmap[i] = 0xffffffff;
 
-    for (uint32_t i = 1; i < size; ++i)
+    for (uint32_t i = 10; i < size; ++i)
         bitmap[i] = 0; // free
 
     // reserve memory used by bitmap
@@ -76,6 +79,9 @@ void pgreserve(void *p) {
  * 
  * Note:
  *  Allocates a page.
+ * 
+ * TODO:
+ *  1) call __mmap
 */
 
 void *pgalloc(void) {

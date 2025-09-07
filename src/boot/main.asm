@@ -66,6 +66,13 @@ __main:
     call __read_sects ; load root dir
     jc __halt
 
+    ; copy command line at expected address
+    ; up to 255 bytes allowed
+    mov si, __data.command_line
+    mov di, __COMMAND_LINE_OFFSET
+    mov cx, (__data.command_line_end - __data.command_line + 1) & 0x00ff
+    rep movsb
+
     push __SYS_SEGMENT
     pop es
     xor bx, bx
@@ -81,6 +88,7 @@ __main:
     jc __halt
 
     ; pass some arguments?
+    mov dl, byte [__bpb.drv_num]
     jmp near __LDR_OFFSET ; execute loader
 
 ;
@@ -241,6 +249,13 @@ __data:
     .rd_sz dw 0x0000
     .loader_sys db "LOADER  SYS"
     .kernel_sys db "KERNEL  SYS"
+    .command_line db `root=/dev/fd0`
+    .command_line_end db 0x00
+
+%if (__data.command_line_end - __data.command_line + 1) > 255
+    ; in fact it will be much smaller because of the code
+    %error "cmd line can have only up to 255 chars including eos"
+%endif
 
 ;
 ; __void

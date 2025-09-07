@@ -1,14 +1,14 @@
 /**
- * Advanced Configuration & Power Interface
- * 
- * Author: verner002
-*/
-
-/**
- * Includes
+ * @file acpi.c
+ * @author verner002
+ * @date 17/08/2025
 */
 
 #include "drivers/acpi.h"
+
+uint32_t acpi_version;
+bool legacy_ps2c_installed;
+bool legacy_pics_installed;
 
 /**
  * __xaddr2addr
@@ -41,6 +41,7 @@ RSDP *__find_rsdp(void *start, uint32_t size) {
     return NULL;
 }
 
+
 /**
  * __checksum
 */
@@ -60,6 +61,122 @@ static uint8_t __checksum(uint8_t *table, uint32_t length) {
 
 SDT *__map_sdt(SDT *sdt) {
     
+}
+
+static char *__apic_etype2str(uint8_t type) {
+    switch (type) {
+        case 0:
+            return "CPU LAPIC"; // local apic
+
+        case 1:
+            return "I/O APIC";
+
+        case 2:
+            return "I/O APIC ISO"; // interrupt source override
+
+        case 3:
+            return "I/O NMIS"; // non-maskable interrupt source
+
+        case 4:
+            return "LAPIC NMI"; // local api non-maskable interrupts
+        
+        case 5:
+            return "LAPIC AO"; // local apic address override
+
+        case 9:
+            return "CPU LAPIC 2x"; // local apic
+    }
+
+    return "Unknown";
+}
+
+/**
+ * __parse_apic_tbl
+*/
+
+static void __parse_apic_table(SDT_HEADER *hdr) {
+    APIC *apic = (APIC *)hdr;
+
+    uint32_t read = 0;
+
+    printk("\033[33macpi-apic:\033[37m APIC table length %u\n", apic->h.length);
+
+    uint32_t data_len = apic->h.length - sizeof(APIC);
+
+    printk("\033[33macpi-apic:\033[37m APIC data length %u\n", data_len);
+
+    printk("\033[33macpi-apic:\033[37m Local APIC address %p\n", apic->local_apic_addr);
+    printk("\033[33macpi-apic:\033[37m Local APIC flags %p\n", apic->flags);
+
+    if (apic->flags & 0x00000001)
+        printk("\033[33macpi-apic:\033[37m \033[96mDual legacy PICs installed\033[37m\n");
+    
+    uint8_t *data = (uint8_t *)apic + sizeof(APIC);
+
+    while (read < data_len) {
+        APIC_HEADER *apic_h = (APIC_HEADER *)data;
+        uint32_t detected_length = apic_h->length;
+        uint32_t expected_length;
+
+        switch (apic_h->type) {
+            case APIC_TYPE_CPU_LAPIC:
+                expected_length = sizeof(APIC_CPU_LAPIC);
+                
+                printk("Found CPU LAPIC entry\n");
+                break;
+
+            case APIC_TYPE_IO_APIC:
+                expected_length = sizeof(APIC_IO_APIC);
+
+                printk("Found I/O APIC entry\n");
+                break;
+
+            /*case APIC_TYPE_IO_APIC_ISO:
+                break;
+
+            case APIC_TYPE_IO_NMIS:
+                break;
+
+            case APIC_TYPE_LAPIC_AO:
+                break;
+
+            case APIC_TYPE_CPU_DLAPIC:
+                break;*/
+
+            default:
+                expected_length = 0;
+
+                printk("Found unknown entry (%u)\n", apic_h->type);
+                break;
+        }
+        
+        if (expected_length > 0 && detected_length != expected_length) {
+            printk("\033[91mThe entry may be corrupted.\033[37m\n");
+            printk("\033[91mExpected %u byte(s), got %u byte(s)\033[37m\n", expected_length, detected_length);
+        }
+
+        data += detected_length;
+        read += detected_length;
+    }
+
+    // TODO: calculate checksum
+}
+
+static void __parse_fadt_table(SDT_HEADER *hdr) {
+    // check ia pc boot architecture flags (0 - no ps/2 controller)
+    FADT *fadt = (FADT *)hdr;
+
+    printk("\033[33macpi-fadt:\033[37m Calculating FADT checksum... ");
+
+    if (__checksum((uint8_t *)fadt, fadt->h.length)) {
+        printf("Invalid\n");
+        return;
+    }
+
+    printf("Valid\n");
+
+    if (!acpi_version || (acpi_version == 2 && fadt->ia_boot_arch_flags & 0x0002))
+        printk("\033[33macpi-fadt:\033[37m Legacy PS/2 controller installed\n");
 }
 
 /**
@@ -94,7 +211,9 @@ int32_t __init_acpi(void) {
 
     printf("Valid\n");
 
-    if (rsdp->revision) {
+    acpi_version = rsdp->revision;
+
+    if (acpi_version == 2) {
         printk("\033[33macpi:\033[37m \033[96mACPI version 2.0-6.1 => using XSDT\033[37m\n");
 
         //__parse_xsdt(rsdp);
@@ -128,7 +247,7 @@ int32_t __init_acpi(void) {
             return -1;
         }
 
-        // i need this if-block here because the remaining
+        // we need this if-block here because the remaining
         // part of the table (with length) may not be mapped
         if (offset_rsdt + sizeof(SDT_HEADER) > 0x00001000) {
             page_rsdt += 0x00001000;
@@ -206,6 +325,13 @@ int32_t __init_acpi(void) {
                 putchar(sdt_h->signature[j]);
 
             putchar('\n');
+
+            if (*(uint32_t *)sdt_h->signature == (uint32_t)'CIPA')
+                __parse_apic_table(sdt_h);
+            else if (*(uint32_t *)sdt_h->signature == (uint32_t)'PCAF')
+                __parse_fadt_table(sdt_h);
+            else
+                printk("\033[33macpi:\033[37m Parser not implemented\n");
         }
     }
 

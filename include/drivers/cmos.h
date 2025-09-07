@@ -15,6 +15,12 @@
 #include "drivers/ports.h"
 
 /**
+ * Constants
+*/
+
+#define CMOS_FLOPPY_TYPE_REGISTER 0x10
+
+/**
  * Declarations
 */
 

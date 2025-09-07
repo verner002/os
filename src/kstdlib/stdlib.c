@@ -8,6 +8,7 @@
  * Includes
 */
 
+#include "bool.h"
 #include "kernel/heap.h"
 
 /**
@@ -60,19 +61,20 @@ void qsort(void *array, uint32_t array_size, int element_size, int (*compare)(vo
  * atoi
 */
 
-int atoi(char const *s) {
-    if (!s) return 0;
+int32_t atoi(char const *s) {
+    if (!s)
+        return 0;
 
     while (*s == ' ') ++s; // skip whitespaces
 
-    int minus = *s == '-';
+    bool minus = *s == '-';
 
     if (*s == '+' || minus) ++s;
 
-    int value = 0;
+    int32_t value = 0;
 
     for (char c; (c = *s) >= '0' && c <= '9'; ++s)
-        value = 10 * value + c - '0';
+        value = 10 * value + (c - '0');
 
     return minus ? -value : value;
 }

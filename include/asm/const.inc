@@ -5,6 +5,7 @@
 ;
 
 %define __FAT_OFFSET 0x6a00
+%define __COMMAND_LINE_OFFSET 0x7e00
 %define __RD_OFFSET 0x8000
 %define __LDR_OFFSET __RD_OFFSET ; loader will replace root directory
 %define __SMAP_OFFSET 0xc000

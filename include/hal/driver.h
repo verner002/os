@@ -21,6 +21,8 @@
 typedef struct __driver DRIVER;
 typedef struct __symbol SYMBOL;
 
+#define DRIVER_MOUNT_SYMBOL "mount"
+
 /**
  * Enumeration
 */
@@ -35,6 +37,7 @@ enum __storage_class {
 */
 
 struct __driver {
+    char *module_name;
     uint32_t symbols_count;
     SYMBOL *symbols;
 };

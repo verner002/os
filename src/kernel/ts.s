@@ -39,6 +39,7 @@ __exec_kernelmode:
     mov ebp, esp
     mov ebx, dword [ebp+4] ; eip
     mov esp, dword [ebp+8] ; esp
+    mov edx, dword [ebp+16] ; * mutex
     mov ebp, dword [ebp+12] ; ebp
 
     mov ax, (2 * 8) | 0
@@ -57,6 +58,7 @@ __exec_kernelmode:
     push eax ; eflags with if=1
     push (1 * 8) | 0 ; code selector
     push ebx
+    mov dword [edx], 0 ; unlock mutex
     iretd ; pe=1, nt=0
 
 ;

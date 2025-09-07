@@ -26,6 +26,8 @@ __entry:
     ;mov sp, 0x7c00
     ;sti
 
+    mov byte [__data.boot_drv], dl
+
     push 0x0040
     pop es
 
@@ -225,6 +227,8 @@ __main:
     push edi ; string table
     push ecx ; symbols count
     push edx ; symbol table ptr
+    movzx ebx, byte [__data.boot_drv]
+    push ebx
     movzx ebx, byte [__cur_pos.cur_x]
     push ebx ; cursor x
     movzx ebx, byte [__cur_pos.cur_y]
@@ -294,3 +298,4 @@ __data:
     
     ;.memory_size dd 0x00000000
     .smap_entries_count dd 0x00000000
+    .boot_drv db 0x00

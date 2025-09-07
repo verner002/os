@@ -15,6 +15,8 @@
 */
 
 static ADDRESS_DESCRIPTOR descriptors[E820_MAX_ENTRIES * 2];
+static ADDRESS_DESCRIPTOR *buffer[E820_MAX_ENTRIES * 2];
+static uint32_t buffer_length = 0;
 static E820_MAP smap;
 
 /**
@@ -22,7 +24,8 @@ static E820_MAP smap;
 */
 
 void __add_region(E820_ENTRY entry) {
-    if (!entry.size) return;
+    if (!entry.size)
+        return;
 
     if (smap.index >= E820_MAX_ENTRIES) {
         printk("\033[33me820:\033[37m \033[91mtoo many entries\033[37m\n");
@@ -52,127 +55,158 @@ void __insert_region(E820_ENTRY entry, uint32_t index) {
 /**
  * __sanitize_e820
  * 
- * this is the best solution i've came up with
- * if you don't consider the sorting algorithm,
- * it resolves conflicts and merges regions in O(n)
+ * this is the best solution i've came up with,
+ * it sorts the address descriptors created from
+ * entries and uses these to construct the new
+ * memory map without overlapping areas
  * 
- * it uses lowest and highest possible addresses of
- * address range descriptors and converts them to
- * points, these are sorted (l->h) and a new map is
- * constructed based on the new order
+ * the algorithm takes the descriptor with the
+ * highest type for the given range and pushes
+ * the descriptor with lower type back to the
+ * buffer for possible future use
+ * 
+ * i'll probably make this code look better
+ * 
+ * TODO:
+ *  1) implement merging
+ *  2) use buffer only (no current temp var)?
+ *  3) get rid of the last operation outside
+ *     the for cycle
 */
 
-void __sanitize_e820(uint32_t entries_count, E820_ENTRY *e820_entries) {
-    printk("\033[33me820:\033[37m Sanitizing E820... ");
-    
-    e820_entries[entries_count++] = (E820_ENTRY) {
+void __sanitize_e820(uint32_t count, E820_ENTRY *map) {
+    map[count++] = (E820_ENTRY){
         .base = 0x00000000,
         .size = 1024+256+22*1024+768,
         .type = 2
     }; // IVT, BDA and stack
 
-    e820_entries[entries_count++] = (E820_ENTRY) {
+    map[count++] = (E820_ENTRY){
         .base = 0x0000d000,
         .size = 3*4096,
         .type = 2
     }; // page directory, 1st mib page table and kernel page table
 
-    // TODO: reserve EBDA
-
-    e820_entries[entries_count++] = (E820_ENTRY) {
+    map[count++] = (E820_ENTRY){
         .base = 0x000a0000,
         .size = 128*1024+32*1024+160*1024+64*1024,
         .type = 2
     }; // video memory, video bios, bios expansion, rom bios
 
-    e820_entries[entries_count++] = (E820_ENTRY) {
+    map[count++] = (E820_ENTRY){
         .base = 0x00100000,
         .size = 4*1024*1024,
         .type = 2
     }; // kernel
 
-    uint32_t descriptors_count = 0;
+    // convert map to list of address descriptors
+    for (uint32_t i = 0; i < count; ++i) {
+        E820_ENTRY *entry = &map[i];
 
-    for (uint32_t i = 0; i < entries_count; ++i) { // convert ards to points
-        descriptors[descriptors_count].address = e820_entries[i].base;
-        descriptors[descriptors_count].entry = &e820_entries[i];
-        descriptors[descriptors_count++].end = FALSE;
-        descriptors[descriptors_count].address = e820_entries[i].base + e820_entries[i].size - 1;
-        descriptors[descriptors_count].entry = &e820_entries[i];
-        descriptors[descriptors_count++].end = TRUE;
+        ADDRESS_DESCRIPTOR *start = &descriptors[i];
+        start->address = entry->base;
+        start->entry = entry;
     }
 
-    bool check;
+    bool swap;
 
-    do { // sort descriptors
-        check = FALSE;
+    // let's use bubble sort here
+    // TODO: use swap-index optimization?
+    do {
+        swap = FALSE;
 
-        for (uint32_t i = 1; i < descriptors_count; ++i) {
-            ADDRESS_DESCRIPTOR
-                *previous = &descriptors[i - 1],
-                *current = &descriptors[i];
-            
-            if (previous->address > current->address) {
-                ADDRESS_DESCRIPTOR temp = *previous;
-                *previous = *current;
-                *current = temp;
-                check = TRUE;
-            } else if (previous->address == current->address) {
-                if (previous->entry->type < current->entry->type) descriptors[i - 1] = descriptors[--descriptors_count];
-                else descriptors[i] = descriptors[--descriptors_count];
-                
-                check = TRUE;
+        for (uint32_t i = 1; i < count; ++i) {
+            // sort by address
+            if (descriptors[i - 1].address > descriptors[i].address || (descriptors[i - 1].address == descriptors[i].address && descriptors[i - 1].entry->type > descriptors[i].entry->type)) {
+                ADDRESS_DESCRIPTOR temp = descriptors[i - 1];
+                descriptors[i - 1] = descriptors[i];
+                descriptors[i] = temp;
+                swap = TRUE;
             }
         }
-    } while (check);
+    } while (swap);
 
-    for (uint32_t i = 1; i < descriptors_count; ++i) { // takes care of merging regions (there is always an even number of descriptors)
-        ADDRESS_DESCRIPTOR *previous_end = &descriptors[i - 1];
-        ADDRESS_DESCRIPTOR *current_start = &descriptors[i];
+    ADDRESS_DESCRIPTOR *current = &descriptors[0];
+    uint32_t descriptor_index = 1;
 
-        if (!current_start->end && previous_end->end && (previous_end->address + 1) == current_start->address && previous_end->entry->type == current_start->entry->type) previous_end->end = FALSE;
-    }
+    smap.index = 0;
 
-    for (uint32_t i = 0; i < descriptors_count; ++i) { // create a new map
-        ADDRESS_DESCRIPTOR *current = &descriptors[i];
-        ADDRESS_DESCRIPTOR *found;
+    for (;;) {
+        if (descriptor_index < count)
+            buffer[buffer_length++] = &descriptors[descriptor_index++];
 
-        if (current->end) {
-            ADDRESS_DESCRIPTOR *previous = &descriptors[i - 1];
+        ADDRESS_DESCRIPTOR *prioritized = NULL;
+        uint32_t prioritized_index;
 
-            __add_region((E820_ENTRY) {
-                .base = previous->address + 1,
-                .size = current->address - previous->address,
-                .type = current->entry->type
-            });
+        if (!buffer_length)
+            break;
+
+        if (buffer_length) {
+            prioritized = buffer[0];
+            prioritized_index = 0;
+
+            for (uint32_t i = 1; i < buffer_length; ++i) {
+                ADDRESS_DESCRIPTOR *temp = buffer[i];
+
+                if (temp->address < prioritized->address || (temp->address == prioritized->address && temp->entry->type > prioritized->entry->type)) {
+                    prioritized_index = i;
+                    prioritized = temp;
+                }
+            }
+        }
+
+        uint32_t base;
+        uint32_t size;
+        uint32_t type;
+
+        if ((current->entry->base + current->entry->size - 1) >= prioritized->address) {
+            // overlap
+            ADDRESS_DESCRIPTOR *to_push;
+
+            if (current->entry->type <= prioritized->entry->type) {
+                base = current->address;
+                size = prioritized->address - current->address;
+                type = current->entry->type;
+
+                uint32_t prev_address = current->address;
+                current->address = prioritized->entry->base + prioritized->entry->size;
+
+                if (current->address < prev_address || current->address >= (current->entry->base + current->entry->size - 1)) {
+                    buffer[prioritized_index] = buffer[--buffer_length];
+                } else
+                    buffer[prioritized_index] = current;
+
+                current = prioritized;
+            } else { // current->entry->type > prioritized->entry->type
+                uint32_t prev_address = prioritized->address;
+                prioritized->address = current->entry->base + current->entry->size;
+
+                if (prioritized->address < prev_address || prioritized->address >= (prioritized->entry->base + prioritized->entry->size - 1))
+                    buffer[prioritized_index] = buffer[--buffer_length];
+            }
         } else {
-            for (++i; i < descriptors_count; ++i) {
-                found = &descriptors[i];
+            // no overlap
+            base = current->address;
+            size = current->entry->size - (current->address - current->entry->base);
+            type = current->entry->type;
 
-                if (found->entry->type > current->entry->type || ((found->entry->type == current->entry->type) && found->end)) break;
-            }
-
-            //if (!found) UNREACHABLE
-
-            if (current->entry->type == found->entry->type) {
-                __add_region((E820_ENTRY) {
-                    .base = current->address,
-                    .size = found->address - current->address + 1,
-                    .type = current->entry->type
-                });
-            } else {
-                __add_region((E820_ENTRY) {
-                    .base = current->address,
-                    .size = found->address - current->address,
-                    .type = current->entry->type
-                });
-
-                --i;
-            }
+            current = prioritized;
+            buffer[prioritized_index] = buffer[--buffer_length];
         }
+
+        __add_region((E820_ENTRY){
+            .base = base,
+            .size = size,
+            .type = type
+        });
     }
 
-    printf("Ok\n");
+    // last descriptor
+    __add_region((E820_ENTRY){
+        .base = current->address,
+        .size = current->entry->size - (current->address - current->entry->base),
+        .type = current->entry->type
+    });
 }
 
 /**
@@ -183,18 +217,43 @@ E820_ENTRY *__get_last_entry(void) {
     return &smap.entries[smap.index - 1];
 }
 
+/**
+ * e820_get_type_string
+*/
+
 char const *e820_get_type_string(E820_ENTRY *descriptor) {
     if (!descriptor) return NULL;
 
     switch (descriptor->type) {
-        case 1: return "Free"; break; // usable memory, merge these regions if possible
-        case 2: return "Reserved"; break; // don't use
-        case 3: return "ACPI Reclaimable"; break; // we can use this after we're done with acpi
-        case 4: return "ACPI NVS"; break; // don't use
-        case 5: return "Bad"; break; // don't use
-        default: return "Unknown"; break; // // don't use, change type to reserved?
+        case REGION_FREE:
+            return "Free"; // usable memory, merge these regions if possible
+            break;
+        
+        case REGION_RESERVED:
+            return "Reserved"; // don't use
+            break;
+        
+        case REGION_ACPI_RECLAIMABLE:
+            return "ACPI Reclaimable"; // we can use this after we're done with acpi
+            break;
+        
+        case REGION_ACPI_NVS:
+            return "ACPI NVS"; // don't use
+            break;
+        
+        case REGION_BAD:
+            return "Bad"; // don't use
+            break;
+        
+        default:
+            return "Unknown"; // don't use, change type to reserved?
+            break;
     }
 }
+
+/**
+ * __dump_e820
+*/
 
 void __dump_e820(void) {
     E820_ENTRY *entries = smap.entries;

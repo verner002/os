@@ -256,11 +256,13 @@ int32_t __fdc_recalibrate(void) {
         __fdc_outb(FDC_COMMAND_RECALIBRATE);
         __fdc_outb(0); // drive 0
         
-        if (__fdc_wait_for_irq6()) continue;
+        if (__fdc_wait_for_irq6())
+            continue;
 
         uint8_t st0, pcn;
         
-        if (__fdc_sense_interrupt(&st0, &pcn)) continue;
+        if (__fdc_sense_interrupt(&st0, &pcn))
+            continue;
 
         /*printk("\033[33mfdc:\033[37m Recalibrate result:\n");
         printk("..... ST0=%u\n", st0);
@@ -374,45 +376,59 @@ int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32
 
             fdc.irqReceived = FALSE;
             __fdc_outb(FDC_COMMAND_READ_DATA | FDC_COMMAND_EXTENSION_MULTITRACK /*| FDC_COMMAND_EXTENSION_SKIP*/ | FDC_COMMAND_EXTENSION_DENSITY);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb((head << 2) | 0);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(cylinder);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(head);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(sector);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(FDC_SECTOR_DTL_512);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(FDC_SECTORS_PER_TRACK_3_5);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(FDC_GAP3_LENGTH_3_5);
-            if (errno) return -1;
+            if (errno)
+                return -1;
             
             __fdc_outb(0xff);
-            if (errno) return -1;
+            if (errno)
+                return -1;
 
-            if (__fdc_wait_for_irq6()) return -1;
+            if (__fdc_wait_for_irq6())
+                return -1;
 
             uint8_t st0 = __fdc_inb();
 
-            if (errno || (st0 & 0xc0) != 0x00) continue;
+            if (errno || (st0 & 0xc0) != 0x00)
+                continue;
 
             for (uint32_t i = 0; i < 6; ++i) {
                 __fdc_inb();
 
-                if (errno) break;
+                if (errno)
+                    break;
             }
 
-            if (errno) continue;
+            if (errno)
+                continue;
+            
             return 0;
         }
 
@@ -455,7 +471,8 @@ int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
         ++lba;
         buffer += 512;
 
-        if (last_opcode) break;
+        if (last_opcode)
+            break;
     }
 
     __mutex_unlock(&motor_mutex);
@@ -481,7 +498,7 @@ char const*__get_drive_type_string(DRIVE drive) {
     return names[(uint32_t)drive.type];
 }
 
-static void __fdc_deamon(void) {
+static void __fdc_daemon(void) {
     for (;;) {
         while (!fdc.motorOn);
 
@@ -507,7 +524,7 @@ int32_t __init_fdc(void) {
     //printk("Initializing FDC...\n");
     //printk("\033[33mfdc:\033[37m Detecting drives... ");
 
-    uint8_t drives = __read_cmos_register(0x10);
+    uint8_t drives = __read_cmos_register(CMOS_FLOPPY_TYPE_REGISTER);
 
     fdc.type = (DRIVE_TYPE)(drives >> 0x04);
     //fdc.slave.type = (DRIVE_TYPE)(drives & 0x0f);
@@ -538,9 +555,9 @@ int32_t __init_fdc(void) {
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_task((uint32_t)&__fdc_deamon, TASK_EXEC_KERNEL);
+    int32_t pid = __create_task("fdc-daemon", (uint32_t)&__fdc_daemon, TASK_EXEC_KERNEL);
 
-    printk("\033[33mfdc:\033[37m FDC deamon running, PID=%u\n", pid);
+    printk("\033[33mfdc:\033[37m FDC daemon running, PID=%u\n", pid);
 
     printk("\033[33mfdc:\033[37m Initialized\n");
     return 0;   

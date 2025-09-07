@@ -4,13 +4,13 @@
 ; Author: verner002
 ;
 
-global __tas
+global __test_set
 
 ;
 ; Test'n'Set
 ;
 
-__tas:
+__test_set:
     push ebp
     mov ebp, esp
     xor eax, eax ; prepare return value
