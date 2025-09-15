@@ -10,6 +10,14 @@
 #include "hal/driver.h"
 #include "kernel/kdev.h"
 
+struct __dentry *__new_dentry(void) {
+    return (struct __dentry *)kmalloc(sizeof(struct __dentry));
+}
+
+struct __inode *__new_inode(void) {
+    return (struct __inode *)kmalloc(sizeof(struct __inode));
+}
+
 /*VFS_DIR_NODE *__init_vfs(DRIVER *root_dev_driver) {
     root = kmalloc(sizeof(VFS_DIR_NODE));
 

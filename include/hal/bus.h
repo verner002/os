@@ -19,3 +19,5 @@ struct __bus {
     struct __bus_type *b_type;
     struct __driver *b_driver;
 };
+
+struct __bus *__register_bus(char const *name, struct __driver const *driver);

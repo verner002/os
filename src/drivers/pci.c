@@ -9,7 +9,7 @@
 #include "drivers/ports.h"
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
-#include "kernel/bus.h"
+#include "hal/bus.h"
 
 #define PCI_CONFIG_CYCLE_ENABLED 0x80000000
 #define PCI_MULTIFUNCTION 0x80
@@ -28,7 +28,7 @@ struct __class {
 struct __subclass {
     uint8_t s_id;
     char *s_name;
-    int32_t (* s_init)(struct __pci_header *h);
+    int32_t (* s_init)(struct __bus *b, struct __pci_header *h);
 };
 
 /*struct __pci_device {
@@ -125,19 +125,20 @@ uint32_t __pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
     return __ind(PCI_CONFIG_DATA);
 }
 
+extern uint32_t buses_cnt;
+extern struct __bus *buses[16];
+
 /**
  * __pci_init
 */
 
 int32_t __init_pci(void) {
-    struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));
+    struct __bus *bus = __register_bus("PCI", NULL);
 
     if (!bus) {
-        printk("pci: warning: failed to allocate memory for bus structure\n");
+        printk("pci: error: failed to register bus\n");
         return -1;
     }
-
-    bus->b_name = "PCI";
 
     for (uint16_t bus_i = 0; bus_i < 256; ++bus_i) {
         for (uint8_t dev_i = 0; dev_i < 32; ++dev_i) {

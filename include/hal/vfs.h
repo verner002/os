@@ -32,7 +32,6 @@ struct __dir_io_ops {
 */
 
 struct __inode {
-    uint16_t i_dev; // device id
     uint32_t i_mode; // permissions and modes
     struct __dentry *i_dentry; // directory entry
     uint32_t i_uid; // owner id
@@ -64,6 +63,9 @@ struct __dentry_io_block {
     struct __dentry *(* create)(struct __dentry *entry);
     struct __dentry *(* lookup)(struct __dentry *entry, char const *name);
 };
+
+struct __dentry *__new_dentry(void);
+struct __inode *__new_inode(void);
 
 /*VFS_DIR_NODE *__init_vfs(DRIVER *root_dev_driver);
 VFS_FILE_NODE *__new_vfs_file_node(char const *name);

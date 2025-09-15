@@ -12,6 +12,7 @@
 
 #include "null.h"
 #include "types.h"
+#include "kernel/kobj.h"
 #include "kstdlib/string.h"
 
 /**
@@ -37,9 +38,8 @@ enum __storage_class {
 */
 
 struct __driver {
-    char *module_name;
-    uint32_t symbols_count;
-    SYMBOL *symbols;
+    struct __kobj *d_kobj;
+    int32_t (* release)(struct __driver * driver);
 };
 
 struct __attribute__((__packed__)) __symbol {

@@ -482,6 +482,9 @@ static char command_line[255];
 uint16_t root_dev = NO_DEV;
 char *envs[16];
 
+struct __dentry __sysfs;
+struct __dentry *sysfs = &__sysfs;
+
 /**
  * entry
 */
@@ -537,7 +540,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // initialize kernel heap manager
-    void *heap = e820_rmalloc(8192, TRUE);
+    void *heap = e820_rmalloc(8192*2, TRUE);
 
     if (!heap) {
         printk("kernel: error: failed to allocate memory for heap\n");

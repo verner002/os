@@ -9,7 +9,7 @@
 #include "types.h"
 #include "kernel/kdev.h"
 #include "kernel/kobj.h"
-#include "kernel/bus.h"
+#include "hal/bus.h"
 
 #define atomic_inc(x) asm volatile (    \
     "lock inc %0"                       \

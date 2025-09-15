@@ -105,7 +105,7 @@ void __dev_type_release(struct __dev *dev) {
     struct __kobj *kobj = dev->d_kobj;
 
     if (kobj) {
-        dev->d_kobj->k_type->k_release(dev->d_kobj);
+        //dev->d_kobj->k_type->k_release(dev->d_kobj);
     } else {
         __kdev_t kdev = dev->d_kdev;
         printk("ide: warning: device %u:%u is missing kobj reference\n", MAJOR(kdev), MINOR(kdev));
@@ -247,13 +247,18 @@ void __ide_identify_drives(void) {
             uint16_t command_sets = *((uint16_t *)(__ide_buffer + IDE_IDENTIFY_COMMAND_SETS));
             drives[drvs_cnt].d_command_sets = command_sets;
 
+            uint32_t sectors;
+
             if (command_sets & IDE_LBA48_ADDRESSING) {
                 if (*((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA_EXT + sizeof(uint32_t))))
-                    drives[drvs_cnt].d_last_sector = 0xffffffff;
+                    sectors = 0xffffffff; // we are limited to 32 bits
                 else
-                    drives[drvs_cnt].d_last_sector = *((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA_EXT)) - 1;
+                    sectors = *((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA_EXT));
             } else
-                drives[drvs_cnt].d_last_sector = *((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA)) - 1;
+                sectors = *((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA));
+
+            // drive could report 0 sectors (empty qemu image)
+            drives[drvs_cnt].d_last_sector = sectors ? sectors - 1 : 0;
 
             __ide_strncpy(drives[drvs_cnt].d_model, __ide_buffer + IDE_IDENTIFY_MODEL, 40);
             __ide_strncpy(drives[drvs_cnt].d_serial, __ide_buffer + IDE_IDENTIFY_SERIAL, 20);
@@ -415,7 +420,7 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
 int32_t __init_ide(struct __bus *b, struct __pci_header *h) {
     printf("        Initializing...\n");
 
-    struct __pci_h_device *d = (struct __pci_devic *)h;
+    struct __pci_h_device *d = (struct __pci_h_device *)h;
 
     uint8_t progif = d->h.h_prog_if;
 
