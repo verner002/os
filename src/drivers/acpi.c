@@ -11,31 +11,15 @@ bool legacy_ps2c_installed;
 bool legacy_pics_installed;
 
 /**
- * __xaddr2addr
-*/
-
-uint32_t __xaddr2addr(uint64_t xaddress, uint32_t *address, char const *exceeds) {
-    uint32_t xaddress_h = xaddress >> 32; // FIXME: check if compiled correctly
-    
-    if (xaddress_h) {
-        printk(exceeds);
-        return xaddress_h;
-    }
-
-    *address = (uint32_t)xaddress;
-
-    return xaddress_h;
-}
-
-/**
  * __find_rsdp
 */
 
 RSDP *__find_rsdp(void *start, uint32_t size) {
     for (uint32_t i = 0; i < size; i += 16) { // 16-byte alignment
-        uint64_t *ptr = start + i;
+        void *ptr = start + i;
 
-        if (*ptr == ' RTP DSR') return (RSDP *)(ptr);
+        if (!strncmp((char const *)ptr, "RSD PTR ", 8))
+            return (RSDP *)ptr;
     }
 
     return NULL;

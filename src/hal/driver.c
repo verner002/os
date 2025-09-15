@@ -14,7 +14,7 @@
  * __link_symbol
 */
 
-uint32_t __link_symbol(DRIVER *driver, char const *name) {
+/*uint32_t __link_symbol(DRIVER *driver, char const *name) {
     uint32_t symbols_count = driver->symbols_count;
     SYMBOL *symbols = driver->symbols;
     
@@ -26,4 +26,4 @@ uint32_t __link_symbol(DRIVER *driver, char const *name) {
     }
 
     return 0;
-}
+}*/

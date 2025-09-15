@@ -23,4 +23,5 @@ struct __dev *__add_device(__kdev_t kdev, char const *name, struct __dev *parent
 
     dev->d_id = __dev_id;
     atomic_inc(__dev_id);
+    return dev;
 }

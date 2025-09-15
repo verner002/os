@@ -86,7 +86,7 @@ static struct __subclass const processor[] = {
     { 0, "Intel 386", NULL },
     { 1, "Intel 486", NULL },
     { 2, "Intel Pentium", NULL },
-    { 3, "Intel Pentium Pro"}
+    { 3, "Intel Pentium Pro", NULL }
 };
 
 static struct __subclass const serial_bus_controller[] = {

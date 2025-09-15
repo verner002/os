@@ -247,6 +247,8 @@ void __ide_identify_drives(void) {
             uint16_t command_sets = *((uint16_t *)(__ide_buffer + IDE_IDENTIFY_COMMAND_SETS));
             drives[drvs_cnt].d_command_sets = command_sets;
 
+            // FIXME: this is not handled properly, i think we should add
+            //  an empty_drive identificator or use another format
             uint32_t sectors;
 
             if (command_sets & IDE_LBA48_ADDRESSING) {

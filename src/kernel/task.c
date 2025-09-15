@@ -15,7 +15,7 @@
 */
 
 static int32_t next_pid = 0;
-static bool mutex = FALSE;
+static bool tasking_mutex = FALSE;
 static TASK
     *first_task,
     *last_task,
@@ -52,17 +52,17 @@ void __quiet_exit(void) {
 */
 
 int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
-    __mutex_lock(&mutex);
+    __mutex_lock(&tasking_mutex);
 
     if (!current_task) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
     TASK *task = (TASK *)kmalloc(sizeof(TASK));
     
     if (!task) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
@@ -78,7 +78,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
 
     if (!stack) {
         kfree(task);
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
@@ -90,7 +90,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
     if (!task->kernel_stack) {
         kfree(task);
         pgfree((void *)stack);
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
@@ -99,7 +99,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
     last_task->next = task;
     last_task = task;
     
-    __mutex_unlock(&mutex);
+    __mutex_unlock(&tasking_mutex);
     return task->pid;
 }
 
@@ -108,7 +108,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
 */
 
 int32_t __sleep_task(int32_t pid) {
-    __mutex_lock(&mutex);
+    __mutex_lock(&tasking_mutex);
     TASK *task = first_task;
     bool not_found = TRUE;
 
@@ -122,12 +122,12 @@ int32_t __sleep_task(int32_t pid) {
     } while (task != first_task);
 
     if (not_found) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
     task->state = TASK_STATE_SLEEP;
-    __mutex_unlock(&mutex);
+    __mutex_unlock(&tasking_mutex);
     // wait for task switch, TODO: invoke task switch?
     while (current_task->state != TASK_STATE_RUNNING);
     return 0;
@@ -146,7 +146,7 @@ int32_t __sleep_me(void) {
 */
 
 int32_t __wake_task(int32_t pid) {
-    __mutex_lock(&mutex);
+    __mutex_lock(&tasking_mutex);
     TASK *task = first_task;
     bool not_found = TRUE;
 
@@ -160,17 +160,17 @@ int32_t __wake_task(int32_t pid) {
     } while (task != first_task);
 
     if (not_found) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
     if (task->state != TASK_STATE_SLEEP) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -2;
     }
 
     task->state = TASK_STATE_WAKE;
-    __mutex_unlock(&mutex);
+    __mutex_unlock(&tasking_mutex);
     return 0;
 }
 
@@ -188,20 +188,20 @@ int32_t __wake_task(int32_t pid) {
 */
 
 int32_t __init_tasking(void) {
-    __mutex_lock(&mutex);
+    __mutex_lock(&tasking_mutex);
     printk("Initializing tasking... ");
 
     first_task = (TASK *)kmalloc(sizeof(TASK));
 
     if (!first_task) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -1;
     }
 
     //struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
 
     /*if (!fs) {
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -2;
     }
 
@@ -220,7 +220,7 @@ int32_t __init_tasking(void) {
 
     if (!stack) {
         kfree(first_task);
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -2;
     }
 
@@ -231,7 +231,7 @@ int32_t __init_tasking(void) {
     if (!kstack) {
         pgfree(stack);
         kfree(first_task);
-        __mutex_unlock(&mutex);
+        __mutex_unlock(&tasking_mutex);
         return -3;
     }
 
@@ -240,7 +240,7 @@ int32_t __init_tasking(void) {
     last_task = current_task = first_task;
 
     printf("Ok\n");
-    __mutex_unlock(&mutex);
+    __mutex_unlock(&tasking_mutex);
     return 0;
 }
 
@@ -249,7 +249,7 @@ int32_t __init_tasking(void) {
 */
 
 void __list_tasks(void) {
-    __mutex_lock(&mutex);
+    __mutex_lock(&tasking_mutex);
     
     TASK *task = first_task;
     
@@ -258,7 +258,7 @@ void __list_tasks(void) {
         task = task->next;
     } while (task != first_task);
     
-    __mutex_unlock(&mutex);
+    __mutex_unlock(&tasking_mutex);
 }
 
 /**
@@ -272,7 +272,7 @@ void __switch_task(void) {
     if (!current_task)
         return; // not initialized
 
-    if (__test_set(&mutex))
+    if (__test_set(&tasking_mutex))
         return;
 
     /*if (current_task == current_task->next)
@@ -357,10 +357,10 @@ void __switch_task(void) {
      *  right into its code, so we must unlock the
      *  mutex here (in __exec_*mode, it is safer)
     */
-    //__mutex_unlock(&mutex);
+    //__mutex_unlock(&tasking_mutex);
 
     //if (current_task->mode)
-        __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp, &mutex);
+        __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp, &tasking_mutex);
     //else
     //    __exec_usermode(current_task->eip, current_task->esp, current_task->ebp);
 }

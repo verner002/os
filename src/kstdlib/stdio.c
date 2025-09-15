@@ -294,8 +294,8 @@ int32_t fprintf(FILE *stream, char const *s, ...) {
 */
 
 int32_t printf(char const *s, ...) {
-    static bool __mutex = FALSE;
-    __mutex_lock(&__mutex);
+    static bool printf_mutex = FALSE;
+    __mutex_lock(&printf_mutex);
     
     va_list args;
     va_start(args, s);
@@ -304,7 +304,7 @@ int32_t printf(char const *s, ...) {
 
     va_end(args);
 
-    __mutex_unlock(&__mutex);
+    __mutex_unlock(&printf_mutex);
     return errno;
 }
 
@@ -321,8 +321,8 @@ int32_t puts(char const *s) {
 */
 
 void printk(char const *s, ...) {
-    static bool __mutex = FALSE;
-    __mutex_lock(&__mutex);
+    static bool printk_mutex = FALSE;
+    __mutex_lock(&printk_mutex);
 
     va_list args;
     va_start(args, s);
@@ -350,7 +350,7 @@ void printk(char const *s, ...) {
     vprintf(s, args);
     va_end(args);
 
-    __mutex_unlock(&__mutex);
+    __mutex_unlock(&printk_mutex);
 }
 
 /**

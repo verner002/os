@@ -117,11 +117,11 @@ void *memmove(void *destination, void const *source, uint32_t n) {
 char *peek(char *str, char const *delimiters, bool eq) {
     char ch;
     
-    while (ch = *str) {
+    while ((ch = *str)) {
         char const *ds = delimiters;
         char d;
 
-        while (d = *ds++)
+        while ((d = *ds++))
             if (d == ch)
                 break;
 
