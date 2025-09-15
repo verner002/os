@@ -175,6 +175,15 @@ int32_t __wake_task(int32_t pid) {
 }
 
 /**
+ * __wake_on
+*/
+
+/*int32_t __wake_on(bool *wake_on) {
+    current_task->wake_on = wake_on;
+    return 0;
+}*/
+
+/**
  * __init_tasking
 */
 
@@ -189,15 +198,15 @@ int32_t __init_tasking(void) {
         return -1;
     }
 
-    struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
+    //struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
 
-    if (!fs) {
+    /*if (!fs) {
         __mutex_unlock(&mutex);
         return -2;
     }
 
     fs->t_users = 1;
-    fs->t_dentry = NULL; // no root mounted
+    fs->t_dentry = NULL; // no root mounted*/
 
     first_task->name = "kernel";
     first_task->parent_pid = -1;
@@ -205,7 +214,7 @@ int32_t __init_tasking(void) {
     first_task->state = TASK_STATE_RUNNING;
     first_task->mode = TASK_EXEC_KERNEL;
     first_task->code = -1;
-    first_task->t_fs = fs;
+    //first_task->t_fs = fs;
 
     void *stack = e820_rmalloc(4096, TRUE); //pgalloc();
 
@@ -321,9 +330,13 @@ void __switch_task(void) {
             next_task = next_task->next;
             get_next_task = TRUE;
         } else if (next_task->state == TASK_STATE_SLEEP) {
-            //next_task->state = TASK_STATE_SLEEPING;
-            next_task = next_task->next;
-            get_next_task = TRUE;
+            /*if (next_task->wake_on && *next_task->wake_on)
+                next_task->wake_on = NULL;
+            else {*/
+                //next_task->state = TASK_STATE_SLEEPING;
+                next_task = next_task->next;
+                get_next_task = TRUE;
+            //}
         } /*else if (next_task->state == TASK_STATE_SLEEPING) {
             next_task = next_task->next;
             get_next_task = TRUE;

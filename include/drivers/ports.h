@@ -98,8 +98,9 @@
  * Declarations
 */
 
-void __outb(uint16_t r, uint8_t v);
 uint8_t __inb(uint16_t r);
+void __outb(uint16_t r, uint8_t v);
+uint16_t __inw(uint16_t r);
 void __outw(uint16_t r, uint16_t v);
 uint32_t __ind(uint16_t r);
 void __outd(uint16_t r, uint32_t v);

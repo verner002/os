@@ -71,6 +71,7 @@ struct __task {
     FILE *stderr;*/
     uint32_t kernel_stack;
     TASK *next;
+    //bool *wake_on;
 };
 
 /**
@@ -81,6 +82,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode);
 int32_t __sleep_task(int32_t pid);
 int32_t __sleep_me(void);
 int32_t __wake_task(int32_t pid);
+int32_t __wake_on(bool *wake_on);
 int32_t __get_pid(void);
 int32_t __exit(int32_t code);
 void __list_tasks(void);

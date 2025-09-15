@@ -38,6 +38,7 @@
 #include "kernel/heap.h"
 
 #include "drivers/pci.h"
+#include "drivers/ide.h"
 #include "kernel/kdev.h"
 #include "kernel/config.h"
 #include "kernel/fs.h"
@@ -114,7 +115,16 @@ __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAM
 }
 
 __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
-    printk("Page fault\n");
+    uint32_t address;
+
+    asm (
+        "mov eax, cr2"
+        : "=a" (address)
+        :
+        :
+    );
+
+    printk("Page fault when accessing %p\n", address);
 
     if (current_task) {
         printk(" Process %s, PID %u\n", current_task->name, current_task->pid);
@@ -269,7 +279,7 @@ void __terminal_task(void) {
     char *pwd = "/";
 
     while (1) {
-        printf("[root@null /]$ ");
+        printf("[root@null %s]$ ", pwd);
         unsigned int size = 16; // base size
         unsigned int index = 0;
         char *input_buffer = (char *)kmalloc(sizeof(char) * size);
@@ -583,7 +593,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
 
     // channel 0 for ticks counter, FIXME: doesn't work in bochs
     __outw(PIT_CHANNEL_0_DATA_REGISTER, 0x001234de / 1000); // channel 0 freq=1kHz
-    
+
     __disable_interrupts();
     //__send_master_eoi();
     __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__pit_irq0_handler);
@@ -599,13 +609,13 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     // initialize usb controller first
     // ps/2 could be emulated (usb
     // legacy support)
-    __init_ps2();
-
-    __disable_interrupts();
-    //__send_master_eoi();
-    __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
-    __enable_interrupts();
-    __enable_irq(0x01); // irq0
+    if (!__init_ps2()) {
+        __disable_interrupts();
+        //__send_master_eoi();
+        __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
+        __enable_interrupts();
+        __enable_irq(0x01); // irq0
+    }
 
     if (__init_tasking())
         panic();

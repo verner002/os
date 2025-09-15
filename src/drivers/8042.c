@@ -19,52 +19,47 @@ static PS2_DEVICE
     *ps2_port_a,
     *ps2_port_b;
 
+static PS2_DEVICE bla = (PS2_DEVICE){
+    .bytes = {},
+    .length = 0,
+    .name = "AT Keyboard",
+    .type = PS2_DEVICE_KEYBOARD
+};
+
 static PS2_DEVICE known_devices[] = {
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = {},
-            .length = 0
-        },
+        .bytes = {},
+        .length = 0,
         .name = "AT Keyboard",
         .type = PS2_DEVICE_KEYBOARD
     },
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = { 0x00 },
-            .length = 1
-        },
+        .bytes = { 0x00 },
+        .length = 1,
         .name = "Standard PS/2 Mouse",
         .type = PS2_DEVICE_MOUSE
     },
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = { 0x03 },
-            .length = 1
-        },
+        .bytes = { 0x03 },
+        .length = 1,
         .name = "Mouse With Scroll Whell",
         .type = PS2_DEVICE_MOUSE
     },
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = { 0x04 },
-            .length = 1
-        },
+        .bytes = { 0x04 },
+        .length = 1,
         .name = "Mouse With Five Buttons",
         .type = PS2_DEVICE_MOUSE
     },
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = { 0xab, 0x83 },
-            .length = 2
-        },
+        .bytes = { 0xab, 0x83 },
+        .length = 2,
         .name = "MF2 Keyboard",
         .type = PS2_DEVICE_KEYBOARD
     },
     (PS2_DEVICE){
-        .id = (PS2_ID){
-            .bytes = { 0xab, 0xc1 },
-            .length = 2
-        },
+        .bytes = { 0xab, 0xc1 },
+        .length = 2,
         .name = "MF2 Keyboard",
         .type = PS2_DEVICE_KEYBOARD
     }
@@ -577,12 +572,11 @@ int32_t __init_ps2(void) {
     
     for (uint32_t i = 0; i < sizeof(known_devices) / sizeof(PS2_DEVICE); ++i) {
         PS2_DEVICE *device = &known_devices[i];
-        PS2_ID *device_id = &device->id;
 
-        if (device_id->length != id_length)
+        if (device->length != id_length)
             continue;
 
-        uint8_t *device_id_bytes = device_id->bytes;
+        uint8_t *device_id_bytes = device->bytes;
         bool invalid = FALSE;
 
         for (uint32_t j = 0; j < id_length; ++j)

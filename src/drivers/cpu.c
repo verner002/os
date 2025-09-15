@@ -36,6 +36,24 @@ void __disable_interrupts(void) {
 }
 
 /**
+ * __cpuid_features
+*/
+
+uint32_t __cpuid_features(void) {
+    uint32_t features;
+
+    asm (
+        "mov eax, 0x00000001\t\n"
+        "cpuid\t\n"
+        : "=d" (features)
+        :
+        :
+    );
+
+    return features;
+}
+
+/**
  * __init_gdt
 */
 

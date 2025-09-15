@@ -21,6 +21,8 @@
 
 #define sizeofarray(x) (sizeof(x) / sizeof(*x))
 
+#define containerof(ptr, type, member) ((type *)((char *)/*(typeof(((type *)0)->member) *)*/ptr - (char *)&((type *)0)->member))
+
 #define lambda(lambda_ret, lambda_args, lambda_body) {  \
     lambda_ret lambda_func lambda_args lambda_body      \
     &lambda_func;                                       \

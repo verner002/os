@@ -184,9 +184,30 @@ void *kmalloc(uint32_t n) {
  * krealloc
  * TODO: some parts of code looks similar, merge them if possible
  * FIXME: we must update first_free_chunk
+ * FIXME: optimized krealloc corrupts heap!!!
 */
 
+// hot-fix implementation
 void *krealloc(void *p, uint32_t n) {
+    __mutex_lock(&mutex);
+
+    void *np = __kmalloc(n);
+
+    if (!np) {
+        __kfree(p);
+        __mutex_unlock(&mutex);
+        return NULL;
+    }
+
+    uint32_t on = ((CHUNK *)(p - sizeof(CHUNK)))->size;
+
+    memcpy(np, p, on);
+    __kfree(p);
+    __mutex_unlock(&mutex);
+    return np;
+}
+
+void *__krealloc(void *p, uint32_t n) {
     __mutex_lock(&mutex);
 
     if (!p || !n) {
@@ -284,6 +305,9 @@ void *krealloc(void *p, uint32_t n) {
             prev_chunk_free = prev_chunk && prev_chunk->free,
             next_chunk_free = next_chunk && next_chunk->free;
 
+        // FIXME: i'm pretty sure this part calculates wrong chunk
+        //  address and required size but i'm drunk so i should
+        //  check tomorrow
         if (next_chunk_free && next_chunk->size > required_bytes) {
             next_chunk->size -= required_bytes;
             curr_chunk->size = n;

@@ -20,6 +20,9 @@
  * Constants
 */
 
+#define PS2_DEVICE_KEYBOARD 0
+#define PS2_DEVICE_MOUSE 1
+
 // commands
 #define PS2_SET_LEDS 0xed
 #define PS2_ECHO 0xee
@@ -80,19 +83,9 @@
  * Types Definitions
 */
 
-typedef enum __ps2_device_type PS2_DEVICE_TYPE;
 typedef struct __ps2_id PS2_ID;
 typedef struct __ps2_device PS2_DEVICE;
 typedef struct __scancode_set SCANCODE_SET;
-
-/**
- * Enumerations
-*/
-
-enum __ps2_device_type {
-    PS2_DEVICE_KEYBOARD = 0,
-    PS2_DEVICE_MOUSE
-};
 
 /**
  * Structures
@@ -104,9 +97,10 @@ struct __ps2_id {
 };
 
 struct __ps2_device {
-    PS2_ID id;
+    uint8_t bytes[2];
+    uint32_t length;
     char const *name;
-    PS2_DEVICE_TYPE type;
+    uint8_t type;
 };
 
 struct __scancode_set {

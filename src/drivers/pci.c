@@ -8,51 +8,15 @@
 #include "drivers/pci.h"
 #include "drivers/ports.h"
 #include "kstdlib/stdio.h"
+#include "kstdlib/stdlib.h"
+#include "kernel/bus.h"
 
 #define PCI_CONFIG_CYCLE_ENABLED 0x80000000
-#define PCI_IDE_CHANNEL_0 0x00
-#define PCI_IDE_CHANNEL_1 0x01
-#define PCI_IDE_CHANNEL_0_NATIVE_MODE 0x01
+#define PCI_MULTIFUNCTION 0x80
+#define PCI_HEADER_TYPE 0x7f
+#define PCI_HEADER_TYPE_GENERAL_DEVICE 0x00
 
-struct __pci_header {
-    uint16_t h_vendor;
-    uint16_t h_id;
-    uint16_t h_command;
-    uint16_t h_status;
-    uint8_t h_revision;
-    uint8_t h_prog_if;
-    uint8_t h_subclass;
-    uint8_t h_class;
-    uint8_t h_cache_line_sz;
-    uint8_t h_latency_timer;
-    uint8_t h_header_type;
-    uint8_t h_bist;
-};
-
-struct __pci_device {
-    struct __pci_header h;
-    uint32_t d_bar0;
-    uint32_t d_bar1;
-    uint32_t d_bar2;
-    uint32_t d_bar3;
-    uint32_t d_bar4;
-    uint32_t d_bar5;
-    uint32_t d_cardbus_cis_ptr;
-    uint16_t d_subsystem_vendor;
-    uint16_t d_subsystem_id;
-    uint32_t d_expansion_rom_base;
-    uint8_t d_capabilities_ptr;
-    uint8_t d_reserved0;
-    uint8_t d_reserved1;
-    uint8_t d_reserved2;
-    uint32_t d_reserved3;
-    uint8_t d_int_line;
-    uint8_t d_int_pin;
-    uint8_t d_min_grant;
-    uint8_t d_max_latency;
-};
-
-int32_t __pci_init_ide(struct __pci_header h);
+extern int32_t __init_ide(struct __bus *b, struct __pci_header *h);
 
 struct __class {
     uint8_t c_id;
@@ -64,8 +28,17 @@ struct __class {
 struct __subclass {
     uint8_t s_id;
     char *s_name;
-    int32_t (* s_init)(struct __pci_header h);
+    int32_t (* s_init)(struct __pci_header *h);
 };
+
+/*struct __pci_device {
+    uint8_t d_bus_id;
+    uint8_t d_dev_id;
+    uint8_t d_func_id;
+    char const *d_name;
+    struct __pci_header *d_header; // should be casted based on header_type
+    int32_t (*d_init)(struct __bus *, struct __pci_header *);
+};*/
 
 static struct __subclass const unclassified[] = {
     { 0, "Non-VGA compatible device", NULL },
@@ -73,7 +46,7 @@ static struct __subclass const unclassified[] = {
 };
 
 static struct __subclass const mass_storage_controller[] = {
-    { 1, "IDE controller", &__pci_init_ide },
+    { 1, "IDE controller", &__init_ide },
     { 2, "Floppy disk controller", NULL },
     /*{ 5, "ATA controller", NULL },
     { 6, "SATA controller", NULL }*/
@@ -157,105 +130,100 @@ uint32_t __pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
 */
 
 int32_t __init_pci(void) {
+    struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));
+
+    if (!bus) {
+        printk("pci: warning: failed to allocate memory for bus structure\n");
+        return -1;
+    }
+
+    bus->b_name = "PCI";
+
     for (uint16_t bus_i = 0; bus_i < 256; ++bus_i) {
         for (uint8_t dev_i = 0; dev_i < 32; ++dev_i) {
-            struct __pci_header dev_header;
+            // TODO: initialize struct __dev here (class for device
+            //  subclass for subdevices, when calling init pass
+            //  subdevice __dev struct to it, it will set additional
+            //  information), read function 0 info here
 
-            for (uint32_t i = 0; i < sizeof(struct __pci_header) / sizeof(uint32_t); ++i)
-                ((uint32_t *)&dev_header)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
+            for (uint8_t func_i = 0; func_i < 8; ++func_i) {
+                struct __pci_header dev_header;
 
-            if (dev_header.h_vendor == 0xffff)
-                continue;
+                for (uint32_t i = 0; i < sizeof(struct __pci_header) / sizeof(uint32_t); ++i)
+                    ((uint32_t *)&dev_header)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
 
-            char *dev_name;
-            int32_t (* dev_init)(struct __pci_header h) = (int32_t (*)(struct __pci_header))NULL;
+                if (dev_header.h_vendor == 0xffff)
+                    continue;
 
-            struct __class *dev_class = NULL;
+                char *dev_name;
+                int32_t (* dev_init)(struct __bus *b, struct __pci_header *h) = NULL;
 
-            // use binary search? (array is ordered)
-            for (uint32_t i = 0; i < sizeof(classes) / sizeof(struct __class); ++i)
-                if (classes[i].c_id == dev_header.h_class) {
-                    dev_class = &classes[i];
-                    break;
-                }
-
-            if (dev_class) {
-                struct __subclass *subclasses = dev_class->c_sclasses;
-                struct __subclass *dev_subclass = NULL;
+                struct __class *dev_class = NULL;
 
                 // use binary search? (array is ordered)
-                for (uint32_t i = 0; i < dev_class->c_sclasses_cnt; ++i)
-                    if (subclasses[i].s_id == dev_header.h_subclass) {
-                        dev_subclass = &subclasses[i];
+                for (uint32_t i = 0; i < sizeofarray(classes); ++i)
+                    if (classes[i].c_id == dev_header.h_class) {
+                        dev_class = &classes[i];
                         break;
                     }
 
-                //printk("pci: info:    subclass [%s]\n", dev_subclass ? dev_subclass->s_name : "unknown");
-                dev_name = dev_subclass ? dev_subclass->s_name : dev_class->c_name;
-                dev_init = dev_subclass->s_init;
-            } else
-                dev_name = "Unknown";
+                if (dev_class) {
+                    struct __subclass *subclasses = dev_class->c_sclasses;
+                    struct __subclass *dev_subclass = NULL;
 
-            printf("%02x:%02x.%u %s\n", bus_i, dev_i, 0, dev_name);
+                    // use binary search? (array is ordered)
+                    for (uint32_t i = 0; i < dev_class->c_sclasses_cnt; ++i)
+                        if (subclasses[i].s_id == dev_header.h_subclass) {
+                            dev_subclass = &subclasses[i];
+                            break;
+                        }
 
-            if (dev_header.h_header_type & 0x80) {
-                printk("pci: warning: multi-function devices not supported\n");
-                continue;
-            }
+                    //printk("pci: info:    subclass [%s]\n", dev_subclass ? dev_subclass->s_name : "unknown");
+                    dev_name = dev_subclass ? dev_subclass->s_name : dev_class->c_name;
+                    dev_init = dev_subclass->s_init;
+                } else
+                    dev_name = "Unknown";
 
-            struct __pci_header *pci_header;
+                printf("%02x:%02x.%u %s\n", bus_i, dev_i, func_i, dev_name);
 
-            switch (dev_header.h_header_type & 0x7f) {
-                case 0: {
-                    struct __pci_device __device;
-                    __device.h = dev_header;                    
+                struct __pci_header *init_header = NULL;
+                uint8_t header_type = dev_header.h_header_type & PCI_HEADER_TYPE;
 
-                    for (uint32_t i = sizeof(struct __pci_header) / sizeof(uint32_t); i < sizeof(struct __pci_device) / sizeof(uint32_t); ++i)
-                        ((uint32_t *)&__device)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
-                    break;
+                switch (header_type) {
+                    case PCI_HEADER_TYPE_GENERAL_DEVICE: {
+                        struct __pci_h_device *pci_device = (struct __pci_h_device *)kmalloc(sizeof(struct __pci_h_device));
+
+                        if (!pci_device) {
+                            printk("pci: error: failed to kmalloc memory for PCI device header\n");
+                            break;
+                        }
+
+                        pci_device->h = dev_header;
+
+                        for (uint32_t i = sizeof(struct __pci_header) / sizeof(uint32_t); i < sizeof(struct __pci_h_device) / sizeof(uint32_t); ++i)
+                            ((uint32_t *)pci_device)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
+                        
+                        init_header = (struct __pci_header *)pci_device;
+                        break;
+                    }
+
+                    default:
+                        printk("pci: error: unknown header type %u\n", header_type);
+                        break;
                 }
-            }
 
-            if (dev_init)
-                dev_init(dev_header);
+                if (dev_init && init_header)
+                    dev_init(bus, init_header);
+
+                if (!(dev_header.h_header_type & PCI_MULTIFUNCTION))
+                    break;
+            }
         }
     }
 
     return 0;
 }
 
-/**
- * __pci_init_ide_channel
-*/
-
-int32_t __pci_init_ide_channel(uint8_t prog_if) {
-    switch (prog_if) {
-        case PCI_IDE_CHANNEL_0: {
-            break;
-        }
-
-        case PCI_IDE_CHANNEL_1: {
-            break;
-        }
-
-        default:
-            printk("pci: ide: unsupported channel %u\n", prog_if);
-            return -1;
-    }
-}
-
-/**
- * __pci_init_ide
-*/
-
-int32_t __pci_init_ide(struct __pci_header h) {
-    uint8_t channel_0_mode = h.h_prog_if & 0x01;
-
-    printf("        Channel 0 mode: %s\n", channel_0_mode ? "native" : "compatibility");
-    printf("        Channel 0 mode switching: %s\n", h.h_prog_if & 0x02 ? "enabled" : "disabled");
-
-    //if (channel_0_mode)
-
-    printf("        Channel 1 mode: %s\n", h.h_prog_if & 0x04 ? "native" : "compatibility");
-    printf("        Channel 1 mode switching: %s\n", h.h_prog_if & 0x08 ? "enabled" : "disabled");
+uint32_t __pci_fix_bar(uint32_t bar) {
+    return bar ? (bar & (bar & 0x00000001 ? 0xfffffffc : 0xfffffff0)) : 0x00000000;
 }

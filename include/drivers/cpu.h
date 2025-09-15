@@ -127,6 +127,7 @@ struct __attribute__((__packed__)) _interrupt_frame {
 
 void __enable_interrupts(void);
 void __disable_interrupts(void);
+uint32_t __cpuid_features(void);
 void __init_gdt(uint16_t ss0, uint32_t esp0);
 void __set_kernel_stack(uint32_t stack);
 int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame));

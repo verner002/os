@@ -41,6 +41,23 @@ uint8_t __inb(uint16_t r) {
 }
 
 /**
+ * __inw
+*/
+
+uint16_t __inw(uint16_t r) {
+    uint16_t v;
+
+    asm (
+        "in ax, dx"
+        : "=a" (v)
+        : "d" (r)
+        :
+    );
+
+    return v;
+}
+
+/**
  * __outw
 */
 

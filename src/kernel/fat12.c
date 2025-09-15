@@ -446,7 +446,6 @@ int32_t __fat12_list_rootdir(void) {
             putchar('0');
 
         printf("%u %s\n", minutes, fname);
-
         kfree(fname);
     }
 }

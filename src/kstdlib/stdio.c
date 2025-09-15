@@ -55,10 +55,15 @@ bool feof(FILE *stream) {
  *  THIS IS A BLOCKING IMPLEMENTATION OF GETC
 */
 
+//static bool __wake;
+
 int getc(FILE *stream) {
     // buffer empty -> sleep the task
-    if (!stream->__count)
+    if (!stream->__count) {
+        /*__wake = FALSE;
+        __wake_on(&__wake);*/
         __sleep_me();
+    }
 
     /*if (!stream->__count) {
         // no data available
@@ -104,8 +109,12 @@ int32_t putc(int c, FILE *stream) {
         } else if (stream->__count < stream->__size) {
             ++stream->__count;
             stream->__base[stream->__index++ % stream->__size] = c;
+
+            /*if (c == '\n')
+                __wake = TRUE;*/
+
             return 0;
-        }   
+        }
     }
     
     return -1;
