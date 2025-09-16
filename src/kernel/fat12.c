@@ -337,7 +337,6 @@ uint16_t *__lfn_to_filename(VFAT_LFN_ENTRY *entry, uint32_t *ucs2_filename_lengt
 */
 
 int32_t __fat12_list_rootdir(void) {
-    // martin: nigga mogul chudes boty
     __fat12_read_root_dir();
 
     for (uint32_t i = 0; i < 224; ++i) {

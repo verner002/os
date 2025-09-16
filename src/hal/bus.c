@@ -4,49 +4,82 @@
  * @date 15/09/2025
 */
 
+#include "types.h"
 #include "macros.h"
 #include "hal/bus.h"
 #include "hal/vfs.h"
 #include "kernel/kobj.h"
 #include "kernel/heap.h"
 
-extern struct __dentry *sysfs;
+extern struct __kobj *sysfs;
 
 uint32_t buses_cnt = 0;
 struct __bus *buses[16];
 
+struct __kobj_type *bus_ktype = NULL;
+
+static void __bus_kobj_release(struct __kobj *kobj) {
+    
+}
+
+static uint32_t __bus_kobj_read(struct __kobj *kobj, struct __sysfs_attrib *attrib, char *buffer) {
+
+}
+
+static void __bus_kobj_write(struct __kobj *kobj, struct __sysfs_attrib *attrib, char const *buffer, uint32_t size) {
+
+}
+
+void __register_bus_type(void) {
+    struct __kobj_type *bus_type = (struct __kobj_type *)kmalloc(sizeof(struct __kobj_type));
+
+    if (!bus_type)
+        return;
+
+    bus_type->release = &__bus_kobj_release;
+    bus_type->k_ops = (struct __sysfs_ops){
+        .read = &__bus_kobj_read,
+        .write = &__bus_kobj_write
+    };
+    bus_type->k_attribs = NULL;
+
+    bus_ktype = bus_type;
+}
+
 struct __bus *__register_bus(char const *name, struct __driver const *driver) {
+    printk("bus: registering %s bus\n", name);
+
     if (buses_cnt >= sizeofarray(buses))
         return NULL;
 
-    struct __inode *inode = __new_inode();
-    struct __dentry *dentry = __new_dentry();
-    // TODO: use __kobj_init
-    struct __kobj *kobj = (struct __kobj *)kmalloc(sizeof(struct __kobj));
-    struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));
+    struct __kobj *bus_kobj = (struct __kobj *)kmalloc(sizeof(struct __kobj));
 
-    if (!inode || !dentry || !kobj || !bus)
+    if (!bus_kobj)
         return NULL;
 
-    inode->i_dentry = dentry;
-    //inode->i_refs = 1;
-    
-    dentry->d_parent = sysfs;
-    dentry->d_inode = inode;
-    //dentry->d_refs = 1;
-    dentry->name = name;
-    dentry->d_next = dentry->d_child;
-    dentry->d_prev = NULL;
-    dentry->d_child->d_prev = dentry;
-    dentry->d_child = dentry;
+    __kobj_init(bus_kobj, bus_ktype);
+    __kobj_rename(bus_kobj, name);
+    __kobj_add(bus_kobj, sysfs);
+    //__kobj_put(bus); -- use by caller (caller should call __kobj_put)
 
-    kobj->k_dentry = dentry;
-    kobj->k_name = name;
-    
-    bus->b_kobj = kobj;
-    bus->b_driver = driver;
+    struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));
+
+    if (!bus) {
+        __kobj_put(bus_kobj);
+        return NULL;
+    }
+
+    struct __bus_type *bus_type = (struct __bus_type *)kmalloc(sizeof(struct __bus));
+
+    if (!bus_type) {
+        __kobj_put(bus_kobj);
+        kfree(bus);
+        return NULL;
+    }
+
+    bus->b_kobj = bus_kobj;
     bus->b_name = name;
-
-    buses[buses_cnt++] = bus;
+    bus->b_type = bus_type;
+    bus->b_driver = driver;
     return bus;
 }

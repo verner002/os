@@ -1,12 +1,11 @@
 /**
- * Kernel
- * 
- * Author: verner002
- * 
- * j+k=<3
+ * @file main.c
+ * @author verner002
+ * @date 11/10/2024
+ * @note j+k=<3
 */
 
-//#define __DEBUG
+#define CONFIG_FDC
 
 /**
  * Includes
@@ -37,6 +36,7 @@
 #include "kstdlib/stdlib.h"
 #include "kernel/heap.h"
 
+#include "hal/bus.h"
 #include "drivers/pci.h"
 #include "drivers/ide.h"
 #include "kernel/kdev.h"
@@ -51,6 +51,10 @@ TASK *current_task = NULL;
 uint32_t f_systems_count = 0;
 struct __fs f_systems[256];
 //VFS_DIR_NODE *root;
+struct __kobj __sysfs = (struct __kobj){
+    
+};
+struct __kobj *sysfs = &__sysfs;
 
 /**
  * panic
@@ -110,27 +114,36 @@ __attribute__((interrupt)) static void __double_fault(INTERRUPT_FRAME *frame) {
 }
 
 __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAME *frame) {
-    printk("fault: general protection fault, task %u!\n", current_task->pid);
+    printk("fault: general protection fault!\n");
     for (;;);
 }
 
 __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
-    uint32_t address;
+    // TODO: TEST THIS CODE!!!
+    uint32_t vas;
 
-    asm (
+    __asm__ volatile (
         "mov eax, cr2"
-        : "=a" (address)
+        : "=a" (vas)
         :
         :
     );
 
-    printk("Page fault when accessing %p\n", address);
+    vas &= 0xfffff000;
 
-    if (current_task) {
-        printk(" Process %s, PID %u\n", current_task->name, current_task->pid);
-        printk(" ESP=%p\n", current_task->esp);
+    void *pas = e820_rmalloc(4096, TRUE);
+
+    if (!pas) {
+        printk("kernel: page-fault: out of memory\n");
+        panic();
     }
-    for (;;);
+
+    if (__map_page(vas, (uint32_t)pas, PAGE_NONE)) {
+        printk("kernel: page-fault: map failed\n");
+        panic();
+    }
+
+    printk("%p -> %p\n", vas, pas);
 }
 
 __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
@@ -482,9 +495,6 @@ static char command_line[255];
 uint16_t root_dev = NO_DEV;
 char *envs[16];
 
-struct __dentry __sysfs;
-struct __dentry *sysfs = &__sysfs;
-
 /**
  * entry
 */
@@ -567,6 +577,8 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         .__fname = "stdin"
     };
 
+    __register_bus_type();
+
     /**
      * initialize devices
      * 
@@ -623,8 +635,10 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     if (__init_tasking())
         panic();
 
+#ifdef CONFIG_FDC
     if (__init_fdc())
-        printk("kernel: info: fdc not initialized\n");
+        printk("kernel: warning: fdc not initialized\n");
+#endif
 
     __init_pci();
 

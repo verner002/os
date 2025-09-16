@@ -9,6 +9,10 @@
 
 atomic_t __dev_id;
 
+struct __dev *__register_dev() {
+    
+}
+
 struct __dev *__add_device(__kdev_t kdev, char const *name, struct __dev *parent, struct __dev_type *dev_type) {
     struct __dev *dev = (struct __dev *)kmalloc(sizeof(struct __dev));
 

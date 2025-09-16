@@ -23,5 +23,5 @@ void __mutex_lock(bool *lock) {
 */
 
 void __mutex_unlock(bool *lock) {
-    *lock = FALSE;
+    __unlock(lock);
 }

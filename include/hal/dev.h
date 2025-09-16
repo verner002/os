@@ -11,20 +11,6 @@
 #include "kernel/kobj.h"
 #include "hal/bus.h"
 
-#define atomic_inc(x) asm volatile (    \
-    "lock inc %0"                       \
-    :                                   \
-    : "m" (x)                           \
-    :                                   \
-);
-
-#define atomic_dec(x) asm volatile (    \
-    "lock dec %0"                       \
-    :                                   \
-    : "m" (x)                           \
-    :                                   \
-);
-
 struct __dev_type {
     // device attributes
     void (* d_release)(struct __device *);

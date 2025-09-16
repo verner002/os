@@ -291,6 +291,9 @@ int32_t fprintf(FILE *stream, char const *s, ...) {
 
 /**
  * printf
+ * 
+ * FIXME: printf mutex can cause dead-lock at
+ *  certain circumstances
 */
 
 int32_t printf(char const *s, ...) {
