@@ -67,7 +67,8 @@ int32_t __init_vmm(void) {
 */
 
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags) {
-    if (!page_directory || (page_directory & 31) || !physical_memory) return -1;
+    if (!page_directory || (page_directory & 31) || !physical_memory)
+        return -1;
     
     uint32_t page = (uint32_t)virtual_memory / PAGE_SIZE;
 
@@ -78,16 +79,20 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     if (!(pde->address & 0x000fffff)) { // no page table, create one
         page_table = (PAGING_TABLE_ENTRY *)__e820_rmalloc(4096, TRUE)/*pgalloc()*/;
 
+        if (!page_table)
+            return -1;
+
         memset(page_table, 0, PAGE_TABLE_SIZE);
 
         pde->address = (uint32_t)page_table >> 12;
-        pde->granularity = PAGE_4KIB;
-        pde->read_write = (bool)PAGE_READ_WRITE;
-        pde->user_supervisor = (bool)PAGE_USER;
-        pde->cache_disabled = PAGE_CACHE_ENABLED;
-        pde->write_through = (bool)PAGE_WRITE_THROUGH;
-        pde->present = TRUE;
-    } else page_table = (PAGING_TABLE_ENTRY *)(pde->address << 12);
+        pde->granularity = !!PAGE_4KIB;
+        pde->read_write = !!PAGE_READ_WRITE;
+        pde->user_supervisor = !!PAGE_USER;
+        pde->cache_disabled = !!PAGE_CACHE_ENABLED;
+        pde->write_through = !!PAGE_WRITE_THROUGH;
+        pde->present = 1;
+    } else
+        page_table = (PAGING_TABLE_ENTRY *)(pde->address << 12);
 
     PAGING_TABLE_ENTRY *pte = &(page_table[page % 1024]);
 
@@ -100,7 +105,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     pte->cache_disabled = flags & PAGE_CACHE_DISABLED; // default: cache enabled
     pte->write_through = !(flags & PAGE_WRITE_THROUGH); // default: write-through
     pte->page_attribute_table = 0;
-    pte->present = TRUE;
+    pte->present = 1;
 
     //asm volatile ("mov cr3, %0\n\t"
     //"mov %1, cr3" : "=r" (page_directory) : "r" (page_directory) : "memory");
@@ -114,6 +119,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
         : "memory"
     ); // invalidate page table
 
+    //printk("VAS(%p) -> PAS(%p)\n", virtual_memory, physical_memory);
     return 0;
 }
 

@@ -239,7 +239,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
 
                                     for (uint32_t j = 0; j < sizeof(uint16_t) * 2; ++j) {
                                         // n = rotate_left(n)
-                                        uint16_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
+                                        uint16_t d = ((n = (n << 4) | (n >> 12)) & 0x0f) + '0';
 
                                         if (d > '9')
                                             d += 'a' - '9' - 1;
@@ -261,7 +261,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
 
                                     for (uint32_t j = 0; j < sizeof(uint32_t) * 2; ++j) {
                                         // n = rotate_left(n)
-                                        uint32_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
+                                        uint32_t d = ((n = (n << 4) | (n >> 28)) & 0x0f) + '0';
 
                                         if (d > '9')
                                             d += 'a' - '9' - 1;

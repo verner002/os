@@ -17,6 +17,7 @@
 #define PCI_HEADER_TYPE_GENERAL_DEVICE 0x00
 
 extern int32_t __init_ide(struct __bus *b, struct __pci_header *h);
+extern int32_t __init_e1000(struct __bus *b, struct __pci_header *h);
 
 struct __class {
     uint8_t c_id;
@@ -53,7 +54,7 @@ static struct __subclass const mass_storage_controller[] = {
 };
 
 static struct __subclass const network_controller[] = {
-    { 0, "Ethernet controller", NULL }
+    { 0, "Ethernet controller", &__init_e1000 }
 };
 
 static struct __subclass const display_controller[] = {

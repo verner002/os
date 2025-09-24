@@ -211,8 +211,7 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
 
         if ((current->entry->base + current->entry->size - 1) >= prioritized->address) {
             // overlap
-            ADDRESS_DESCRIPTOR *to_push;
-
+            // TODO: this if-else-block could be merged into one block of code
             if (current->entry->type <= prioritized->entry->type) {
                 base = current->address;
                 size = prioritized->address - current->address;
@@ -221,9 +220,9 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
                 uint32_t prev_address = current->address;
                 current->address = prioritized->entry->base + prioritized->entry->size;
 
-                if (current->address < prev_address || current->address >= (current->entry->base + current->entry->size - 1)) {
+                if (current->address < prev_address || current->address >= (current->entry->base + current->entry->size - 1))
                     buffer[prioritized_index] = buffer[--buffer_length];
-                } else
+                else
                     buffer[prioritized_index] = current;
 
                 current = prioritized;
@@ -237,6 +236,8 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
 
                 if (prioritized->address < prev_address || prioritized->address >= (prioritized->entry->base + prioritized->entry->size - 1))
                     buffer[prioritized_index] = buffer[--buffer_length];
+                /*else
+                    buffer[prioritized_index] = prioritized;*/
             }
         } else {
             // no overlap

@@ -118,7 +118,9 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
         :
     );
 
-    vas &= 0xfffff000;
+    printk("page-fault when accessing address %p\n", vas);
+
+    /*vas &= 0xfffff000;
 
     void *pas = __e820_rmalloc(4096, TRUE);
 
@@ -127,10 +129,12 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
         panic();
     }
 
-    if (__map_page(vas, (uint32_t)pas, PAGE_NONE)) {
+    if (__map_page(vas, (uint32_t)pas, PAGE_READ_WRITE)) {
         printk("kernel: page-fault: map failed\n");
         panic();
-    }
+    }*/
+
+    panic();
 }
 
 __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
