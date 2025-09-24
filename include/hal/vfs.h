@@ -64,8 +64,10 @@ struct __dentry_io_block {
     struct __dentry *(* lookup)(struct __dentry *entry, char const *name);
 };
 
-struct __dentry *__new_dentry(void);
-struct __inode *__new_inode(void);
+void __dentry_init(struct __dentry *dentry);
+void __dentry_add(struct __dentry *dentry, struct __dentry *parent);
+void __inode_init(struct __inode *inode, struct __dentry *dentry);
+struct __dentry *__lookup(struct __dentry *node, char const *path, uint32_t max_depth);
 
 /*VFS_DIR_NODE *__init_vfs(DRIVER *root_dev_driver);
 VFS_FILE_NODE *__new_vfs_file_node(char const *name);

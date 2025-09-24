@@ -1,12 +1,12 @@
 /**
- * Task Switch
- * 
- * Author: verner002
+ * @file ts.h
+ * @author verner002
+ * @date 23/09/2025
 */
 
-/**
- * Declarations
-*/
+#pragma once
+
+#include "bool.h"
 
 void __flush_tss(void);
 uint32_t __read_eip(void);

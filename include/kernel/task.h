@@ -12,9 +12,9 @@
 
 #include "types.h"
 #include "drivers/cpu.h"
-#include "kernel/pager.h"
+#include "mm/pager.h"
 #include "kernel/ts.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 #include "kernel/mutex.h"
 #include "hal/vfs.h"
 #include "kstdlib/stdio.h"
@@ -50,7 +50,7 @@ enum __task_exec_mode {
 */
 
 struct __task_fs {
-    uint32_t t_users;
+    //uint32_t t_users;
     struct __dentry *t_dentry;
 };
 
@@ -86,6 +86,6 @@ int32_t __wake_on(bool *wake_on);
 int32_t __get_pid(void);
 int32_t __exit(int32_t code);
 void __list_tasks(void);
-int32_t __init_tasking(void);
+int32_t __init_tasking(struct __dentry *root);
 void __switch_task(void);
 int32_t fork(void);

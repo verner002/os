@@ -9,9 +9,7 @@
 #include "hal/bus.h"
 #include "hal/vfs.h"
 #include "kernel/kobj.h"
-#include "kernel/heap.h"
-
-extern struct __kobj *sysfs;
+#include "mm/heap.h"
 
 uint32_t buses_cnt = 0;
 struct __bus *buses[16];
@@ -30,11 +28,11 @@ static void __bus_kobj_write(struct __kobj *kobj, struct __sysfs_attrib *attrib,
 
 }
 
-void __register_bus_type(void) {
+int32_t __init_buses(void) {
     struct __kobj_type *bus_type = (struct __kobj_type *)kmalloc(sizeof(struct __kobj_type));
 
     if (!bus_type)
-        return;
+        return -1;
 
     bus_type->release = &__bus_kobj_release;
     bus_type->k_ops = (struct __sysfs_ops){
@@ -44,6 +42,7 @@ void __register_bus_type(void) {
     bus_type->k_attribs = NULL;
 
     bus_ktype = bus_type;
+    return 0;
 }
 
 struct __bus *__register_bus(char const *name, struct __driver const *driver) {
@@ -59,7 +58,7 @@ struct __bus *__register_bus(char const *name, struct __driver const *driver) {
 
     __kobj_init(bus_kobj, bus_ktype);
     __kobj_rename(bus_kobj, name);
-    __kobj_add(bus_kobj, sysfs);
+    //__kobj_add(bus_kobj, sysfs);
     //__kobj_put(bus); -- use by caller (caller should call __kobj_put)
 
     struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));

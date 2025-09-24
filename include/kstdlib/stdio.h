@@ -14,7 +14,7 @@
 #include "drivers/cpu.h"
 #include "drivers/vga.h"
 #include "kernel/mutex.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 #include "kernel/task.h"
 #include "kstdlib/math.h"
 #include "kstdlib/errno.h"

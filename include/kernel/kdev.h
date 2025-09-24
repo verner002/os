@@ -7,7 +7,7 @@
 #pragma once
 
 #include "types.h"
-#include "kernel/super.h"
+#include "fs/super.h"
 
 typedef uint16_t __kdev_t;
 

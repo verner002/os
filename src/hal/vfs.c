@@ -5,17 +5,91 @@
 */
 
 #include "types.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 #include "hal/vfs.h"
 #include "hal/driver.h"
 #include "kernel/kdev.h"
+#include "kstdlib/stdio.h"
 
-struct __dentry *__new_dentry(void) {
-    return (struct __dentry *)kmalloc(sizeof(struct __dentry));
+void __dentry_init(struct __dentry *dentry) {
+    if (!dentry)
+        return;
+
+    dentry->name = NULL;
+    dentry->d_refs = 1;
+    dentry->d_parent = NULL;
+    dentry->d_prev = NULL;
+    dentry->d_next = NULL;
+    dentry->d_inode = NULL;
+    dentry->d_child = NULL;
 }
 
-struct __inode *__new_inode(void) {
-    return (struct __inode *)kmalloc(sizeof(struct __inode));
+void __dentry_add(struct __dentry *dentry, struct __dentry *parent) {
+    if (!dentry || !parent)
+        return;
+
+    // add list head
+    dentry->d_parent = parent;
+    dentry->d_next = parent->d_child;
+
+    if (parent->d_child)
+        parent->d_child->d_prev = dentry;
+
+    parent->d_child = dentry;
+}
+
+void __inode_init(struct __inode *inode, struct __dentry *dentry) {
+    if (!inode || !dentry)
+        return;
+
+    inode->i_dentry = dentry;
+    inode->i_mode = 0;
+    inode->i_refs = 1;
+    inode->i_uid = 0777;
+    inode->i_gid = 0777;
+}
+
+static struct __dentry *__internal_lookup(struct __dentry *node, char *path, uint32_t max_depth, uint32_t depth) {
+    printk("looking for [%s] in [%s]\n", path, node->name);
+    
+    if (depth > max_depth)
+        return NULL;
+
+    if (strcmp(node->name, path))
+        return NULL;
+
+    char *subpath = strtok(NULL, "/");
+
+    printk("sp=%p\n", subpath);
+
+    if (!subpath)
+        return node;
+
+    struct __dentry *child = node->d_child;
+
+    while (child) {
+        struct __dentry *temp = __internal_lookup(child, subpath, max_depth, depth + 1);
+
+        if (temp)
+            return temp;
+
+        child = child->d_next;
+    }
+}
+
+struct __dentry *__lookup(struct __dentry *node, char const *path, uint32_t max_depth) {
+    struct __dentry *child = node->d_child;
+
+    while (child) {
+        struct __dentry *temp = __internal_lookup(child, strtok(path, "/"), max_depth, 1);
+
+        if (temp)
+            return temp;
+
+        child = child->d_next;
+    }
+
+    return NULL;
 }
 
 /*VFS_DIR_NODE *__init_vfs(DRIVER *root_dev_driver) {

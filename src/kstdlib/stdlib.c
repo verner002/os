@@ -9,7 +9,7 @@
 */
 
 #include "bool.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 
 /**
  * qsort

@@ -231,6 +231,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                             }
                             break;
                         }
+
                         case '4': {
                             switch (s[++i]) {
                                 case 'x': {
@@ -239,6 +240,28 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                                     for (uint32_t j = 0; j < sizeof(uint16_t) * 2; ++j) {
                                         // n = rotate_left(n)
                                         uint16_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
+
+                                        if (d > '9')
+                                            d += 'a' - '9' - 1;
+                                        
+                                        putc(d, stream);
+                                    }
+                                    break;
+                                }
+                                default:
+                                    return -1;
+                            }
+                            break;
+                        }
+
+                        case '8': {
+                            switch (s[++i]) {
+                                case 'x': {
+                                    uint32_t n = va_arg(args, uint32_t);
+
+                                    for (uint32_t j = 0; j < sizeof(uint32_t) * 2; ++j) {
+                                        // n = rotate_left(n)
+                                        uint32_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
 
                                         if (d > '9')
                                             d += 'a' - '9' - 1;

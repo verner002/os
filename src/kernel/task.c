@@ -16,7 +16,7 @@
 
 static int32_t next_pid = 0;
 static bool tasking_mutex = FALSE;
-static TASK
+TASK
     *first_task,
     *last_task,
     *current_task = NULL;
@@ -74,7 +74,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
     task->code = -1;
     task->t_fs = current_task->t_fs;
 
-    uint32_t stack = (uint32_t)/*pgalloc()*/e820_rmalloc(4096, TRUE) + 4096 - sizeof(uint32_t);
+    uint32_t stack = (uint32_t)/*pgalloc()*/__e820_rmalloc(4096, TRUE) + 4096 - sizeof(uint32_t);
 
     if (!stack) {
         kfree(task);
@@ -85,7 +85,7 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
     *(uint32_t *)stack = (uint32_t)&__quiet_exit;
 
     task->esp = task->ebp = stack;
-    task->kernel_stack = (uint32_t)/*pgalloc()*/e820_rmalloc(4096, TRUE) + 4096;
+    task->kernel_stack = (uint32_t)/*pgalloc()*/__e820_rmalloc(4096, TRUE) + 4096;
 
     if (!task->kernel_stack) {
         kfree(task);
@@ -187,7 +187,7 @@ int32_t __wake_task(int32_t pid) {
  * __init_tasking
 */
 
-int32_t __init_tasking(void) {
+int32_t __init_tasking(struct __dentry *root) {
     __mutex_lock(&tasking_mutex);
     printk("Initializing tasking... ");
 
@@ -198,15 +198,17 @@ int32_t __init_tasking(void) {
         return -1;
     }
 
-    //struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
+    struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
 
-    /*if (!fs) {
+    if (!fs) {
+        kfree(first_task);
+        first_task = NULL;
         __mutex_unlock(&tasking_mutex);
         return -2;
     }
 
-    fs->t_users = 1;
-    fs->t_dentry = NULL; // no root mounted*/
+    //fs->t_users = 1;
+    fs->t_dentry = root; // no root mounted
 
     first_task->name = "kernel";
     first_task->parent_pid = -1;
@@ -214,9 +216,9 @@ int32_t __init_tasking(void) {
     first_task->state = TASK_STATE_RUNNING;
     first_task->mode = TASK_EXEC_KERNEL;
     first_task->code = -1;
-    //first_task->t_fs = fs;
+    first_task->t_fs = fs;
 
-    void *stack = e820_rmalloc(4096, TRUE); //pgalloc();
+    void *stack = __e820_rmalloc(4096, TRUE); //pgalloc();
 
     if (!stack) {
         kfree(first_task);
@@ -226,7 +228,7 @@ int32_t __init_tasking(void) {
 
     first_task->esp = first_task->ebp = (uint32_t)stack + 4096;
 
-    void *kstack = e820_rmalloc(4096, TRUE); //pgalloc();
+    void *kstack = __e820_rmalloc(4096, TRUE); //pgalloc();
 
     if (!kstack) {
         pgfree(stack);

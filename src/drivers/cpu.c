@@ -214,9 +214,9 @@ void __set_kernel_stack(uint32_t stack) {
 */
 
 int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
-    printk("\033[33mcpu:\033[37m Initializing IDT... "); // FIXME: use e820_rmm_alloc (real mode memory alloction)
+    printk("\033[33mcpu:\033[37m Initializing IDT... ");
     
-    idt = (INTERRUPT_DESCRIPTOR *)e820_rmalloc(2048, TRUE);
+    idt = (INTERRUPT_DESCRIPTOR *)__e820_rmalloc(2048, TRUE);
 
     if (!idt) {
         printf("Error\n");

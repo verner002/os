@@ -7,7 +7,7 @@
 #include "null.h"
 #include "macros.h"
 #include "kernel/kdev.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 #include "kstdlib/string.h"
 
 struct __kdev *kdev_top;

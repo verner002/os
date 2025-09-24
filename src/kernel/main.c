@@ -14,47 +14,36 @@
 #include "null.h"
 
 #include "drivers/cpu.h"
-#include "drivers/acpi.h"
+#include "drivers/power/acpi.h"
 #include "drivers/8259a.h"
 #include "drivers/8254a.h"
-#include "drivers/8042.h"
-#include "drivers/8237a.h"
-#include "drivers/82077aa.h"
+#include "drivers/char/8042.h"
+#include "drivers/dma/8237a.h"
+#include "drivers/block/82077aa.h"
 
 #include "hal/driver.h"
 #include "hal/vfs.h"
 
 //#include "kernel/syms.h"
-#include "kernel/e820.h"
-#include "kernel/pager.h"
+#include "mm/e820.h"
+#include "mm/pager.h"
 #include "kernel/ts.h"
 #include "kernel/task.h"
-#include "kernel/fat12.h"
+#include "fs/fat12/fat12.h"
 
 #include "kstdlib/errno.h"
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 
+#include "kernel/sysfs.h"
 #include "hal/bus.h"
-#include "drivers/pci.h"
-#include "drivers/ide.h"
+#include "drivers/bus/pci.h"
+#include "drivers/block/ide.h"
 #include "kernel/kdev.h"
 #include "kernel/config.h"
-#include "kernel/fs.h"
 
-/**
- * Global Variables
-*/
-
-TASK *current_task = NULL;
-uint32_t f_systems_count = 0;
-struct __fs f_systems[256];
-//VFS_DIR_NODE *root;
-struct __kobj __sysfs = (struct __kobj){
-    
-};
-struct __kobj *sysfs = &__sysfs;
+extern TASK *current_task;
 
 /**
  * panic
@@ -131,7 +120,7 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
 
     vas &= 0xfffff000;
 
-    void *pas = e820_rmalloc(4096, TRUE);
+    void *pas = __e820_rmalloc(4096, TRUE);
 
     if (!pas) {
         printk("kernel: page-fault: out of memory\n");
@@ -142,8 +131,6 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
         printk("kernel: page-fault: map failed\n");
         panic();
     }
-
-    printk("%p -> %p\n", vas, pas);
 }
 
 __attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
@@ -159,18 +146,19 @@ void __f1_handler(void) {
 }
 
 void __up_handler(void) {
-    printf("[UP]");
+    // use arrows to choose the input buffer
+    // cyclic array of ptrs to input buffers
 }
-
-static bool
-    extended,
-    released,
-    shift = FALSE;
 
 static int32_t wake_task = -1; // TODO: use list for "tasks to wake"
 
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     static uint32_t state = 0;
+
+    static bool
+        extended = FALSE,
+        released = FALSE,
+        shift = FALSE;
 
     __send_eoi(0x01);
     uint8_t data = __inb(PS2_DATA_PORT_REGISTER);
@@ -286,8 +274,51 @@ int32_t xatoi(char const *s) {
     return value;
 }
 
+static void __path(struct __dentry *node) {
+    if (!node->d_parent) {
+        printf(node->name);
+        return;
+    }
+
+    __path(node->d_parent);
+    printf("/%s", node->name);
+}
+
+static void __tree(struct __dentry *node) {
+    struct __dentry *child = node->d_child;
+
+    while (child) {
+        __path(child);
+        putchar('\n');
+
+        if (child->d_child)
+            __tree(child);
+
+        child = child->d_next;
+    }
+}
+
 void __terminal_task(void) {
     printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
+
+    struct __dentry *dhome = (struct __dentry *)kmalloc(sizeof(struct __dentry));
+
+    if (!dhome)
+        panic();
+
+    struct __inode *ihome = (struct __inode *)kmalloc(sizeof(struct __inode));
+
+    if (!ihome) {
+        kfree(dhome);
+        panic();
+    }
+
+    __dentry_init(dhome);
+    dhome->name = "home";
+    __inode_init(ihome, dhome);
+    ihome->i_mode = 0x80000000 | 0777;
+    dhome->d_inode = ihome;
+    __dentry_add(dhome, current_task->t_fs->t_dentry);
 
     char *pwd = "/";
 
@@ -336,10 +367,45 @@ void __terminal_task(void) {
         } else if (!strcmp(cmd, "ps")) {
             __list_tasks();
         } else if (!strcmp(cmd, "e820")) {
-            __dump_e820();
+            __e820_dump_mmap();
         } else if (!strcmp(cmd, "ls")) {
             //DIR *dir = opendir(pwd);
-            __fat12_list_rootdir();
+            //__fat12_list_rootdir();
+            char *s = strtok(NULL, " ");
+
+            uint32_t mode = 0;
+
+            if (!strcmp(s, "-l"))
+                mode = 1;
+
+            struct __dentry *child = current_task->t_fs->t_dentry->d_child;
+
+            if (child) {
+                while (child) {
+                    if (child->d_inode->i_mode & 0777 == 0777)
+                        printf("\033[30;42m");
+
+                    if (child->d_inode->i_mode & 0x80000000)
+                        printf("\033[34m");
+
+                    printf("%s\033[37;40m", child->name);
+
+                    switch (mode) {
+                        case 0:
+                            printf("  ");
+                            break;
+
+                        case 1:
+                            putchar('\n');
+                            break;
+                    }
+
+                    child = child->d_next;
+                }
+                
+                if (!mode)
+                    putchar('\n');
+            }
         } else if (!strcmp(cmd, "hexdump")) {
             char *address = strtok(NULL, " ");
 
@@ -456,12 +522,8 @@ void __terminal_task(void) {
 
             for (uint32_t i = 0; i < devs_count; ++i)
                 printf("%s %u:%u %s (address=%p)\n", devs[i].name, devs[i].major, devs[i].minor, devs[i].driver->module_name, devs[i].driver);*/
-        } else if (!strcmp(cmd, "help"))
-            printf(
-                " heap - dumps heap                 clear - clears window\n"
-                " ps - lists tasks                  e820 - dumps bios memory map\n"
-                " help - prints help\n"
-            );
+        } else if (!strcmp(cmd, "tree"))
+            __tree(current_task->t_fs->t_dentry);
         else if (index)
             printf("terminal: %s: command not found\n", cmd);
 
@@ -491,7 +553,7 @@ void __init_handlers(void) {
     __set_handler(0x0e, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__page_fault);
 }
 
-static char command_line[255];
+static char command_line[256];
 uint16_t root_dev = NO_DEV;
 char *envs[16];
 
@@ -516,10 +578,10 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __init_gdt(0x0010, 0x00007c00); // RFC: can we set the esp0 latter?
 
     // fix memory map
-    __sanitize_e820(e820_entries_count, e820_entries);
+    __e820_sanitize(e820_entries_count, e820_entries);
 
     // dump the map
-    __dump_e820();
+    __e820_dump_mmap();
 
     // initialize interrupt descriptor table
     if (__init_idt(&__default_isr)) {
@@ -533,6 +595,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     __parse_config(command_line);
 
     if (root_dev == NO_DEV) {
+        // RFC: use some kind of default device?
         printk("kernel: error: unknown root dev\n");
         panic();
     }
@@ -550,7 +613,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // initialize kernel heap manager
-    void *heap = e820_rmalloc(8192*2, TRUE);
+    void *heap = __e820_rmalloc(8192*2, TRUE);
 
     if (!heap) {
         printk("kernel: error: failed to allocate memory for heap\n");
@@ -577,7 +640,30 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         .__fname = "stdin"
     };
 
-    __register_bus_type();
+    // there is only one root dentry
+    // because multitasking is disabled
+    // at this point
+    // we'll be able to set different
+    // fs dentry for each process once
+    // the multitasking is enabled
+    struct __dentry root = {
+        .d_child = NULL,
+        .d_inode = NULL,
+        .d_next = NULL,
+        .d_parent = NULL,
+        .d_prev = NULL,
+        .d_refs = 1,
+        .name = "" // empty string
+    };
+
+    if (__init_sysfs(&root))
+        panic();
+
+    if (__init_drivers()) // register "driver" group
+        panic();
+
+    /*if (__init_buses()) // register "bus" group
+        panic();*/
 
     /**
      * initialize devices
@@ -632,15 +718,20 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         __enable_irq(0x01); // irq0
     }
 
-    if (__init_tasking())
+    // initialize first task (kernel) with default
+    // root dentry (singletasking root)
+    if (__init_tasking(&root))
         panic();
 
 #ifdef CONFIG_FDC
     if (__init_fdc())
-        printk("kernel: warning: fdc not initialized\n");
+        printk("kernel: info: fdc not initialized\n");
 #endif
 
     __init_pci();
+
+    /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
+    for(;;);*/
 
     int32_t terminal_pid = __create_task("terminal", (uint32_t)&__terminal_task, TASK_EXEC_KERNEL);
     wake_task = terminal_pid;
@@ -652,9 +743,6 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
 
     //__create_task((uint32_t)&__user_daemon, TASK_EXEC_USER);
     //__create_task((uint32_t)&__user_daemon);
-
-    // TODO: bios device id list starts with 0 so we could use
-    //  an array to map device id to the actual DEVICE structure
 
     printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
 
@@ -685,8 +773,4 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }*/
 
     //__set_handler(0x80, 0x0008, 0xee, &syscall); // FIXME: implement setting dpl, this is stupid
-}
-
-int32_t open(char const *path, char const *mode) {
-    
 }

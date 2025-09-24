@@ -96,7 +96,7 @@ void *__parse_image(uint8_t *image, uint32_t address) {
 
         uint32_t pages_count = (virtual_size + 4095) / 4096;
 
-        void *page = e820_rmalloc(4096, TRUE);
+        void *page = __e820_rmalloc(4096, TRUE);
 
         if (page) {
             pe_error = PE_ERROR_FAILED_TO_ALLOC_MEM;

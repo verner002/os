@@ -9,8 +9,8 @@
 */
 
 #include "types.h"
-#include "kernel/e820.h"
-#include "kernel/vmm.h"
+#include "mm/e820.h"
+#include "mm/vmm.h"
 #include "kstdlib/string.h"
 
 /**

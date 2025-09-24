@@ -7,7 +7,7 @@
 #include "types.h"
 #include "macros.h"
 #include "kernel/kobj.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 #include "kstdlib/string.h"
 
 void __kobj_init(struct __kobj *kobj, struct __kobj_type *kobj_type) {

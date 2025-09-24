@@ -1,5 +1,4 @@
 /**
-/**
  * @file string.c
  * @author verner002
  * @date 25/08/2025
@@ -7,7 +6,7 @@
 
 #include "types.h"
 #include "kstdlib/string.h"
-#include "kernel/heap.h"
+#include "mm/heap.h"
 
 /**
  * strlen

@@ -13,7 +13,6 @@
 #include "null.h"
 #include "types.h"
 #include "kernel/kobj.h"
-#include "kstdlib/string.h"
 
 /**
  * Types Definitions
@@ -51,4 +50,5 @@ struct __attribute__((__packed__)) __symbol {
  * Declarations
 */
 
-uint32_t __link_symbol(DRIVER *driver, char const *name);
+int32_t __init_drivers(void);
+struct __driver *__register_driver(char const *name, struct __kobj_type *ktype);

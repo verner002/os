@@ -1,27 +1,22 @@
 # OS
 Operating system written in x86 Assembly and C for the i486 architecture or later revisions.
 
-# Building the project
+# Building The Project
 ## Dependencies
 At least these versions of listed packages are required:
 ```
-gcc >= 14.2.1
-ld >= 2.44
+gcc >= 15.2.1
+ld >= 2.45.0
 nasm >= 2.16.03
 make >= 4.4.1
-dd >= 9.6
+dd >= 9.7
 mkfs.fat >= 4.2
 ```
 
 ## Build
-To build the project use:
+To build the project (including the bootable floppy image) use:
 ```
 $ make
-```
-
-To create a bootable image use:
-```
-$ make image
 ```
 
 # Stage 1
@@ -98,3 +93,104 @@ The memory map for Stage 2 slightly differs from the first one because now we ar
 |:-----:|:---:|:----:|------|-------------|
 | `0x00000000` | `0x000fffff` | 1 MiB | Reserved | First MiB
 | `0x80000000` | `0x80400000` | 4 MiB | Kernel | Kernel
+
+# Portability
+- Even though this is just a hobby operating system I am doing my best to make it portable.
+
+## Atomic Types & Operations
+- `atomic_t` and `uatomic_t` are basically (unsigned) integer types:
+```c
+typedef int atomic_t;
+typedef unsigned int uatomic_t;
+```
+- What actually differs is a set of operations used to increment or decrement value of an `atomic_t` variable. This is because the compiler can sometimes try to optimize our code which is not always what we want it to do.
+- This means these operations are platform dependent and must be defined for each architecture.
+- For x86 the increment and decrement operations are defined like this:
+```c
+#define __atomic_inc(x) __asm__ volatile (  \
+    "inc dword [%0]"                        \
+    :                                       \
+    : "m" (x)                               \
+    :                                       \
+);
+
+#define __atomic_inc(x) __asm__ volatile (  \
+    "dec dword [%0]"                        \
+    :                                       \
+    : "m" (x)                               \
+    :                                       \
+);
+```
+
+# Boot Configuration
+- Boot configuration is a way to tell kernel which device it should use a root device, to set environment variables and many other stuff.
+- The pointer to the command line is passed as an arument to the `__entry` function along with other arguments like cursor position, E820 map, etc.
+
+## Root Configuration
+- The kernel is able to mount whatever drive you want it to as a root file system. The easiest way to do so is to set the `root` property in boot configuration:
+```
+root=/dev/hda
+```
+- Here is the list of supported root devices in the current kernel version:
+
+| Name | Path | Description |
+|:-----|:-----|:------------|
+| fd0 | /dev/fd0 | First floppy disk drive |
+| hda | /dev/hda | First hard disk drive |
+| hdb | /dev/hdb | Second hard disk drive |
+| hdc | /dev/hda | Third hard disk drive |
+| hdd | /dev/hda | Fourth hard disk drive |
+
+# Environment Variables Configuration
+- Not implemented yet. :\-\(
+
+# Virtual File System
+- Virtual file system (VFS) provides an abstraction for all file systems which could be present on a physical media.
+- File system is represented by a graph structure consisting of `__dentry`s and `__inode`s.
+- A `__dentry` maps the structure (how are all the entries connected), `__inode`, on the other hand, contains metadata describing the associated `__dentry` (what the entry represents).
+- The structutes look like this:
+```c
+struct __dentry {
+    char const *name;               // entry name
+    char sname[10];                 // short name
+    atomic_t refs;                  // reference counter
+    struct __dentry_ops ops;        // entry operations
+    struct __inode *inode;          // metadata node
+    struct __dentry *parent;        // parent entry
+    struct __dentry *previous;      // previous entry
+    struct __dentry *next;          // next entry
+    struct __dentry *child_head;    // head of children linked-list
+};
+
+struct __inode {
+    uint32_t mode;                  // entry mode
+    atomic_t refs;                  // reference counter
+    struct __dentry *dentry;        // entry node
+    uint32_t uid;                   // owner id
+    uint32_t gid;                   // owner group id
+    uint32_t block_n;               // block number
+    uint32_t block_cnt;             // block count
+    uint32_t block_sz;              // block size
+};
+```
+
+# Device & Driver Model
+## Kernel Object
+- `__kobj` is similar to the one used in GNU/Linux. On its own the kernel object is useless. To become usefull we need to attach `__kobj_type` to and assign it to a device(/bus/driver/etc.). This way we are able to create a tree-like structure which allows us to operate with each device the same way.
+- The structure is defined like this:
+```c
+struct __kobj {
+    char const *k_name;
+    char k_sname[10];
+    atomic_t k_refs;
+    struct __kobj *k_parent;
+    struct __kobj *k_previous;
+    struct __kobj *k_next;
+    struct __kobj_type *k_type;
+    struct __dentry *k_dentry;
+};
+```
+
+## Kernel Object Type
+
+## Kernel Object Set
