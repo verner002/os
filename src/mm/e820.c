@@ -124,10 +124,6 @@ static void __insert_region(E820_ENTRY entry, uint32_t index) {
  *  2) use buffer only (no current temp var)?
  *  3) get rid of the last operation outside
  *     the for cycle
- * 
- * FIXME:
- *  1) the function creates a duplicate of block
- *     0x000f0000 - 0x000fffff for some reason
 */
 
 void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
@@ -232,6 +228,10 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
 
                 current = prioritized;
             } else { // current->entry->type > prioritized->entry->type
+                base = prioritized->address;
+                size = current->address - prioritized->address;
+                type = prioritized->entry->type;
+
                 uint32_t prev_address = prioritized->address;
                 prioritized->address = current->entry->base + current->entry->size;
 
