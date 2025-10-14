@@ -31,7 +31,7 @@ __init_paging:
     .fill_entries: ; pt for first MiB follows the pd
     movzx eax, cl ; let's use cl value to self map the memory
     shl eax, 0x0c ; *4096 (translate to page aligned address)
-    or al, 0x07 ; user, r/w, present
+    or al, 0x17 ; user, r/w, present, cache disabled
     stosd ; store pt entry
     inc cl
     jnz .fill_entries ; fill 256 entries

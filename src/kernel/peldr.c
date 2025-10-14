@@ -96,6 +96,7 @@ void *__parse_image(uint8_t *image, uint32_t address) {
 
         uint32_t pages_count = (virtual_size + 4095) / 4096;
 
+        // FIXME: use pgalloc!!!
         void *page = __e820_rmalloc(4096, TRUE);
 
         if (page) {

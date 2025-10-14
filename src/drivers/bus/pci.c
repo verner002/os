@@ -154,7 +154,7 @@ int32_t __init_pci(void) {
     if (!driver)
         return -1;
 
-    struct __bus *bus = __register_bus("PCI", driver);
+    struct __bus *bus = __register_bus("pci", driver);
 
     if (!bus) {
         printk("pci: error: failed to register bus\n");
@@ -234,8 +234,20 @@ int32_t __init_pci(void) {
                         break;
                 }
 
-                if (dev_init && init_header)
+                if (dev_init && init_header) {
+                    __outd(PCI_CONFIG_ADDRESS,
+                        ((uint32_t)bus_i << 16) |
+                        ((uint32_t)(dev_i & 0x1f) << 11) |
+                        ((uint32_t)(func_i & 0x07) << 8) |
+                        ((uint32_t)(4 & 0xfc) << 0) |
+                        PCI_CONFIG_CYCLE_ENABLED
+                    );
+                
+                    // enable interrupts and bus mastering
+                    __outd(PCI_CONFIG_DATA, (((uint32_t)init_header->h_status << 16) | init_header->h_command) & ~(1 << 10) | 0x00000004);
+                    
                     dev_init(bus, init_header);
+                }
 
                 if (!(dev_header.h_header_type & PCI_MULTIFUNCTION))
                     break;

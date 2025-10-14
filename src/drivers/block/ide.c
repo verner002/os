@@ -402,7 +402,7 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
         if (__ide_poll(channel, TRUE))
             return -4;
 
-        asm (
+        asm volatile (
             "rep insw"
             :
             : "c" (256), "d" (port), "D" (offset)

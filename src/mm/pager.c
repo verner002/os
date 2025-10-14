@@ -5,6 +5,7 @@
 */
 
 #include "mm/pager.h"
+#include "mm/vmm.h"
 
 static uint32_t *bitmap; // size=x/(4096*8) to represent x bytes
 static uint32_t size; // number of uint32_t in bitmap
@@ -80,10 +81,10 @@ void *pgalloc(void) {
             uint32_t temp = bitmap[i];
             temp ^= bitmap[i] |= temp + 1; // toggles the first 0 bit it finds
 
-            asm (
-                "push eax\t\n"
-                "bsr eax, %1\t\n"
-                "mov %0, eax\t\n"
+            asm volatile (
+                "push eax\n\t"
+                "bsr eax, %1\n\t"
+                "mov %0, eax\n\t"
                 "pop eax"
                 : "=m" (temp)
                 : "m" (temp)
@@ -97,8 +98,10 @@ void *pgalloc(void) {
             r |= ((temp & 0x0000ff00) != 0) << 3;*/
 
             last_index = i; // update offset
+            uint32_t address = (i * 32 + (uint32_t)temp) * 4096;
             
-            return (void *)((i * 32 + (uint32_t)temp) * 4096);
+            __map_page(address, address, PAGE_READ_WRITE | PAGE_USER);
+            return (void *)address;
         }
     }
 

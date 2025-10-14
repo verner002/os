@@ -73,10 +73,12 @@ int32_t strncmp(char const *str1, char const *str2, uint32_t n) {
 
 /**
  * memset
+ * 
+ * TODO: use `rep movsb'
 */
 
 void *memset(void *ptr, int value, uint32_t n) {
-    for (uint32_t i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i)
         ((uint8_t *)ptr)[i] = (uint8_t)value;
 
     return ptr;

@@ -15,5 +15,6 @@
 void __init_heap(void *p, uint32_t s);
 void __dump_heap(void);
 void *kmalloc(uint32_t n);
+void *kzalloc(uint32_t size, uint32_t alignment);
 void *krealloc(void *p, uint32_t n);
 void kfree(void *p);

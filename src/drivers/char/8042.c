@@ -600,11 +600,18 @@ int32_t __init_ps2(void) {
     printf("%s\n", ps2_port_a->name);
 
     printk("\033[33mps2:\033[37m port-a: Setting scan code set 2... ");
+    errno = 0;
     __ps2_set_scancode_set(SCANCODE_SET_2);
-    printf("Ok\n");
+    printf("%s\n", errno ? "Err" : "Ok");
 
+    printk("\033[33mps2:\033[37m port-a: Resetting LEDs... ");
     leds = LED_RESET;
+    errno = 0;
     __ps2_update_leds();
+    printf("%s\n", errno ? "Err" : "Ok");
+
+    // TODO: flush data port register? (seems to keep
+    //  an extra 0xfa response code)
 
     printk("\033[33mps2:\033[37m port-a: Ready\n");
     return 0;
@@ -653,7 +660,7 @@ void __ps2_write_byte(uint8_t r, uint8_t v) {
             return;
         }
 
-        __delay_ms(1);
+        //__delay_ms(1);
     }
 
     errno = ETIMEDOUT;
@@ -668,7 +675,7 @@ uint8_t __ps2_read_byte(void) {
         if (__inb(PS2_STATUS_REGISTER) & 0x01)
             return __inb(PS2_DATA_PORT_REGISTER);
 
-        __delay_ms(1);
+        //__delay_ms(1);
     }
 
     errno = ETIMEDOUT;

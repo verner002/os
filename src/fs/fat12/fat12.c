@@ -26,7 +26,7 @@ static FAT12_RECORD *root_dir = NULL;
 
 int32_t __fat12_read_fat(void) {
     if (!fat) {
-        fat = (uint8_t *)__e820_rmalloc(9*512, FALSE);
+        fat = (uint8_t *)kmalloc(9*512);
 
         if (!fat)
             return -1;
@@ -41,7 +41,7 @@ int32_t __fat12_read_fat(void) {
 
 int32_t __fat12_read_root_dir(void) {
     if (!root_dir) {
-        root_dir = (FAT12_RECORD *)__e820_rmalloc(224*32, TRUE);
+        root_dir = (FAT12_RECORD *)kmalloc(224*32);
 
         if (!root_dir)
             return -1;

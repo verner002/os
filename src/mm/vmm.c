@@ -67,8 +67,13 @@ int32_t __init_vmm(void) {
 */
 
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags) {
-    if (!page_directory || (page_directory & 31) || !physical_memory)
+    if (!page_directory || (page_directory & 31) || !physical_memory) {
+        printk("page-map: invalid arguments: %p, %p\n", page_directory, physical_memory);
         return -1;
+    }
+
+    virtual_memory &= 0xfffff000;
+    physical_memory &= 0xfffff000;
     
     uint32_t page = (uint32_t)virtual_memory / PAGE_SIZE;
 
@@ -77,10 +82,12 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     PAGING_TABLE_ENTRY *page_table;
 
     if (!(pde->address & 0x000fffff)) { // no page table, create one
-        page_table = (PAGING_TABLE_ENTRY *)__e820_rmalloc(4096, TRUE)/*pgalloc()*/;
+        page_table = (PAGING_TABLE_ENTRY *)pgalloc();
 
-        if (!page_table)
+        if (!page_table) {
+            printk("page-map: not enough memory for page table\n");
             return -1;
+        }
 
         memset(page_table, 0, PAGE_TABLE_SIZE);
 
@@ -88,7 +95,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
         pde->granularity = !!PAGE_4KIB;
         pde->read_write = !!PAGE_READ_WRITE;
         pde->user_supervisor = !!PAGE_USER;
-        pde->cache_disabled = !!PAGE_CACHE_ENABLED;
+        pde->cache_disabled = 1 /*!!PAGE_CACHE_ENABLED*/;
         pde->write_through = !!PAGE_WRITE_THROUGH;
         pde->present = 1;
     } else
@@ -101,9 +108,9 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
 
     pte->address = ((uint32_t)physical_memory >> 12); // must be page-aligned
     pte->read_write = flags & PAGE_READ_WRITE; // default: read only
-    pte->user_supervisor = flags & PAGE_USER; // default: supervisor
-    pte->cache_disabled = flags & PAGE_CACHE_DISABLED; // default: cache enabled
-    pte->write_through = !(flags & PAGE_WRITE_THROUGH); // default: write-through
+    pte->user_supervisor = !!(flags & PAGE_USER); // default: supervisor
+    pte->cache_disabled = 1 /*(flags & PAGE_CACHE_DISABLED)*/; // default: cache enabled
+    pte->write_through = 1 /*!(flags & PAGE_WRITE_THROUGH)*/; // default: write-through
     pte->page_attribute_table = 0;
     pte->present = 1;
 
@@ -111,9 +118,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     //"mov %1, cr3" : "=r" (page_directory) : "r" (page_directory) : "memory");
 
     asm volatile (
-        //"cli\t\n"
-        "invlpg dword ptr [%0]\t\n"
-        //"sti"
+        "invlpg dword ptr [%0]"
         :
         : "r" (virtual_memory)
         : "memory"

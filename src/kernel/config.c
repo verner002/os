@@ -9,7 +9,7 @@
 #include "kernel/kdev.h"
 #include "kstdlib/stdio.h"
 
-extern uint16_t root_dev;
+extern __kdev_t root_dev;
 extern char *envs[16];
 
 /**

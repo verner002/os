@@ -107,14 +107,14 @@ typedef unsigned int uatomic_t;
 - This means these operations are platform dependent and must be defined for each architecture.
 - For x86 the increment and decrement operations are defined like this:
 ```c
-#define __atomic_inc(x) __asm__ volatile (  \
+#define __atomic_inc(x) asm volatile (  \
     "inc dword [%0]"                        \
     :                                       \
     : "m" (x)                               \
     :                                       \
 );
 
-#define __atomic_inc(x) __asm__ volatile (  \
+#define __atomic_inc(x) asm volatile (  \
     "dec dword [%0]"                        \
     :                                       \
     : "m" (x)                               \

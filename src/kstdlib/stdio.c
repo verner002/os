@@ -37,7 +37,7 @@ FILE
 */
 
 void __stack_chk_fail(void) {
-    printf("Stack overflow\n");
+    printf("Stack overflow %u\n", __get_pid());
 }
 
 /**
@@ -55,14 +55,13 @@ bool feof(FILE *stream) {
  *  THIS IS A BLOCKING IMPLEMENTATION OF GETC
 */
 
-//static bool __wake;
+bool __wake;
 
 int getc(FILE *stream) {
     // buffer empty -> sleep the task
     if (!stream->__count) {
-        /*__wake = FALSE;
-        __wake_on(&__wake);*/
-        __sleep_me();
+        __wake = FALSE;
+        __wake_on(&__wake);
     }
 
     /*if (!stream->__count) {
@@ -110,8 +109,8 @@ int32_t putc(int c, FILE *stream) {
             ++stream->__count;
             stream->__base[stream->__index++ % stream->__size] = c;
 
-            /*if (c == '\n')
-                __wake = TRUE;*/
+            if (c == '\n')
+                __wake = TRUE;
 
             return 0;
         }
@@ -189,22 +188,6 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                         if (d > '9') d += 'a' - '9' - 1;
                         
                         putc(d, stream);
-                    }
-                    break;
-                }
-                case 'l': {
-                    switch (/*c = */s[++i]) {
-                        case 'u': {
-                            uint8_t n[20];
-                            uint64_t u = va_arg(args, uint64_t);
-                            uint32_t j = 0;
-
-                            do n[j++] = u % 10 + '0'; while (u /= 10);
-                            do errno = putc(n[--j], stream); while (j && !errno);
-                            break;
-                        }
-                        default:
-                            return -1;
                     }
                     break;
                 }

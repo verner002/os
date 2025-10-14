@@ -50,6 +50,7 @@ struct __file {
     uint32_t __flags; // flags
     uint32_t __size; // buffer size
     char *__fname; // filename
+    bool __lock; // mutex
 };
 
 struct __dir {

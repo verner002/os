@@ -43,6 +43,13 @@ void __disable_speaker(void) {
 */
 
 void __play_note(uint16_t f) {
-    __outw(PIT_CHANNEL_2_DATA_REGISTER, 0x001234de / f);
+    if (f < 13)
+        f = 13;
+
+    uint16_t value = 0x001234de / f;
+
+    //__disable_speaker();
+    __outb(PIT_CHANNEL_2_DATA_REGISTER, (uint8_t)value);
+    __outb(PIT_CHANNEL_2_DATA_REGISTER, (uint8_t)(value >> 8));
     __enable_speaker();
 }

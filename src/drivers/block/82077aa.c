@@ -498,7 +498,7 @@ char const*__get_drive_type_string(DRIVE drive) {
     return names[(uint32_t)drive.type];
 }
 
-static void __fdc_daemon(void) {
+static int32_t __fdc_daemon(int argc, char **argv) {
     for (;;) {
         while (!fdc.motorOn);
 
@@ -539,7 +539,6 @@ int32_t __init_fdc(void) {
     //printk("\033[33mfdc:\033[37m Preparing IRQ6 handler... ");
 
     __disable_interrupts();
-    __send_master_eoi();
     __set_handler(0x26, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__fdc_irq6_handler);
     __enable_interrupts();
     __enable_irq(0x06); // irq6
@@ -548,6 +547,7 @@ int32_t __init_fdc(void) {
 
     if (__fdc_reset()) {
         printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
+        __disable_irq(0x06);
         return -1;
     }
 
@@ -555,10 +555,9 @@ int32_t __init_fdc(void) {
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_task("fdc-daemon", (uint32_t)&__fdc_daemon, TASK_EXEC_KERNEL);
+    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0);
 
     printk("\033[33mfdc:\033[37m FDC daemon running, PID=%u\n", pid);
-
     printk("\033[33mfdc:\033[37m Initialized\n");
     return 0;   
 }

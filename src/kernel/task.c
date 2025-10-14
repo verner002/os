@@ -9,98 +9,333 @@
 */
 
 #include "kernel/task.h"
+#include "drivers/vga.h"
 
-/**
- * Static Global Variables
-*/
+#define THREAD_STATE_IDLE 0
+#define THREAD_STATE_RUNNING 1
+#define THREAD_STATE_SLEEPING 2
+#define THREAD_STATE_EXITING 3
 
-static int32_t next_pid = 0;
-static bool tasking_mutex = FALSE;
-TASK
-    *first_task,
-    *last_task,
-    *current_task = NULL;
+#define push_32(stack, value) *--stack = (value)
+
+struct __thread_fs {
+    //uint32_t t_users;
+    struct __dentry *t_dentry;
+};
+
+struct __thread_control_block {
+    uint32_t t_esp; // current esp
+    uint32_t t_stack; // stack bottom
+    uint32_t t_kernel_esp; // current kernel esp
+    uint32_t t_kernel_stack; // kernel stack bottom
+    int32_t t_pid; // process id
+    uint32_t t_state; // task state
+    uint32_t t_flags; // privilage level
+    uint32_t t_page_dir; // paging directory
+    int32_t t_exit_code; // exit code
+    int32_t t_parent_pid;
+    struct __thread_control_block *t_nextt; // next thread
+    char const *t_name;
+    struct __thread_fs *t_fs;
+    /*FILE *t_stdin;
+    FILE *t_stdout;
+    FILE *t_stderr;*/
+};
+
+bool __sched_lock = FALSE;
+struct __thread_control_block
+    *thread_lhead = NULL,
+    *thread_lcurrent = NULL,
+    *thread_ltail = NULL;
+
+static int32_t __thread_next_pid = 0;
 
 /**
  * __get_pid
 */
 
 int32_t __get_pid(void) {
-    return current_task->pid;
+    if (!thread_lcurrent)
+        return -1;
+
+    return thread_lcurrent->t_pid;
+}
+
+/**
+ * __get_dentry
+*/
+
+struct __dentry *__get_dentry(void) {
+    if (!thread_lcurrent || !thread_lcurrent->t_fs)
+        return NULL;
+
+    return thread_lcurrent->t_fs->t_dentry;
 }
 
 /**
  * __exit
 */
 
-int32_t __exit(int32_t code) {
-    current_task->state = TASK_STATE_EXITING;
-    current_task->code = code;
+__attribute__((noreturn)) int32_t __exit(int32_t code) {
+    __mutex_lock(&__sched_lock);
+    thread_lcurrent->t_state = THREAD_STATE_EXITING;
+    thread_lcurrent->t_exit_code = code;
+    __mutex_unlock(&__sched_lock);
+    
     for(;;); // idle loop
 }
 
 /**
- * __quiet_exit
+ * __thread_setup
 */
 
-void __quiet_exit(void) {
-    __exit(0);
+static void __thread_setup(void) {
+    // returns into main
 }
 
 /**
- * __create_task
+ * __thread_exit
 */
 
-int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
-    __mutex_lock(&tasking_mutex);
+static void __thread_exit(void) {
+    __exit(thread_lcurrent->t_exit_code);
+}
 
-    if (!current_task) {
-        __mutex_unlock(&tasking_mutex);
+/**
+ * __create_thread
+*/
+
+int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags) {
+    if (!thread_lcurrent)
         return -1;
-    }
 
-    TASK *task = (TASK *)kmalloc(sizeof(TASK));
-    
-    if (!task) {
-        __mutex_unlock(&tasking_mutex);
-        return -1;
-    }
+    // 
+    bool spawn_ring_0_thread = flags & THREAD_RING_0;
 
-    task->name = name;
-    task->parent_pid = -1;
-    task->pid = next_pid++;
-    task->state = TASK_STATE_IDLE;
-    task->mode = mode;
-    task->code = -1;
-    task->t_fs = current_task->t_fs;
+    // is thread allowed to spawn ring 0 thread?
+    if (spawn_ring_0_thread && !(thread_lcurrent->t_flags & THREAD_RING_0))
+        return -2;
 
-    uint32_t stack = (uint32_t)/*pgalloc()*/__e820_rmalloc(4096, TRUE) + 4096 - sizeof(uint32_t);
+    //printk("%u\n", sizeof(struct __thread_control_block));
+    kmalloc(63UL);
+
+    if (__thread_next_pid++ == 1)
+        return 1;
+
+    struct __thread_control_block *thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
+
+    if (!thread)
+        return -3;
+
+    uint32_t *stack = (uint32_t *)pgalloc();
 
     if (!stack) {
-        kfree(task);
-        __mutex_unlock(&tasking_mutex);
-        return -1;
+        kfree(thread);
+        return -4;
     }
 
-    *(uint32_t *)stack = (uint32_t)&__quiet_exit;
+    uint32_t *kstack = (uint32_t *)pgalloc();
 
-    task->esp = task->ebp = stack;
-    task->kernel_stack = (uint32_t)/*pgalloc()*/__e820_rmalloc(4096, TRUE) + 4096;
-
-    if (!task->kernel_stack) {
-        kfree(task);
-        pgfree((void *)stack);
-        __mutex_unlock(&tasking_mutex);
-        return -1;
+    if (!kstack) {
+        pgfree(stack);
+        kfree(thread);
+        return -5;
     }
 
-    task->eip = process;
-    task->next = first_task;
-    last_task->next = task;
-    last_task = task;
+    // clear stack
+    memset(stack, 0, 4096);
+    memset(kstack, 0, 4096);
+
+    thread->t_pid = __thread_next_pid++;
+    thread->t_state = THREAD_STATE_IDLE;
+    thread->t_flags = flags;
+    thread->t_page_dir = 0;
+    thread->t_exit_code = -1;
+    thread->t_parent_pid = thread_lcurrent->t_pid;
+
+    thread->t_name = name;
+    thread->t_fs = thread_lcurrent->t_fs;
+    /*thread->t_stdin = NULL;
+    thread->t_stdout = NULL;
+    thread->t_stderr = NULL;*/
+
+    // set stack bottom for pgfree
+    thread->t_stack = (uint32_t)stack;
+    thread->t_kernel_stack = (uint32_t)kstack;
+
+    // += (KERNEL_)STACK_SIZE / sizeof(uint32_t)
+    stack += 1024;
+    kstack += 1024;
+
+    *--stack = (uint32_t)&__thread_exit; // thread exit
+    *--stack = (uint32_t)main; // eip
+
+    // set up thread stack
+    if (!spawn_ring_0_thread) {
+        uint32_t temp = (uint32_t)stack;
+        *--stack = 0x00000023;
+        *--stack = temp;
+    }
+
+    *--stack = 0x00000202; // eflags
+
+    if (spawn_ring_0_thread)
+        *--stack = 0x00000008; // cs
+    else
+        *--stack = 0x0000001b; // cs
     
-    __mutex_unlock(&tasking_mutex);
-    return task->pid;
+    *--stack = (uint32_t)&__thread_setup; // thread setup
+    
+    uint32_t temp = (uint32_t)stack;
+
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = temp;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+
+    if (spawn_ring_0_thread) {
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+    } else {
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+    }
+
+    thread->t_esp = (uint32_t)stack;
+
+    // set up kernel stack
+    thread->t_kernel_esp = (uint32_t)kstack;
+    
+    // ----- CRITICAL -----
+    __mutex_lock(&__sched_lock);
+    thread->t_nextt = thread_lhead;
+    thread_ltail->t_nextt = thread;
+    thread_ltail = thread;
+    __mutex_unlock(&__sched_lock);
+    // ----- CRITICAL -----
+    return thread->t_pid;
+}
+
+/**
+ * __sched_init
+*/
+
+int32_t __sched_init(struct __dentry *root_dentry) {
+    struct __thread_control_block *init = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
+    
+    if (!init)
+        return -1;
+
+    struct __thread_fs *init_fs = (struct __thread_fs *)kmalloc(sizeof(struct __thread_fs));
+
+    if (!init_fs) {
+        kfree(init);
+        return -1;
+    }
+
+    init_fs->t_dentry = root_dentry;
+
+    init->t_name = "kernel";
+    init->t_parent_pid = -1;
+    init->t_pid = __thread_next_pid++;
+    init->t_state = THREAD_STATE_RUNNING;
+    init->t_flags = THREAD_RING_0;
+    init->t_exit_code = -1;
+    init->t_fs = init_fs;
+    //init->t_esp = 0;
+    init->t_stack = 0;
+    // not used by thread 0
+    init->t_kernel_esp = 0;
+    init->t_kernel_stack = 0;
+    
+    asm volatile (
+        "mov %0, cr3"
+        : "=r" (init->t_page_dir)
+        :
+        :
+    );
+
+    init->t_nextt = init;
+
+    __mutex_lock(&__sched_lock);
+    thread_lhead = thread_lcurrent = thread_ltail = init;
+    __mutex_unlock(&__sched_lock);
+    return 0;
+}
+
+/**
+ * __dispatch
+*/
+
+void __dispatch(void) {
+    if (thread_lcurrent->t_state == THREAD_STATE_RUNNING)
+        thread_lcurrent->t_state = THREAD_STATE_IDLE;
+
+    struct __thread_control_block *prev_thread;
+    struct __thread_control_block *next_thread = thread_lcurrent;
+    bool next;
+
+    do {
+        prev_thread = next_thread;
+        next_thread = next_thread->t_nextt;
+        next = FALSE;
+
+        switch (next_thread->t_state) {
+            case THREAD_STATE_SLEEPING:
+                next = TRUE;
+                break;
+
+            case THREAD_STATE_EXITING:
+                if (next_thread->t_stack)
+                    pgfree((void *)next_thread->t_stack);
+
+                if (next_thread->t_kernel_stack)
+                    pgfree((void *)next_thread->t_kernel_stack);
+
+                prev_thread->t_nextt = next_thread->t_nextt;
+
+                if (next_thread == thread_lhead)
+                    thread_lhead = next_thread->t_nextt;
+
+                if (next_thread == thread_ltail)
+                    thread_ltail = next_thread->t_nextt;
+
+                kfree(next_thread);
+                next_thread = prev_thread;
+                next = TRUE;
+                break;
+        }
+    } while (next);
+
+    thread_lcurrent = next_thread;
+    thread_lcurrent->t_state = THREAD_STATE_RUNNING;
+    return;
+}
+
+/**
+ * __wake_on
+*/
+
+void __wake_on(bool *alarm) {
+    //__mutex_lock(&__sched_lock);
+    //thread_lcurrent->t_state = THREAD_STATE_SLEEPING;
+    //__mutex_unlock(&__sched_lock);
+
+    // something could wake the thread up
+    // so we check both the alarm and the state
+    while (!*alarm/* && thread_lcurrent->t_state != THREAD_STATE_RUNNING*/);
+
+    __mutex_lock(&__sched_lock);
+    thread_lcurrent->t_state = THREAD_STATE_RUNNING;
+    __mutex_unlock(&__sched_lock);
 }
 
 /**
@@ -108,28 +343,31 @@ int32_t __create_task(char const *name, uint32_t process, TASK_EXEC_MODE mode) {
 */
 
 int32_t __sleep_task(int32_t pid) {
-    __mutex_lock(&tasking_mutex);
-    TASK *task = first_task;
+    __mutex_lock(&__sched_lock);
+    struct __thread_control_block *thread = thread_lhead;
     bool not_found = TRUE;
 
+    // TODO: compare current thread pid with pid
     do {
-        if (task->pid == pid) {
+        if (thread->t_pid == pid) {
             not_found = FALSE;
             break;
         }
 
-        task = task->next;
-    } while (task != first_task);
+        thread = thread->t_nextt;
+    } while (thread != thread_lhead);
 
     if (not_found) {
-        __mutex_unlock(&tasking_mutex);
+        __mutex_unlock(&__sched_lock);
         return -1;
     }
 
-    task->state = TASK_STATE_SLEEP;
-    __mutex_unlock(&tasking_mutex);
-    // wait for task switch, TODO: invoke task switch?
-    while (current_task->state != TASK_STATE_RUNNING);
+    thread->t_state = THREAD_STATE_SLEEPING;
+    __mutex_unlock(&__sched_lock);
+    // wait for ctx switch, TODO: invoke ctx switch?
+
+    // if the thread is the current thread
+    while (thread_lcurrent->t_state != THREAD_STATE_RUNNING);
     return 0;
 }
 
@@ -138,7 +376,7 @@ int32_t __sleep_task(int32_t pid) {
 */
 
 int32_t __sleep_me(void) {
-    return __sleep_task(current_task->pid);
+    return __sleep_task(thread_lcurrent->t_pid);
 }
 
 /**
@@ -146,232 +384,57 @@ int32_t __sleep_me(void) {
 */
 
 int32_t __wake_task(int32_t pid) {
-    __mutex_lock(&tasking_mutex);
-    TASK *task = first_task;
+    __mutex_lock(&__sched_lock);
+    struct __thread_control_block *thread = thread_lcurrent;
     bool not_found = TRUE;
 
     do {
-        if (task->pid == pid) {
+        if (thread->t_pid == pid) {
             not_found = FALSE;
             break;
         }
 
-        task = task->next;
-    } while (task != first_task);
+        thread = thread->t_nextt;
+    } while (thread != thread_lhead);
 
     if (not_found) {
-        __mutex_unlock(&tasking_mutex);
+        __mutex_unlock(&__sched_lock);
         return -1;
     }
 
-    if (task->state != TASK_STATE_SLEEP) {
-        __mutex_unlock(&tasking_mutex);
-        return -2;
+    if (thread->t_state != THREAD_STATE_SLEEPING) {
+        __mutex_unlock(&__sched_lock);
+        return 0; // thread is awake, return error?
     }
 
-    task->state = TASK_STATE_WAKE;
-    __mutex_unlock(&tasking_mutex);
+    thread->t_state = THREAD_STATE_IDLE;
+    __mutex_unlock(&__sched_lock);
     return 0;
 }
 
 /**
- * __wake_on
+ * __list_threads
 */
 
-/*int32_t __wake_on(bool *wake_on) {
-    current_task->wake_on = wake_on;
-    return 0;
-}*/
-
-/**
- * __init_tasking
-*/
-
-int32_t __init_tasking(struct __dentry *root) {
-    __mutex_lock(&tasking_mutex);
-    printk("Initializing tasking... ");
-
-    first_task = (TASK *)kmalloc(sizeof(TASK));
-
-    if (!first_task) {
-        __mutex_unlock(&tasking_mutex);
-        return -1;
-    }
-
-    struct __task_fs *fs = (struct __task_fs *)kmalloc(sizeof(struct __task_fs));
-
-    if (!fs) {
-        kfree(first_task);
-        first_task = NULL;
-        __mutex_unlock(&tasking_mutex);
-        return -2;
-    }
-
-    //fs->t_users = 1;
-    fs->t_dentry = root; // no root mounted
-
-    first_task->name = "kernel";
-    first_task->parent_pid = -1;
-    first_task->pid = next_pid++;
-    first_task->state = TASK_STATE_RUNNING;
-    first_task->mode = TASK_EXEC_KERNEL;
-    first_task->code = -1;
-    first_task->t_fs = fs;
-
-    void *stack = __e820_rmalloc(4096, TRUE); //pgalloc();
-
-    if (!stack) {
-        kfree(first_task);
-        __mutex_unlock(&tasking_mutex);
-        return -2;
-    }
-
-    first_task->esp = first_task->ebp = (uint32_t)stack + 4096;
-
-    void *kstack = __e820_rmalloc(4096, TRUE); //pgalloc();
-
-    if (!kstack) {
-        pgfree(stack);
-        kfree(first_task);
-        __mutex_unlock(&tasking_mutex);
-        return -3;
-    }
-
-    first_task->kernel_stack = (uint32_t)kstack + 4096;
-    first_task->next = first_task;
-    last_task = current_task = first_task;
-
-    printf("Ok\n");
-    __mutex_unlock(&tasking_mutex);
-    return 0;
-}
-
-/**
- * __list_tasks
-*/
-
-void __list_tasks(void) {
-    __mutex_lock(&tasking_mutex);
+void __list_threads(void) {
+    __mutex_lock(&__sched_lock);
     
-    TASK *task = first_task;
+    struct __thread_control_block *thread = thread_lhead;
     
     do {
-        printk("task pid=%u, state=%u, mode=%u, name=%s\n", task->pid, task->state, task->mode, task->name);
-        task = task->next;
-    } while (task != first_task);
+        printk("thread pid=%u, state=%u, flags=%08x, name=%s\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name);
+        printk("  stack: %p, kstack: %p\n", thread->t_stack, thread->t_kernel_stack);
+        thread = thread->t_nextt;
+    } while (thread != thread_lhead);
     
-    __mutex_unlock(&tasking_mutex);
-}
-
-/**
- * __switch_task
- * 
- * FIXME:
- *  switch task should lock mutex!!!
-*/
-
-void __switch_task(void) {
-    if (!current_task)
-        return; // not initialized
-
-    if (__test_set(&tasking_mutex))
-        return;
-
-    /*if (current_task == current_task->next)
-        return; // only one task*/
-
-    // idle current task
-    if (current_task->state == TASK_STATE_RUNNING)
-        current_task->state = TASK_STATE_IDLE;
-
-    /**
-     * two things can happen here:
-     * 1) __read_eip returned the current processes address and
-     *    we're going to do task switch
-     * 2) the task switch just happened and the old process is
-     *    being resumed
-    */
-
-    uint32_t eip = __read_eip(); // get current eip
-
-    // if the task state is TASK_STATE_RUNNING, task switch happend and
-    // we're being resumed, otherwise we're performing the task switch
-    if (current_task->state == TASK_STATE_RUNNING)
-        return; // resumed task, let it run
-
-    uint32_t esp, ebp;
-
-    asm (
-        "mov %0, esp\t\n"
-        "mov %1, ebp"
-        : "=m" (esp), "=m" (ebp)
-        :
-        :
-    );
-    
-    // store current task state
-    current_task->eip = eip;
-    current_task->esp = esp;
-    current_task->ebp = ebp;
-
-    // move to next task
-    TASK *next_task = current_task->next;
-    bool get_next_task;
-    
-    do {
-        get_next_task = FALSE;
-
-        if (next_task->state == TASK_STATE_EXITING) {
-            printk("task %u exited with code %u\n", next_task->pid, next_task->code);
-
-            current_task->next = next_task->next;
-            pgfree((void *)next_task->esp);
-            pgfree((void *)next_task->kernel_stack);
-            kfree(next_task);
-
-            next_task = next_task->next;
-            get_next_task = TRUE;
-        } else if (next_task->state == TASK_STATE_SLEEP) {
-            /*if (next_task->wake_on && *next_task->wake_on)
-                next_task->wake_on = NULL;
-            else {*/
-                //next_task->state = TASK_STATE_SLEEPING;
-                next_task = next_task->next;
-                get_next_task = TRUE;
-            //}
-        } /*else if (next_task->state == TASK_STATE_SLEEPING) {
-            next_task = next_task->next;
-            get_next_task = TRUE;
-        }*/
-    } while (get_next_task);
-
-    // idle, wake and running tasks can pass
-    current_task = next_task;
-    current_task->state = TASK_STATE_RUNNING;
-
-    //printk("switching to task=%p, state=%u\n", current_task->eip, current_task->state);
-
-    //__set_kernel_stack(current_task->kernel_stack); // associated kernel stack
-
-    /**
-     * ATTENTION:
-     *  if a new task is created, switch task jumps
-     *  right into its code, so we must unlock the
-     *  mutex here (in __exec_*mode, it is safer)
-    */
-    //__mutex_unlock(&tasking_mutex);
-
-    //if (current_task->mode)
-        __exec_kernelmode(current_task->eip, current_task->esp, current_task->ebp, &tasking_mutex);
-    //else
-    //    __exec_usermode(current_task->eip, current_task->esp, current_task->ebp);
+    __mutex_unlock(&__sched_lock);
 }
 
 /**
  * fork
 */
 
-int32_t fork(void) {
+/*int32_t fork(void) {
     __disable_interrupts();
 
     TASK *parent_task = current_task;
@@ -380,24 +443,23 @@ int32_t fork(void) {
     task->pid = next_pid;
     task->state = TASK_STATE_IDLE;
     task->mode = TASK_EXEC_USER;
-    task->kernel_stack = (uint32_t)pgalloc() + 4096;
     task->next = first_task;
     last_task->next = task;
     last_task = task;
 
     uint32_t eip = __read_eip();
 
-    /**
+    **
      * the `parent_task' will be always the same
      * (vas) as replicated but the `current_task'
      * changes (is `parent_task' or `task') 
-    */
+    *
 
     if (parent_task == current_task) {
         uint32_t esp, ebp;
         
         asm volatile (
-            "mov %0, esp\t\n"
+            "mov %0, esp\n\t"
             "mov %1, ebp"
             : "=r" (esp), "=r" (ebp)
             :
@@ -406,11 +468,10 @@ int32_t fork(void) {
         
         task->esp = esp;
         task->ebp = ebp;
-        task->eip = eip;
 
         __enable_interrupts();
         return next_pid++;
     }
 
     return 0;
-}
+}*/

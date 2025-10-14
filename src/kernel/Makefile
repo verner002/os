@@ -4,6 +4,9 @@
 # @date 18/09/2025
 #
 
+VERSION := "\"0.0.1\""
+ARCH := "\"x86\""
+
 BUILD ?= ../../build/kernel
 
 C_FLAGS ?= -Wno-pedantic -Wall -Wextra -masm=intel -m32 -nostdlib -nodefaultlibs -nostartfiles -fno-pie -fno-asynchronous-unwind-tables -save-temps=obj -mgeneral-regs-only -fno-builtin -std=gnu17 -g
@@ -21,6 +24,6 @@ pdac: # make platform dependent assembly code
 	$(ASM) tas.s -felf -o $(BUILD)/tas.o
 
 $(BUILD)/%.o: %.c
-	$(CC) -I../../include $(C_FLAGS) -c $< -o $@
+	$(CC) -I../../include $(C_FLAGS) -D VERSION=$(VERSION) -D ARCH=$(ARCH) -c $< -o $@
 
 ASM ?= nasm

@@ -33,7 +33,7 @@ typedef struct _global_descriptor GLOBAL_DESCRIPTOR;
 typedef struct _idt_ptr IDT_PTR;
 typedef struct _interrupt_descriptor INTERRUPT_DESCRIPTOR;
 typedef struct _task_state_segment TASK_STATE_SEGMENT;
-typedef struct _interrupt_frame INTERRUPT_FRAME;
+typedef struct __interrupt_frame INTERRUPT_FRAME;
 
 /**
  * Structures
@@ -117,7 +117,7 @@ struct __attribute__((__packed__)) _task_state_segment {
     uint16_t io_map_base;
 };
 
-struct __attribute__((__packed__)) _interrupt_frame {
+struct __attribute__((__packed__)) __interrupt_frame {
     // TODO: implement
 };
 

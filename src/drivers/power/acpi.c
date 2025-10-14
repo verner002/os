@@ -216,9 +216,6 @@ int32_t __init_acpi(void) {
 
         printk("\033[33macpi:\033[37m \033[96mRSDT located at PAS=%p\033[37m\n", rsdt);
 
-        asm ("mov %0, cr3" : "=r" (page_directory) ::);
-        page_directory &= ~31; // discards cd, wt and res
-
         uint32_t
             rsdt_origin = 0x90000000,
             page_rsdt = (uint32_t)rsdt & 0xfffff000,

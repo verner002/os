@@ -19,6 +19,8 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define swap_bytes16(x) ((((x) >> 8) & 0xff) | (((x) << 8) & 0xff00))
+
 #define sizeofarray(x) (sizeof(x) / sizeof(*x))
 
 #define containerof(ptr, type, member) ((type *)((char *)/*(typeof(((type *)0)->member) *)*/ptr - (char *)&((type *)0)->member))

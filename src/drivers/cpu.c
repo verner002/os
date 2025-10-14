@@ -9,6 +9,7 @@
 */
 
 #include "drivers/cpu.h"
+#include "drivers/isr.h"
 
 /**
  * Static Global Variable
@@ -19,12 +20,17 @@ static INTERRUPT_DESCRIPTOR *idt; // interrupt descriptor table
 static TASK_STATE_SEGMENT tss; // task state segment
 static uint64_t ticks; // current tick count, 1 tick = 1 ms
 
+void __isr(uint8_t vector, struct __interrupt_frame *frame) {
+    printk("isr: %u: unhandled interrupt\n", vector);
+    for(;;);
+}
+
 /**
  * __enable_interrupts
 */
 
 void __enable_interrupts(void) {
-    asm("sti");
+    asm volatile ("sti");
 }
 
 /**
@@ -32,7 +38,7 @@ void __enable_interrupts(void) {
 */
 
 void __disable_interrupts(void) {
-    asm("cli");
+    asm volatile ("cli");
 }
 
 /**
@@ -42,9 +48,9 @@ void __disable_interrupts(void) {
 uint32_t __cpuid_features(void) {
     uint32_t features;
 
-    asm (
-        "mov eax, 0x00000001\t\n"
-        "cpuid\t\n"
+    asm volatile (
+        "mov eax, 0x00000001\n\t"
+        "cpuid\n\t"
         : "=d" (features)
         :
         :
@@ -186,7 +192,7 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
     tss.cs = 0x000b;
     tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x0013;
 
-    asm (
+    asm volatile (
         "lgdt %0"
         :
         : "m" (gdt_ptr)
@@ -194,7 +200,6 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
     ); // flush gdt
 
     __flush_tss();
-
     printf("Ok\n");
 }
 
@@ -231,14 +236,17 @@ int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
     INTERRUPT_DESCRIPTOR __default_descriptor = {
         .offset_low = (uint16_t)((uint32_t)default_isr & 0xffff),
         .selector = 0x0008, // code segment selector
+        ._reserved = 0,
         .attributes = INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE,
         .offset_high = (uint16_t)(((uint32_t)default_isr >> 16) & 0xffff)
     };
 
-    for (uint32_t i = 0; i < 256; ++i)
-        idt[i] = __default_descriptor;
+    /*for (uint32_t i = 0; i < 256; ++i)
+        idt[i] = __default_descriptor;*/
 
-    asm (
+    __isr_init();
+
+    asm volatile (
         "lidt %0"
         :
         : "m" (idt_ptr)
@@ -257,10 +265,13 @@ void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*is
     INTERRUPT_DESCRIPTOR id = {
         .offset_low = (uint16_t)((uint32_t)isr & 0xffff),
         .selector = selector,
+        ._reserved = 0,
         .attributes = attributes,
         .offset_high = (uint16_t)(((uint32_t)isr >> 16) & 0xffff)
     };
 
+    idt[irq] = id;
+    idt[irq] = id;
     idt[irq] = id;
 }
 

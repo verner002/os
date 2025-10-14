@@ -43,7 +43,8 @@
 #include "kernel/kdev.h"
 #include "kernel/config.h"
 
-extern TASK *current_task;
+#include "kernel/tty.h"
+#include "kernel/mount.h"
 
 /**
  * panic
@@ -53,9 +54,15 @@ void panic(void) {
     printk("\033[31mKERNEL PANIC\n");
 
     for (;;) {
-        __asm__("cli");
-        __asm__("hlt");
+        asm volatile (
+            "cli\n\t"
+            "hlt"
+        );
     }
+}
+
+__attribute__((interrupt)) static void __spurious_irq_isr(INTERRUPT_FRAME *frame) {
+    
 }
 
 __attribute__((interrupt)) static void __default_isr(INTERRUPT_FRAME *frame) {
@@ -86,9 +93,18 @@ __attribute__((interrupt)) static void __bounds_check(INTERRUPT_FRAME *frame) {
 __attribute__((interrupt)) static void __invalid_opcode(INTERRUPT_FRAME *frame) {
     uint32_t eip; // instruction that caused the fault
     
-    __asm__ volatile ("pop %0" : "=m" (eip));
+    asm volatile (
+        "pop %0"
+        : "=m" (eip)
+        :
+        :
+    );
 
     printk("fault: invalid opcode at %p!\n", eip);
+
+    if (thread_lcurrent)
+        printk("thread %u\n", __get_pid());
+
     for (;;);
 }
 
@@ -103,6 +119,11 @@ __attribute__((interrupt)) static void __double_fault(INTERRUPT_FRAME *frame) {
 }
 
 __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAME *frame) {
+    if (thread_lcurrent && __get_pid() != 0) {
+        __enable_interrupts();
+        __exit(1); // no return
+    }
+    
     printk("fault: general protection fault!\n");
     for (;;);
 }
@@ -111,7 +132,7 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
     // TODO: TEST THIS CODE!!!
     uint32_t vas;
 
-    __asm__ volatile (
+    asm volatile (
         "mov eax, cr2"
         : "=a" (vas)
         :
@@ -120,30 +141,30 @@ __attribute__((interrupt)) static void __page_fault(INTERRUPT_FRAME *frame) {
 
     printk("page-fault when accessing address %p\n", vas);
 
-    /*vas &= 0xfffff000;
+    vas &= 0xfffff000;
 
-    void *pas = __e820_rmalloc(4096, TRUE);
+    /*void *pas = __e820_rmalloc(4096, TRUE);
 
     if (!pas) {
         printk("kernel: page-fault: out of memory\n");
         panic();
-    }
+    }*/
 
-    if (__map_page(vas, (uint32_t)pas, PAGE_READ_WRITE)) {
+    if (__map_page(vas, vas, PAGE_READ_WRITE)) {
         printk("kernel: page-fault: map failed\n");
         panic();
-    }*/
+    }
 
     panic();
 }
 
-__attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
-    //__disable_interrupts();
-    __send_eoi(0x00);
+/*__attribute__((interrupt)) void __pit_irq0_handler(INTERRUPT_FRAME *frame) {
     __update_tick_counter();
-    __switch_task();
+    __send_eoi(0x00);
+    //__disable_interrupts();
+    __schedule();
     //__enable_interrupts();
-}
+}*/
 
 void __f1_handler(void) {
     printf("[F1]");
@@ -164,7 +185,6 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
         released = FALSE,
         shift = FALSE;
 
-    __send_eoi(0x01);
     uint8_t data = __inb(PS2_DATA_PORT_REGISTER);
 
     if (state == 0 && data == 0xe0) {
@@ -193,7 +213,8 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
                 
                 default:
                     if (data >= TABLE_SIZE) {
-                        printf("ps2: cannot translate scan code 0x%02x\n", data);
+                        //printf("ps2: cannot translate scan code 0x%02x\n", data);
+                        __send_eoi(0x01);
                         return;
                     }
 
@@ -214,13 +235,15 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
                         if (!c)
                             break;
 
-                        if (putc(c, stdin))
-                            printk("ps2: stdin full\n"); // TODO: realloc buffer
+                        /*if (*/putc(c, stdin);/*)*/
+                            //printk("ps2: stdin full\n"); // TODO: realloc buffer
 
+                        // FIXME: this can cause dead-lock!!!
+                        //  we should something like queue
                         putchar(c);
                         
-                        if (c == '\n' && wake_task != -1)
-                            __wake_task(wake_task);
+                        /*if (c == '\n' && wake_task != -1)
+                            __wake_task(wake_task);*/
                     }
 
                     break;
@@ -248,10 +271,13 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame
             __enable_interrupts();
         }
     }
+
+    __send_eoi(0x01);
 }
 
 __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
-    printk("\033[33mkernel:\033[37m syscall\n");
+    __enable_interrupts();
+    __exit(0);
 }
 
 /**
@@ -303,6 +329,7 @@ static void __tree(struct __dentry *node) {
 }
 
 void __terminal_task(void) {
+    wake_task = __get_pid();
     printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
 
     struct __dentry *dhome = (struct __dentry *)kmalloc(sizeof(struct __dentry));
@@ -312,17 +339,15 @@ void __terminal_task(void) {
 
     struct __inode *ihome = (struct __inode *)kmalloc(sizeof(struct __inode));
 
-    if (!ihome) {
-        kfree(dhome);
+    if (!ihome)
         panic();
-    }
 
     __dentry_init(dhome);
     dhome->name = "home";
     __inode_init(ihome, dhome);
     ihome->i_mode = 0x80000000 | 0777;
     dhome->d_inode = ihome;
-    __dentry_add(dhome, current_task->t_fs->t_dentry);
+    __dentry_add(dhome, __get_dentry());
 
     char *pwd = "/";
 
@@ -351,11 +376,11 @@ void __terminal_task(void) {
         if (chr == EOF && !feof(stdin)) {
             printf("terminal: failed to read stdin\n");
 
-            /*int32_t terminal_pid = __create_task("terminal", (uint32_t)&__terminal_task, TASK_EXEC_KERNEL);
-            wake_task = terminal_pid; // FIXME: mutex should be used!!!
+            wake_task = -1;
+            int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0);
 
             if (terminal_pid == -1)
-                printk("failed to start terminal\n");*/
+                printk("failed to start terminal\n");
 
             __exit(-1);
         }
@@ -369,7 +394,7 @@ void __terminal_task(void) {
         } else if (!strcmp(cmd, "clear")) {
             __clear();
         } else if (!strcmp(cmd, "ps")) {
-            __list_tasks();
+            __list_threads();
         } else if (!strcmp(cmd, "e820")) {
             __e820_dump_mmap();
         } else if (!strcmp(cmd, "ls")) {
@@ -382,11 +407,11 @@ void __terminal_task(void) {
             if (!strcmp(s, "-l"))
                 mode = 1;
 
-            struct __dentry *child = current_task->t_fs->t_dentry->d_child;
+            struct __dentry *child = __get_dentry()->d_child;
 
             if (child) {
                 while (child) {
-                    if (child->d_inode->i_mode & 0777 == 0777)
+                    if ((child->d_inode->i_mode & 0777) == 0777)
                         printf("\033[30;42m");
 
                     if (child->d_inode->i_mode & 0x80000000)
@@ -527,8 +552,18 @@ void __terminal_task(void) {
             for (uint32_t i = 0; i < devs_count; ++i)
                 printf("%s %u:%u %s (address=%p)\n", devs[i].name, devs[i].major, devs[i].minor, devs[i].driver->module_name, devs[i].driver);*/
         } else if (!strcmp(cmd, "tree"))
-            __tree(current_task->t_fs->t_dentry);
-        else if (index)
+            __tree(__get_dentry());
+        else if (!strcmp(cmd, "ping")) {
+            char *target = strtok(NULL, " ");
+
+            if (!target) {
+                printf("ping: expected target\n");
+                kfree(input_buffer);
+                continue;
+            }
+
+            //ping(target);
+        } else if (index)
             printf("terminal: %s: command not found\n", cmd);
 
         kfree(input_buffer);
@@ -538,6 +573,7 @@ void __terminal_task(void) {
 void __user_daemon(void) {
     //printk("\033[33muser:\033[37m USER daemon running, PID=%u\n", __get_pid());
 
+    //asm volatile ("int 0x80");
     for (;;);
 }
 
@@ -558,7 +594,7 @@ void __init_handlers(void) {
 }
 
 static char command_line[256];
-uint16_t root_dev = NO_DEV;
+__kdev_t root_dev = NO_DEV;
 char *envs[16];
 
 /**
@@ -571,21 +607,31 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     
     // initialize vga
     __init_vga();
+
     __setcurpos(cursor_y, cursor_x);
 
-    printf("\033[97mWelcome to Kernel!\033[37m\n");
+    printf("VGA initialized\n");
 
     // copy command line to buffer
     strcpy(command_line, (char const *)0x00007e00);
 
     // initialize global descriptor table
-    __init_gdt(0x0010, 0x00007c00); // RFC: can we set the esp0 latter?
+    __init_gdt(0x0010, 0);
 
     // fix memory map
     __e820_sanitize(e820_entries_count, e820_entries);
 
     // dump the map
     __e820_dump_mmap();
+
+    asm volatile (
+        "mov %0, cr3"
+        : "=r" (page_directory)
+        :
+        :
+    );
+    
+    page_directory &= ~31; // discards cd, wt and res
 
     // initialize interrupt descriptor table
     if (__init_idt(&__default_isr)) {
@@ -594,6 +640,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // set default handlers
+    // TODO: use isr wrapper
     __init_handlers();
 
     __parse_config(command_line);
@@ -601,6 +648,13 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     if (root_dev == NO_DEV) {
         // RFC: use some kind of default device?
         printk("kernel: error: unknown root dev\n");
+        panic();
+    }
+
+    void *heap = __e820_rmalloc(4*4096, TRUE);
+
+    if (!heap) {
+        printk("kernel: error: failed to allocate memory for heap\n");
         panic();
     }
 
@@ -617,14 +671,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // initialize kernel heap manager
-    void *heap = __e820_rmalloc(8192*2, TRUE);
-
-    if (!heap) {
-        printk("kernel: error: failed to allocate memory for heap\n");
-        panic();
-    }
-
-    __init_heap(heap, 8192);
+    __init_heap(heap, 4*4096);
 
     uint32_t const __stdin_size = 128;
     char *__stdin_base = kmalloc(__stdin_size * sizeof(char));
@@ -648,7 +695,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     // because multitasking is disabled
     // at this point
     // we'll be able to set different
-    // fs dentry for each process once
+    // fs dentries for each process once
     // the multitasking is enabled
     struct __dentry root = {
         .d_child = NULL,
@@ -660,8 +707,10 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         .name = "" // empty string
     };
 
-    if (__init_sysfs(&root))
+    if (__init_sysfs(&root)) {
+        __dump_heap();
         panic();
+    }
 
     if (__init_drivers()) // register "driver" group
         panic();
@@ -685,23 +734,30 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         printk("\033[33mkernel:\033[37m \033[96mCannot use APIC => using PIC\033[37m\n");
 
         // initialize pic
+        // initialize pic
         __init_pics(0x20, 0x70); // irqs 0-7 -> int 20->27, irqs 8-f -> 70->77
-        // TODO: irq7 and irq15 must to check isr flag (spurious irqs)
         __disable_irqs();
+        __send_slave_eoi();
+        __send_master_eoi();
+        // set handlers for spurious interrupts
+        __set_handler(0x77, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__spurious_irq_isr);
+        __set_handler(0x27, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__spurious_irq_isr);
+        __enable_irq(2); // enable cascade
+        __enable_interrupts(); // we are ready to receive external interrupts
     } else {
         // initialize apic
+        __disable_irqs(); // mask all pic irqs
     }
-
-    __enable_interrupts(); // we are ready to receive external interrupts
     
     __init_pit();
 
     // channel 0 for ticks counter, FIXME: doesn't work in bochs
-    __outw(PIT_CHANNEL_0_DATA_REGISTER, 0x001234de / 1000); // channel 0 freq=1kHz
+    uint16_t const ticks = 0x001234de / 1000; // channel 0 freq=1kHz
+    __outb(PIT_CHANNEL_0_DATA_REGISTER, (uint8_t)ticks);
+    __outb(PIT_CHANNEL_0_DATA_REGISTER, (uint8_t)(ticks >> 8));
 
     __disable_interrupts();
-    //__send_master_eoi();
-    __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__pit_irq0_handler);
+    __set_handler(0x20, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, (void (*)(INTERRUPT_FRAME *))&__schedule);
     __enable_interrupts();
     __enable_irq(0x00); // irq0
 
@@ -716,15 +772,14 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     // legacy support)
     if (!__init_ps2()) {
         __disable_interrupts();
-        //__send_master_eoi();
         __set_handler(0x21, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__ps2_irq1_handler);
         __enable_interrupts();
-        __enable_irq(0x01); // irq0
+        __enable_irq(0x01); // irq1
     }
 
     // initialize first task (kernel) with default
     // root dentry (singletasking root)
-    if (__init_tasking(&root))
+    if (__sched_init(&root))
         panic();
 
 #ifdef CONFIG_FDC
@@ -737,21 +792,26 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
     for(;;);*/
 
-    int32_t terminal_pid = __create_task("terminal", (uint32_t)&__terminal_task, TASK_EXEC_KERNEL);
-    wake_task = terminal_pid;
+    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0);
 
-    if (terminal_pid == -1) {
+    if (terminal_pid < 0) {
         printk("failed to start terminal\n");
         panic();
     }
 
-    //__create_task((uint32_t)&__user_daemon, TASK_EXEC_USER);
-    //__create_task((uint32_t)&__user_daemon);
+    //__set_handler(0x80, 0x0008, 0xee, &syscall);
 
-    printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
+    //__create_thread("user-daemon", (int32_t (*)(int argc, char **argv))&__user_daemon, 0);
+
+    //printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
+    printf("\033[97mWelcome!\033[37m\n");
+    printf("\033[97m%s-%s\033[37m\n", VERSION, ARCH);
+
+    //__mount(root_dev, "dev");
 
     // idle loop
-    for (;;) __asm__("hlt");
+    for (;;)
+        asm volatile ("hlt");
 
     /*for (uint32_t i = 0; i < symbols_count; ++i) {
         SYMBOL *symbol = &symbol_table[i];

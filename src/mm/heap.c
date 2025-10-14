@@ -1,25 +1,14 @@
 /**
- * Heap
- * 
- * Author: verner002
-*/
-
-/**
- * Includes
+ * @file heap.c
+ * @author verner002
+ * @date 13/10/2025
 */
 
 #include "mm/heap.h"
 #include "kstdlib/stdio.h"
-
-/**
- * Types Definitions
-*/
+#include "mm/vmm.h"
 
 typedef struct __chunk CHUNK;
-
-/**
- * Structures
-*/
 
 struct __chunk {
     // uint32_t magic = 0x0badbabe
@@ -29,10 +18,6 @@ struct __chunk {
         *previous_chunk,
         *next_chunk;
 };
-
-/**
- * Static Global Variables
-*/
 
 static bool mutex = FALSE;
 static bool init = FALSE;
@@ -46,6 +31,13 @@ static CHUNK *first_free_chunk = NULL;
 void __init_heap(void *p, uint32_t s) {
     if (init)
         return;
+
+    uint32_t pages = (s + 4095) / 4096;
+
+    for (uint32_t i = 0; i < pages; ++i) {
+        pgreserve((void *)((uint32_t)p + 4096 * i));
+        __map_page((uint32_t)p + 4096 * i, (uint32_t)p + 4096 * i, PAGE_READ_WRITE | PAGE_CACHE_DISABLED | PAGE_WRITE_THROUGH);
+    }
 
     __mutex_lock(&mutex);
     CHUNK *heap = (CHUNK *)p;
@@ -118,7 +110,19 @@ void *__kmalloc(uint32_t n) {
     if (!n)
         return NULL;
 
-    CHUNK *chunk = (CHUNK *)first_free_chunk;
+    CHUNK *chunk = first_free_chunk;
+    
+    /*CHUNK *temp = first_free_chunk;
+
+    while (temp) {
+        if (temp->free && (!chunk->free || (temp->size < chunk->size && temp->size >= n)))
+            chunk = temp;
+
+        temp = temp->next_chunk;
+    }
+
+    if (!chunk)
+        return NULL;*/
 
     while (chunk) {
         if (chunk->free && chunk->size >= n) {
@@ -127,11 +131,14 @@ void *__kmalloc(uint32_t n) {
             uint32_t remainder = chunk->size - n;
             
             if (remainder > sizeof(CHUNK)) { // split chunk
-                next_chunk = (CHUNK *)chunk + n;
+                next_chunk = (CHUNK *)((uint32_t)chunk + sizeof(CHUNK) + n);
                 next_chunk->free = TRUE;
                 next_chunk->size = remainder - sizeof(CHUNK); // usable size, without metadata
                 next_chunk->previous_chunk = chunk;
                 next_chunk->next_chunk = chunk->next_chunk;
+
+                if (chunk->next_chunk)
+                    chunk->next_chunk->previous_chunk = next_chunk;
 
                 chunk->size = n;
                 chunk->next_chunk = next_chunk;
@@ -150,6 +157,54 @@ void *__kmalloc(uint32_t n) {
 }
 
 /**
+ * __kzalloc
+*/
+
+void *__kzalloc(uint32_t size, uint32_t alignment) {
+    if (!size || !alignment)
+        return NULL;
+
+    CHUNK *chunk = first_free_chunk;
+
+    while (chunk) {
+        if (chunk->free && chunk->size >= size) {
+            uint32_t remainder = chunk->size - size;
+
+            uint32_t start = (uint32_t)chunk + sizeof(CHUNK);
+            uint32_t padding = (alignment - (start % alignment)) % alignment;
+
+            if (remainder >= padding) {
+                chunk->free = FALSE;
+                remainder -= padding;
+
+                if (remainder > sizeof(CHUNK)) {
+                    CHUNK *free = ((void *)chunk + sizeof(CHUNK) + size + padding);
+                    free->free = TRUE;
+                    free->previous_chunk = chunk;
+                    free->next_chunk = chunk->next_chunk;
+
+                    if (chunk->next_chunk)
+                        chunk->next_chunk->previous_chunk = free;
+
+                    chunk->next_chunk = free;
+                    free->size = remainder - sizeof(CHUNK);
+                }
+
+                chunk->size = size + padding;
+                first_free_chunk = chunk->next_chunk;
+                void *ptr = (void *)chunk + sizeof(CHUNK) + padding;
+                *(uint32_t *)ptr = padding;
+                return ptr;
+            }
+        }
+
+        chunk = chunk->next_chunk;
+    }
+
+    return NULL;
+}
+
+/**
  * __kfree
 */
 
@@ -157,7 +212,7 @@ void __kfree(void *p) {
     if (!p)
         return;
 
-    CHUNK *curr_chunk = (CHUNK *)((uint32_t)p - (uint32_t)sizeof(CHUNK));
+    CHUNK *curr_chunk = (CHUNK *)(p - sizeof(CHUNK));
 
     if (curr_chunk->free)
         return;
@@ -176,6 +231,13 @@ void __kfree(void *p) {
 void *kmalloc(uint32_t n) {
     __mutex_lock(&mutex);
     void *ptr = __kmalloc(n);
+    __mutex_unlock(&mutex);
+    return ptr;
+}
+
+void *kzalloc(uint32_t size, uint32_t alignment) {
+    __mutex_lock(&mutex);
+    void *ptr = __kzalloc(size, alignment);
     __mutex_unlock(&mutex);
     return ptr;
 }

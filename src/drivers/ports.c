@@ -15,7 +15,7 @@
 */
 
 void __outb(uint16_t r, uint8_t v) {
-    asm (
+    asm volatile (
         "out dx, al"
         :
         : "d" (r), "a" (v)
@@ -30,7 +30,7 @@ void __outb(uint16_t r, uint8_t v) {
 uint8_t __inb(uint16_t r) {
     uint8_t v;
 
-    asm (
+    asm volatile (
         "in al, dx"
         : "=a" (v)
         : "d" (r)
@@ -47,7 +47,7 @@ uint8_t __inb(uint16_t r) {
 uint16_t __inw(uint16_t r) {
     uint16_t v;
 
-    asm (
+    asm volatile (
         "in ax, dx"
         : "=a" (v)
         : "d" (r)
@@ -59,13 +59,13 @@ uint16_t __inw(uint16_t r) {
 
 /**
  * __outw
+ * 
+ * RFC: couldn't we just use `out dx, ax'?
 */
 
 void __outw(uint16_t r, uint16_t v) {
-    asm (
-        "out dx, al\n\t"
-        "mov al, ah\n\t"
-        "out dx, al"
+    asm volatile (
+        "out dx, ax"
         :
         : "d" (r), "a" (v)
         :
@@ -79,7 +79,7 @@ void __outw(uint16_t r, uint16_t v) {
 uint32_t __ind(uint16_t r) {
     uint32_t v;
 
-    asm (
+    asm volatile (
         "in eax, dx"
         : "=a" (v)
         : "d" (r)
@@ -94,8 +94,8 @@ uint32_t __ind(uint16_t r) {
 */
 
 void __outd(uint16_t r, uint32_t v) {
-    asm (
-        "out dx, eax\n\t"
+    asm volatile (
+        "out dx, eax"
         :
         : "d" (r), "a" (v)
         :

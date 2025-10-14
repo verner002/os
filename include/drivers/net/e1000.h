@@ -7,3 +7,5 @@
 #pragma once
 
 #include "types.h"
+
+int32_t __e1000_send(void *data, uint16_t length);
