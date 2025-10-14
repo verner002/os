@@ -200,36 +200,47 @@ struct __kobj {
 [1] https://www.felixcloutier.com/x86
 
 ### PIC Driver
+[1] https://wiki.osdev.org/8259_PIC\
+[2] https://wiki.osdev.org/Interrupts
 
 ### PIT Driver
 
 ### PS/2 Keyboard Driver
+[1] https://wiki.osdev.org/PS/2_Keyboard
 
 ### Speaker Driver
 
-### DMA Driver
+### ISA DMA Driver
+[1] https://wiki.osdev.org/ISA_DMA
 
 ### VGA Driver
 
 ### VESA Driver
 
 ### ACPI Driver
+[1] https://uefi.org/sites/default/files/resources/ACPI_1.pdf (ACPI v1.0)\
+[2] https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html (ACPI v6.5)
 
 ### FDD Driver
 
 ### FAT12 Driver
+[1] https://grumbeer.dyndns.org/ftp/linux/dist/cnix/FAT.pdf (FAT12)\
+[2] https://en.wikipedia.org/wiki/8.3_filename (8.3 File Name)\
+[3] https://en.wikipedia.org/wiki/Long_filename (Long File Name)\
+[4] http://www.maverick-os.dk/FileSystemFormats/VFAT_LongFileNames.html (Long File Name)
 
 ### Multitasking
 [1] https://wiki.osdev.org/Brendan%27s_Multi-tasking_Tutorial\
 [2] http://www.brokenthorn.com/Resources/OSDev25.html\
 [3] https://wiki.osdev.org/Kernel_Multitasking\
-[4] https://wiki.osdev.org/Getting_to_Ring_3\
+[4] https://wiki.osdev.org/Getting_to_Ring_3 (User Space)\
 [5] https://wiki.osdev.org/Context_Switching
 
 ### PCI
 [1] https://wiki.osdev.org/PCI
 
 ### IDE Driver
+[1] https://wiki.osdev.org/PCI_IDE_Controller
 
 ### Network Driver
 [1] https://courses.cs.washington.edu/courses/cse451/16au/readings/e1000.pdf (Intel E1000)\
@@ -240,4 +251,4 @@ struct __kobj {
 [6] https://wiki.osdev.org/Internet_Control_Message_Protocol (ICMP)\
 [7] https://www.ietf.org/rfc/rfc1071.txt (Internet Checksum)\
 [8] https://wiki.osdev.org/Intel_Ethernet_i217 (Intel E1000)\
-[n] https://qiita.com/kagurazakakotori/items/a1bf45a9c2dea204f66f (Intel E1000)\
+[9] https://qiita.com/kagurazakakotori/items/a1bf45a9c2dea204f66f (Intel E1000)
