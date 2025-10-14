@@ -194,3 +194,50 @@ struct __kobj {
 ## Kernel Object Type
 
 ## Kernel Object Set
+
+## Useful Links
+### x86 Instruction Set
+[1] https://www.felixcloutier.com/x86
+
+### PIC Driver
+
+### PIT Driver
+
+### PS/2 Keyboard Driver
+
+### Speaker Driver
+
+### DMA Driver
+
+### VGA Driver
+
+### VESA Driver
+
+### ACPI Driver
+
+### FDD Driver
+
+### FAT12 Driver
+
+### Multitasking
+[1] https://wiki.osdev.org/Brendan%27s_Multi-tasking_Tutorial\
+[2] http://www.brokenthorn.com/Resources/OSDev25.html\
+[3] https://wiki.osdev.org/Kernel_Multitasking\
+[4] https://wiki.osdev.org/Getting_to_Ring_3\
+[5] https://wiki.osdev.org/Context_Switching
+
+### PCI
+[1] https://wiki.osdev.org/PCI
+
+### IDE Driver
+
+### Network Driver
+[1] https://courses.cs.washington.edu/courses/cse451/16au/readings/e1000.pdf (Intel E1000)\
+[2] https://wiki.osdev.org/Address_Resolution_Protocol (ARP)\
+[3] https://en.wikipedia.org/wiki/Address_Resolution_Protocol (ARP)\
+[4] https://wiki.osdev.org/User:KemyLand (IPv4)\
+[5] https://datatracker.ietf.org/doc/html/rfc792 (ICMP)\
+[6] https://wiki.osdev.org/Internet_Control_Message_Protocol (ICMP)\
+[7] https://www.ietf.org/rfc/rfc1071.txt (Internet Checksum)\
+[8] https://wiki.osdev.org/Intel_Ethernet_i217 (Intel E1000)\
+[n] https://qiita.com/kagurazakakotori/items/a1bf45a9c2dea204f66f (Intel E1000)\
