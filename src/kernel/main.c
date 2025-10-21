@@ -390,7 +390,7 @@ void __terminal_task(void) {
         char *cmd = strtok(input_buffer, " ");
 
         if (!strcmp(cmd, "heap")) {
-            __dump_heap();
+            __dump_heap(); // at this point can lead to a deadlock
         } else if (!strcmp(cmd, "clear")) {
             __clear();
         } else if (!strcmp(cmd, "ps")) {
@@ -565,7 +565,8 @@ void __terminal_task(void) {
             }
 
             //ping(target);
-        } else if (index)
+        }
+        else if (index)
             printf("terminal: %s: command not found\n", cmd);
 
         kfree(input_buffer);
@@ -741,10 +742,8 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         }
     };
 
-    if (__init_sysfs(&root)) {
-        __dump_heap();
+    if (__init_sysfs(&root))
         panic();
-    }
 
     if (__init_drivers()) // register "driver" group
         panic();
@@ -841,7 +840,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     printf("\033[97mWelcome!\033[37m\n");
     printf("\033[97m%s-%s\033[37m\n", VERSION, ARCH);
 
-    __mount(root_dev, "/dev/fd0");
+    //__mount(root_dev, "/dev/fd0");
 
     // idle loop
     for (;;)

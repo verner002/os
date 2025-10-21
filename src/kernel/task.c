@@ -110,29 +110,22 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     if (!thread_lcurrent)
         return -1;
 
-    // 
     bool spawn_ring_0_thread = flags & THREAD_RING_0;
 
     // is thread allowed to spawn ring 0 thread?
     if (spawn_ring_0_thread && !(thread_lcurrent->t_flags & THREAD_RING_0))
-        return -2;
-
-    //printk("%u\n", sizeof(struct __thread_control_block));
-    kmalloc(63UL);
-
-    if (__thread_next_pid++ == 1)
-        return 1;
+        return -1;
 
     struct __thread_control_block *thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
 
     if (!thread)
-        return -3;
+        return -1;
 
     uint32_t *stack = (uint32_t *)pgalloc();
 
     if (!stack) {
         kfree(thread);
-        return -4;
+        return -1;
     }
 
     uint32_t *kstack = (uint32_t *)pgalloc();
@@ -140,7 +133,7 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     if (!kstack) {
         pgfree(stack);
         kfree(thread);
-        return -5;
+        return -1;
     }
 
     // clear stack

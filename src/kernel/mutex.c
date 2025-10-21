@@ -9,13 +9,15 @@
 */
 
 #include "kernel/mutex.h"
+#include "kernel/task.h"
 
 /**
  * __mutex_lock
 */
 
 void __mutex_lock(bool *lock) {
-    while (__test_set(lock));
+    while (__test_set(lock))
+        __yield();
 }
 
 /**

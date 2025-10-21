@@ -31,6 +31,7 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
 int32_t __sched_init(struct __dentry *root_dentry);
 int32_t __get_pid(void);
 struct __dentry *__get_dentry(void);
+void __yield(void);
 void __wake_on(bool *alarm);
 __attribute__((noreturn)) int32_t __exit(int32_t code);
 void __list_threads(void);

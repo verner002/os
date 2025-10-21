@@ -13,6 +13,7 @@ global __flush_tss
 global __schedule
 global __exec_kernelmode
 global __exec_usermode
+global __yield
 
 extern __update_tick_counter
 extern __sched_lock
@@ -39,12 +40,75 @@ __read_eip:
     jmp eax
 
 ;
+; __yield
+;
+
+__yield:
+    sub esp, 12
+    mov dword [esp], eax
+    mov eax, dword [esp+12]
+    mov dword [esp+4], eax ; eip
+    mov eax, cs
+    mov dword [esp+8], eax ; cs
+    pushfd
+    pop eax
+    mov dword [esp+12], eax ; flags
+    pop eax
+
+    cli
+    pushad
+    lock bts dword [__sched_lock], 0
+    jc .return
+
+    ; load pointer to current task
+    mov edx, dword [thread_lcurrent]
+
+    ; is there a task?
+    test edx, edx
+    jz .unlock
+
+    push ds
+    push es
+    push fs
+    push gs
+
+    ; switch to kernel segments
+    mov ax, (2 * 8) | 0
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; save current stack pointer
+    mov dword [edx], esp
+
+    call __dispatch
+
+    mov edx, dword [thread_lcurrent]
+    mov esp, dword [edx]
+
+    push dword [edx+8]
+    call __set_kernel_stack
+    add esp, 4
+
+    pop gs
+    pop fs
+    pop es
+    pop ds
+
+    .unlock:
+    mov dword [__sched_lock], 0
+
+    .return:
+    popad
+    iretd
+
+;
 ; __schedule
 ;
 
 __schedule:
-    ; disabled external interrupts
-    cli
+    ;cli
     pushad
     call __update_tick_counter
 

@@ -251,6 +251,10 @@ static uint32_t curr_tx_i = 0;
 
 /**
  * __e1000_handler
+ * 
+ * TODO: schedule a routine (bottom half in linux terminology)
+ *  that will take care of the packet, disable interrupts from
+ *  the nic and return 
 */
 
 __attribute__((interrupt)) void __e1000_handler(INTERRUPT_FRAME *frame) {
