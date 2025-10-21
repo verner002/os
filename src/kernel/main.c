@@ -415,7 +415,9 @@ void __terminal_task(void) {
                         printf("\033[30;42m");
 
                     if (child->d_inode->i_mode & 0x80000000)
-                        printf("\033[34m");
+                        printf("\033[94m");
+                    else if (child->d_inode->i_mode & 0x40000000)
+                        printf("\033[93m");
 
                     printf("%s\033[37;40m", child->name);
 
@@ -597,6 +599,34 @@ static char command_line[256];
 __kdev_t root_dev = NO_DEV;
 char *envs[16];
 
+struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
+    static bool init = TRUE;
+
+    if (!path)
+        return NULL;
+    
+    char *name = strtok(init ? path : NULL, "/");
+    init = FALSE;
+
+    // we've reached the end of the path
+    if (!name) {
+        init = TRUE;
+        return node;
+    }
+
+    struct __dentry *child = node->d_child; // children list head
+    
+    while (child) {
+        if (!strcmp(child->name, name))
+            return __dentry_lookup(child, name);
+        
+        child = child->d_next;
+    }
+
+    init = TRUE;
+    return NULL;
+}
+
 /**
  * entry
 */
@@ -704,7 +734,11 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         .d_parent = NULL,
         .d_prev = NULL,
         .d_refs = 1,
-        .name = "" // empty string
+        .name = "", // empty string
+        .io_ops = {
+            .create = NULL,
+            .lookup = &__dentry_lookup
+        }
     };
 
     if (__init_sysfs(&root)) {
@@ -807,7 +841,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     printf("\033[97mWelcome!\033[37m\n");
     printf("\033[97m%s-%s\033[37m\n", VERSION, ARCH);
 
-    //__mount(root_dev, "dev");
+    __mount(root_dev, "/dev/fd0");
 
     // idle loop
     for (;;)

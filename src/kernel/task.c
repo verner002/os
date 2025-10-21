@@ -37,6 +37,7 @@ struct __thread_control_block {
     struct __thread_control_block *t_nextt; // next thread
     char const *t_name;
     struct __thread_fs *t_fs;
+    char *strtok_sptr; // strtok string pointer
     /*FILE *t_stdin;
     FILE *t_stdout;
     FILE *t_stderr;*/
@@ -423,7 +424,7 @@ void __list_threads(void) {
     
     do {
         printk("thread pid=%u, state=%u, flags=%08x, name=%s\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name);
-        printk("  stack: %p, kstack: %p\n", thread->t_stack, thread->t_kernel_stack);
+        printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
         thread = thread->t_nextt;
     } while (thread != thread_lhead);
     

@@ -13,6 +13,8 @@
 #include "mm/vmm.h"
 #include "drivers/cpu.h"
 
+#define IPV4(a, b, c, d) ((uint32_t)((a << 24) | (b << 16) | (c << 8) | (d << 0)))
+
 #define REG_CTRL                        0x0000
 #define REG_STATUS                      0x0008
 #define REG_EEPROM                      0x0014
@@ -531,6 +533,17 @@ int32_t __e1000_send(void *data, uint16_t length) {
 }
 
 /**
+ * __e1000_set_ip
+*/
+
+void __e1000_set_ip(uint32_t ip) {
+    e1000.ipv4[0] = (uint8_t)(ip >> 24);
+    e1000.ipv4[1] = (uint8_t)(ip >> 16);
+    e1000.ipv4[2] = (uint8_t)(ip >> 8);
+    e1000.ipv4[3] = (uint8_t)(ip >> 0);
+}
+
+/**
  * __init_e1000
 */
 
@@ -627,10 +640,7 @@ int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
     __e1000_print_mac(e1000.mac);
     putchar('\n');
 
-    e1000.ipv4[0] = 192;
-    e1000.ipv4[1] = 168;
-    e1000.ipv4[2] = 0;
-    e1000.ipv4[3] = 2;
+    __e1000_set_ip(IPV4(192, 168, 0, 2));
 
     printf("        IPv4                    : ");
     __e1000_print_ipv4(e1000.ipv4);
@@ -642,9 +652,9 @@ int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
     if (e1000.irq != 0xff) {
         __disable_interrupts();
 
-        uint8_t intl = e1000.irq <= 7 ? (0x20 + e1000.irq) : (0x70 + e1000.irq - 8);
+        uint8_t interrupt = e1000.irq <= 7 ? (0x20 + e1000.irq) : (0x70 + e1000.irq - 8);
 
-        __set_handler(intl, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__e1000_handler);
+        __set_handler(interrupt, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__e1000_handler);
         
         __enable_interrupts();
         __enable_irq(e1000.irq);

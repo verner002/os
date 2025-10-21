@@ -23,8 +23,8 @@ struct __dir_io_ops {
 
 /**
  * __inode (index node)
- * inode is a metadata block for each __dentry
- * that contains flags, owner and group id,
+ * inode is a metadata struct for each __dentry
+ * that contains flags, owner and group ids,
  * attributes specifing allowed operations,
  * i/o operations block for inode and for
  * data specified by file system driver and
@@ -39,6 +39,11 @@ struct __inode {
     uint32_t i_refs; // reference counter
 };
 
+struct __dentry_io_block {
+    struct __dentry *(* create)(struct __dentry *entry);
+    struct __dentry *(* lookup)(struct __dentry *entry, char const *name);
+};
+
 /**
  * __dentry (directory entry)
  * 
@@ -51,17 +56,13 @@ struct __inode {
 
 struct __dentry {
     char const *name;
+    struct __dentry_io_block io_ops;
     struct __inode *d_inode;
     struct __dentry *d_parent;
     uint32_t d_refs;
     struct __dentry *d_prev;
     struct __dentry *d_next;
     struct __dentry *d_child;
-};
-
-struct __dentry_io_block {
-    struct __dentry *(* create)(struct __dentry *entry);
-    struct __dentry *(* lookup)(struct __dentry *entry, char const *name);
 };
 
 void __dentry_init(struct __dentry *dentry);
@@ -74,3 +75,5 @@ VFS_FILE_NODE *__new_vfs_file_node(char const *name);
 VFS_DIR_NODE *__new_vfs_dir_node(char const *name);
 int32_t __update_vfs_node(VFS_NODE *node, uint8_t flags);
 VFS_NODE *__find_vfs_node(VFS_DIR_NODE *root, char const *name);*/
+
+struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t uid, uint32_t gid, uint32_t flags);

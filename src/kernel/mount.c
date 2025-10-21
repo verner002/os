@@ -5,31 +5,49 @@
 */
 
 #include "kernel/mount.h"
-#include "hal/vfs.h"
+#include "hal/dev.h"
 #include "kernel/task.h"
 
+/**
+ * __mount
+*/
+
 int32_t __mount(__kdev_t dev, char const *mpoint) {
-    struct __dentry *mount = (struct __dentry *)kmalloc(sizeof(struct __dentry));
+    __dev_init();
 
-    if (!mount)
-        return -1;
+    __file_add(__get_dentry()->io_ops.lookup(__get_dentry(), "/dev"), "fd0", 0, 0, 0x80000000 | 0755);
+    
+    // "/mnt/test/fd0", "./test/fd0", "test/fd0", "test/fd0/"
+    // '.' (dot) represent current directory relative
+    // to the given part of the path or (if used as
+    // the first char the relative address to the
+    // current working directory - process start
+    // directory)
+    //
+    // RFC: do we want to perform a mount operation
+    //  to the existing __dentry? could be useful for
+    //  example when trying to mount a temp disk image
+    //  from an external device (and using the known
+    //  one if that is not possible)
+    //   - i'll keep this open and use the easier
+    //     approach (not allow that)
 
-    struct __inode *inode = (struct __inode *)kmalloc(sizeof(struct __inode));
+    // firstly let's find the node we want to
+    // perform the mount operation to
+    char *temp = (char *)kmalloc(strlen(mpoint) + sizeof(char));
+    
+    //if (!temp) error
+    
+    strcpy(temp, mpoint);
 
-    if (!inode) {
-        kfree(mount);
+    struct __dentry *thread_mount = __get_dentry();
+    struct __dentry *mount_dir = thread_mount->io_ops.lookup(thread_mount, temp);
+    kfree(temp);
+
+    if (!mount_dir) {
+        printk("mount point \'%s\' not found\n", mpoint);
         return -1;
     }
 
-    __dentry_init(mount);
-    mount->name = mpoint;
-    
-    __inode_init(inode, mount);
-    inode->i_gid = 0;
-    inode->i_uid = 0;
-    inode->i_mode = 0x80000000 | 0755;
-
-    struct __dentry *root = __get_dentry();
-    __dentry_add(mount, root);
     return 0;
 }

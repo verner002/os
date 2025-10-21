@@ -31,6 +31,7 @@ void __dentry_add(struct __dentry *dentry, struct __dentry *parent) {
     // add list head
     dentry->d_parent = parent;
     dentry->d_next = parent->d_child;
+    dentry->io_ops = parent->io_ops;
 
     if (parent->d_child)
         parent->d_child->d_prev = dentry;
@@ -228,3 +229,32 @@ VFS_DIR_NODE *__new_vfs_dir_node(char const *name) {
 
     return NULL; // not found
 }*/
+
+struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t uid, uint32_t gid, uint32_t flags) {
+    if (!parent || !name)
+        return NULL;
+    
+    struct __dentry *file_d = (struct __dentry *)kmalloc(sizeof(struct __dentry));
+
+    if (!file_d)
+        return NULL;
+
+    struct __inode *file_i = (struct __inode *)kmalloc(sizeof(struct __inode));
+
+    if (!file_i) {
+        kfree(file_d);
+        return NULL;
+    }
+
+    __inode_init(file_i, file_d);
+    file_i->i_uid = uid;
+    file_i->i_gid = gid;
+    file_i->i_mode = flags;
+
+    __dentry_init(file_d);
+    file_d->name = name;
+    file_d->d_inode = file_i;
+    __dentry_add(file_d, parent);
+    
+    return file_d;
+}
