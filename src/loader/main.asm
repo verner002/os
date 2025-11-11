@@ -1,7 +1,7 @@
 ;
-; Loader
-;
-; Author: verner002
+; @file loader.asm
+; @author verner002
+; @date 11/11/2025
 ;
 
 cpu 486
@@ -87,7 +87,7 @@ __entry:
 
     push 0x0000
     pop es
-    mov di, __SMAP_OFFSET
+    mov di, 0x2000
     mov esi, 4096*1024 ;ebx
     call __get_smap
     movzx eax, ax
@@ -208,7 +208,7 @@ __main:
     ; and start mapping virtual space from
     ; 0x80000000 to kernel's physical address
 
-    mov eax, __SYS_ADDRESS
+    mov eax, 0x00010000
     call __parse_pe
     jc __panic32
 
@@ -234,7 +234,7 @@ __main:
     movzx ebx, byte [__cur_pos.cur_y]
     push ebx ; cursor y
     push __PD_OFFSET
-    push __SMAP_OFFSET ; smap
+    push 0x2000 ; smap
     push dword [__data.smap_entries_count] ; smap entries
     ;push dword [__data.memory_size] ; memory size
     

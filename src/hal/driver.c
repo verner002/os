@@ -8,11 +8,15 @@
 #include "kernel/sysfs.h"
 #include "mm/heap.h"
 
-extern struct __kobj *sysfs;
+struct __driver {
+    struct __kobj *d_kobj;
+    int32_t (* release)(struct __driver * driver);
+};
+
+struct __driver *drivers[256];
 
 static struct __kobj *local_group; // local group (driver)
 static uint32_t drivers_cnt = 0;
-static struct __driver *drivers[32];
 
 static void __group_release(struct __kobj *group) {
     // TODO: kill all drivers
@@ -57,19 +61,32 @@ int32_t __init_drivers(void) {
     //__kobj_add(group, sysfs);
 
     local_group = group;
+
+    // no driver loaded
+    for (uint32_t i = 0; i < 256; ++i)
+        drivers[i] = NULL;
+
     return 0;
 }
 
-struct __driver *__register_driver(char const *name, struct __kobj_type *ktype) {
+struct __driver *__register_driver(char const *name, uint8_t major, struct __kobj_type *ktype) {
+    struct __driver *driver = (struct __driver *)kmalloc(sizeof(struct __driver));
+
+    if (!driver)
+        return NULL;
+
     struct __kobj *kobj = (struct __kobj *)kmalloc(sizeof(struct __kobj));
 
-    if (!kobj)
+    if (!kobj) {
+        kfree(driver);
         return NULL;
+    }
 
     struct __dentry *dentry = (struct __dentry *)kmalloc(sizeof(struct __dentry));
 
     if (!dentry) {
         kfree(kobj);
+        kfree(driver);
         return NULL;
     }
 
@@ -82,6 +99,11 @@ struct __driver *__register_driver(char const *name, struct __kobj_type *ktype) 
     __kobj_add(kobj, sysfs);
 
     //__kobj_put(bus); -- used by caller (caller should call __kobj_put)
+
+    driver->d_kobj = kobj;
+    driver->release = NULL;
+    drivers[major] = driver;
+    return driver;
 }
 
 /**

@@ -17,6 +17,7 @@ typedef uint16_t __kdev_t;
 
 #define MAJOR(x) (((x) >> 8) & 0xff)
 #define MINOR(x) ((x) & 0xff)
+#define MAJMIN(x, y) (((x) << 8) | (y))
 
 struct __kdev {
     __kdev_t k_dev;

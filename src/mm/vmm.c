@@ -82,7 +82,7 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     PAGING_TABLE_ENTRY *page_table;
 
     if (!(pde->address & 0x000fffff)) { // no page table, create one
-        page_table = (PAGING_TABLE_ENTRY *)pgalloc();
+        page_table = (PAGING_TABLE_ENTRY *)pgalloc(PAGE_MAP);
 
         if (!page_table) {
             printk("page-map: not enough memory for page table\n");

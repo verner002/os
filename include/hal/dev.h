@@ -29,4 +29,5 @@ struct __dev {
 extern atomic_t __dev_id;
 
 int32_t __dev_init(void);
-struct __dev *__dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct __dev_type *dev_type);
+int32_t __dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct __bus *bus, struct __dev_type *type);
+//struct __dev *__dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct __dev_type *dev_type);

@@ -7,6 +7,14 @@
 
 #define CONFIG_FDC
 
+#ifndef VERSION
+    #define VERSION "unknown"
+#endif
+
+#ifndef ARCH
+    #define ARCH "unknown"
+#endif
+
 /**
  * Includes
 */
@@ -41,10 +49,12 @@
 #include "drivers/bus/pci.h"
 #include "drivers/block/ide.h"
 #include "kernel/kdev.h"
+#include "hal/dev.h"
 #include "kernel/config.h"
 
 #include "kernel/tty.h"
 #include "kernel/mount.h"
+#include "kernel/terminal.h"
 
 /**
  * panic
@@ -102,7 +112,7 @@ __attribute__((interrupt)) static void __invalid_opcode(INTERRUPT_FRAME *frame) 
 
     printk("fault: invalid opcode at %p!\n", eip);
 
-    if (thread_lcurrent)
+    if (thread_current)
         printk("thread %u\n", __get_pid());
 
     for (;;);
@@ -119,7 +129,7 @@ __attribute__((interrupt)) static void __double_fault(INTERRUPT_FRAME *frame) {
 }
 
 __attribute__((interrupt)) static void __general_protection_fault(INTERRUPT_FRAME *frame) {
-    if (thread_lcurrent && __get_pid() != 0) {
+    if (thread_current && __get_pid() != 0) {
         __enable_interrupts();
         __exit(1); // no return
     }
@@ -174,8 +184,6 @@ void __up_handler(void) {
     // use arrows to choose the input buffer
     // cyclic array of ptrs to input buffers
 }
-
-static int32_t wake_task = -1; // TODO: use list for "tasks to wake"
 
 __attribute__((interrupt)) static void __ps2_irq1_handler(INTERRUPT_FRAME *frame) {
     static uint32_t state = 0;
@@ -281,306 +289,6 @@ __attribute__((interrupt)) static void syscall(INTERRUPT_FRAME *frame) {
 }
 
 /**
- * xatoi
-*/
-
-int32_t xatoi(char const *s) {
-    if (!s)
-        return 0;
-
-    while (*s == ' ') ++s; // skip whitespaces
-
-    int32_t value = 0;
-
-    for (char c; ((c = *s) >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); ++s) {
-        c -= '0';
-
-        if (c > 9)
-            c -= 'a' - '9' - 1;
-
-        value = 16 * value + c;
-    }
-
-    return value;
-}
-
-static void __path(struct __dentry *node) {
-    if (!node->d_parent) {
-        printf(node->name);
-        return;
-    }
-
-    __path(node->d_parent);
-    printf("/%s", node->name);
-}
-
-static void __tree(struct __dentry *node) {
-    struct __dentry *child = node->d_child;
-
-    while (child) {
-        __path(child);
-        putchar('\n');
-
-        if (child->d_child)
-            __tree(child);
-
-        child = child->d_next;
-    }
-}
-
-void __terminal_task(void) {
-    wake_task = __get_pid();
-    printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
-
-    struct __dentry *dhome = (struct __dentry *)kmalloc(sizeof(struct __dentry));
-
-    if (!dhome)
-        panic();
-
-    struct __inode *ihome = (struct __inode *)kmalloc(sizeof(struct __inode));
-
-    if (!ihome)
-        panic();
-
-    __dentry_init(dhome);
-    dhome->name = "home";
-    __inode_init(ihome, dhome);
-    ihome->i_mode = 0x80000000 | 0777;
-    dhome->d_inode = ihome;
-    __dentry_add(dhome, __get_dentry());
-
-    char *pwd = "/";
-
-    while (1) {
-        printf("[root@null %s]$ ", pwd);
-        unsigned int size = 16; // base size
-        unsigned int index = 0;
-        char *input_buffer = (char *)kmalloc(sizeof(char) * size);
-
-        char chr;
-
-        while ((chr = getchar()) != EOF && chr != '\n') {
-            if (index + 1 >= size) {
-                size *= 2; //size = size * 1.5f + 0.5f; // growth factor
-                input_buffer = (char *)krealloc(input_buffer, size);
-
-                if (!input_buffer) {
-                    printk("terminal: failed to reallocate input buffer\n");
-                    __exit(-1);
-                }
-            }
-            
-            input_buffer[index++] = chr;
-        }
-
-        if (chr == EOF && !feof(stdin)) {
-            printf("terminal: failed to read stdin\n");
-
-            wake_task = -1;
-            int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0);
-
-            if (terminal_pid == -1)
-                printk("failed to start terminal\n");
-
-            __exit(-1);
-        }
-
-        input_buffer[index] = '\0';
-
-        char *cmd = strtok(input_buffer, " ");
-
-        if (!strcmp(cmd, "heap")) {
-            __dump_heap(); // at this point can lead to a deadlock
-        } else if (!strcmp(cmd, "clear")) {
-            __clear();
-        } else if (!strcmp(cmd, "ps")) {
-            __list_threads();
-        } else if (!strcmp(cmd, "e820")) {
-            __e820_dump_mmap();
-        } else if (!strcmp(cmd, "ls")) {
-            //DIR *dir = opendir(pwd);
-            //__fat12_list_rootdir();
-            char *s = strtok(NULL, " ");
-
-            uint32_t mode = 0;
-
-            if (!strcmp(s, "-l"))
-                mode = 1;
-
-            struct __dentry *child = __get_dentry()->d_child;
-
-            if (child) {
-                while (child) {
-                    if ((child->d_inode->i_mode & 0777) == 0777)
-                        printf("\033[30;42m");
-
-                    if (child->d_inode->i_mode & 0x80000000)
-                        printf("\033[94m");
-                    else if (child->d_inode->i_mode & 0x40000000)
-                        printf("\033[93m");
-
-                    printf("%s\033[37;40m", child->name);
-
-                    switch (mode) {
-                        case 0:
-                            printf("  ");
-                            break;
-
-                        case 1:
-                            putchar('\n');
-                            break;
-                    }
-
-                    child = child->d_next;
-                }
-                
-                if (!mode)
-                    putchar('\n');
-            }
-        } else if (!strcmp(cmd, "hexdump")) {
-            char *address = strtok(NULL, " ");
-
-            if (!address) {
-                printf("hexdump: expected address\n");
-                kfree(input_buffer);
-                continue;
-            }
-            
-            char *count = strtok(NULL, " ");
-
-            if (!count) {
-                printf("hexdump: expected count\n");
-                kfree(input_buffer);
-                continue;
-            }
-            uint32_t addr = xatoi(address);
-            uint32_t max = atoi(count);
-
-            printf("dumping %u byte(s) from %p (%u):\n", max, addr, addr);
-            printf("00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F %c 0123456789ABCDEF\n", (char)179);
-            printf("------------------------------------------------------------------\n");
-
-            for (uint32_t i = 0; i < (max / 16); ++i) {
-                char buffer[16];
-
-                for (uint32_t j = 0; j < 16; ++j) {
-                    uint32_t index = 16 * i + j;
-
-                    uint8_t data = ((uint8_t *)addr)[index];
-
-                    buffer[j] = data;
-                    printf("%02x ", data);
-                }
-
-                putchar((char)179);
-                putchar(' ');
-
-                for (uint32_t j = 0; j < 16; ++j) {
-                    char ch = buffer[j];
-
-                    switch (ch) {
-                        case '\n':
-                        case '\b':
-                        case '\e':
-                        case '\t':
-                        case '\r':
-                            putchar('?');
-                            break;
-
-                        default:
-                            putchar(ch);
-                            break;
-                    }
-                }
-
-                putchar('\n');
-            }
-
-            if (max % 16) {
-                char buffer[16];
-
-                for (uint32_t i = 0; i < (max % 16); ++i) {
-                    uint32_t index = (max & 0xfffffff0) + i;
-                    uint8_t data = ((uint8_t *)addr)[i];
-
-                    buffer[i] = data;
-                    printf("%02x ", data);
-                }
-
-                for (uint32_t i = 0; i < (16 - (max % 16)); ++i) {
-                    printf("   ");
-                }
-
-                putchar((char)179);
-                putchar(' ');
-
-                for (uint32_t i = 0; i < (max % 16); ++i) {
-                    char ch = buffer[i];
-
-                    switch (ch) {
-                        case '\n':
-                        case '\b':
-                        case '\e':
-                        case '\t':
-                        case '\r':
-                            putchar('?');
-                            break;
-
-                        default:
-                            putchar(ch);
-                            break;
-                    }
-                }
-
-                putchar('\n');
-            }
-        } else if (!strcmp(cmd, "lsblk")) {
-            //printk("NAME     DRIVER    TYPE      MOUNTPOINT\n");
-
-            /*printf("NAME");
-
-            uint32_t spaces;
-
-            if (longest_dev_name < 5)
-                spaces = 1;
-            else
-                spaces = longest_dev_name - 4;
-
-            for (uint32_t i = 0; i < spaces; ++i)
-                putchar(' ');
-
-            printf("MAJ:MIN\n");
-
-            for (uint32_t i = 0; i < devs_count; ++i)
-                printf("%s %u:%u %s (address=%p)\n", devs[i].name, devs[i].major, devs[i].minor, devs[i].driver->module_name, devs[i].driver);*/
-        } else if (!strcmp(cmd, "tree"))
-            __tree(__get_dentry());
-        else if (!strcmp(cmd, "ping")) {
-            char *target = strtok(NULL, " ");
-
-            if (!target) {
-                printf("ping: expected target\n");
-                kfree(input_buffer);
-                continue;
-            }
-
-            //ping(target);
-        }
-        else if (index)
-            printf("terminal: %s: command not found\n", cmd);
-
-        kfree(input_buffer);
-    }
-}
-
-void __user_daemon(void) {
-    //printk("\033[33muser:\033[37m USER daemon running, PID=%u\n", __get_pid());
-
-    //asm volatile ("int 0x80");
-    for (;;);
-}
-
-/**
  * __init_handlers
 */
 
@@ -628,11 +336,28 @@ struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
     return NULL;
 }
 
+// use atomic operations
+bool net_rx_pending = FALSE;
+
+void receive_packet() {
+    printf("processing packet...\n");
+    net_rx_pending = FALSE;
+}
+
+int32_t __softirq_daemon(int argc, char **argv) {
+    for (;;) {
+        if (net_rx_pending) {
+            receive_packet();
+            //net_rx_pending = FALSE;
+        }
+    }
+}
+
 /**
  * entry
 */
 
-void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, uint32_t boot_drv, uint32_t fs_type, SYMBOL *symbol_table, uint32_t symbols_count, char *string_table) {
+void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_directory, uint32_t cursor_y, uint32_t cursor_x, uint32_t boot_drv, uint32_t fs_type, void *symbol_table, uint32_t symbols_count, char *string_table) {
     // reset tick counter
     __init_tick_counter();
     
@@ -671,7 +396,6 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     }
 
     // set default handlers
-    // TODO: use isr wrapper
     __init_handlers();
 
     __parse_config(command_line);
@@ -775,7 +499,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
         // set handlers for spurious interrupts
         __set_handler(0x77, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__spurious_irq_isr);
         __set_handler(0x27, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__spurious_irq_isr);
-        __enable_irq(2); // enable cascade
+        __enable_irq(0x02); // enable cascade
         __enable_interrupts(); // we are ready to receive external interrupts
     } else {
         // initialize apic
@@ -815,17 +539,83 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
     if (__sched_init(&root))
         panic();
 
-#ifdef CONFIG_FDC
-    if (__init_fdc())
-        printk("kernel: info: fdc not initialized\n");
-#endif
+    if (__dev_init())
+        panic();
 
+    // takes care of deffered jobs
+    int32_t softirq_pid = __create_thread("softirq-daemon", (int32_t (*)(int argc, char **argv))&__softirq_daemon, THREAD_RING_0, THREAD_PRIORITY_HIGH);
+
+    if (softirq_pid < 0) {
+        printk("failed to start softirq\n");
+        panic();
+    }
+
+#ifdef CONFIG_FDC
+    int32_t fdc_init_pid = __create_thread("fdc-init", (int32_t (*)(int argc, char **argv))&__init_fdc, THREAD_RING_0, THREAD_PRIORITY_LOW);
+
+    if (fdc_init_pid < 0) {
+        printk("failed to start fdc daemon\n");
+        panic();
+    }
+
+    uint32_t state;
+    uint32_t spaces = 0;
+    int32_t add = 1;
+    int tks = 0;
+
+    // this is actually the sexiest thing in this
+    // kernel right now ... absolutely love it
+    do {
+        if (__get_state(fdc_init_pid, &state))
+            break;
+        
+        if (tks % 20 == 0) {
+            printf("\r[");
+
+            for (uint32_t j = 0; j < spaces; ++j)
+                putchar(' ');
+            
+            printf("\033[33m***\033[37m");
+
+            for (uint32_t j = 0; j < 3 - spaces; ++j)
+                putchar(' ');
+
+            printf("] Initializing... ");
+
+            if (add == 1)
+                ++spaces;
+            else if (add == -1)
+                --spaces;
+
+            if (spaces <= 0 || spaces >= 3)
+                add *= -1;
+        }
+
+        __delay_ms(1);
+        ++tks;
+    } while (state != 3);
+
+    int32_t exitcode;
+
+    if (__get_exitcode(fdc_init_pid, &exitcode))
+        panic();
+
+    // TODO: clear line (with spaces)
+    printf("\r[");
+
+    if (exitcode)
+        printf("\033[91mFAILED");
+    else
+        printf("\033[92m  OK  ");
+
+    printf("\033[37m] FDC Initialized\n");
+#endif
     __init_pci();
 
     /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
     for(;;);*/
 
-    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0);
+    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_LOW);
 
     if (terminal_pid < 0) {
         printk("failed to start terminal\n");
@@ -834,13 +624,11 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, void *paging_d
 
     //__set_handler(0x80, 0x0008, 0xee, &syscall);
 
-    //__create_thread("user-daemon", (int32_t (*)(int argc, char **argv))&__user_daemon, 0);
-
     //printk("\033[33mkernel:\033[37m Entering IDLE loop\n");
     printf("\033[97mWelcome!\033[37m\n");
     printf("\033[97m%s-%s\033[37m\n", VERSION, ARCH);
 
-    //__mount(root_dev, "/dev/fd0");
+    __mount(root_dev, "/dev/fd0");
 
     // idle loop
     for (;;)

@@ -149,7 +149,7 @@ static struct __kobj_type pci_driver_type = {
 */
 
 int32_t __init_pci(void) {
-    struct __driver *driver = __register_driver("pci", &pci_driver_type);
+    struct __driver *driver = __register_driver("pci", 143, &pci_driver_type);
 
     if (!driver)
         return -1;

@@ -1292,6 +1292,10 @@ void (* isrs[256])(struct __interrupt_frame *) = {
     &__int255_handler,
 };
 
+/**
+ * __isr_init
+*/
+
 void __isr_init(void) {
     for (uint32_t i = 0; i < 256; ++i)
         __set_handler(i, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, isrs[i]);

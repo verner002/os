@@ -4,47 +4,72 @@
  * @date 14/09/2025
 */
 
+#include "macros.h"
 #include "hal/dev.h"
 #include "mm/heap.h"
 #include "kernel/task.h"
+#include "hal/vfs.h"
 
 atomic_t __dev_id;
 
-static struct __kobj *dev;
+// kobj for /dev
+static struct __dentry *dev;
 
-static struct __dev *head = NULL;
-static struct __dev *tail = NULL;
+// devs linked-list
+static uint32_t devices_cnt;
+static struct __dev *devices[32];
+
+/**
+ * initializes devs linked-list and
+ * mounts /dev
+*/
 
 int32_t __dev_init(void) {
-    dev = (struct __kobj *)kmalloc(sizeof(struct __kobj));
+    dev = __file_add(__get_dentry(), "dev", 0, 0, 0x80000000 | 0755);
 
     if (!dev)
         return -1;
 
-    struct __dentry *dev_dentry = (struct __dentry *)kmalloc(sizeof(struct __dentry));
+    devices_cnt = 0;
+    return 0;
+}
 
-    if (!dev_dentry) {
-        kfree(dev);
-        dev = NULL;
+/**
+ * __dev_add
+ * 
+ * RFC: actually we should take a look at device types
+ *  and (maybe) create different __*_dev_add functions
+ *  for  each type?
+*/
+
+int32_t __dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct __bus *bus, struct __dev_type *type) {
+    if (!name /*|| !bus || !type*/ || devices_cnt >= sizeofarray(devices))
+        return -1;
+
+    struct __dev *device = (struct __dev *)kmalloc(sizeof(struct __dev));
+
+    if (!device)
+        return -1;
+
+    // FIXME: we need an atomic increment that
+    // gives us the value and increments it as
+    // a single operation
+    device->d_id = __dev_id++;
+    device->d_bus = bus;
+    device->d_kdev = kdev;
+    //device->d_kobj = ;
+    device->d_name = name;
+    device->d_parent = parent;
+    device->d_type = type;
+
+    struct __dentry *device_file = __file_add(dev, name, 0, 0, 0755);
+
+    if (!device_file) {
+        kfree(device);
         return -1;
     }
 
-    struct __inode *dev_inode = (struct __inode *)kmalloc(sizeof(struct __inode *));
-
-    if (!dev_inode) {
-        kfree(dev_dentry);
-        kfree(dev);
-        dev = NULL;
-        return -1;
-    }
-
-    __dentry_init(dev_dentry);
-    dev_dentry->name = "dev";
-    dev_dentry->d_inode = dev_inode;
-    __dentry_add(dev_dentry, __get_dentry());
-
-    __inode_init(dev_inode, dev_dentry);
-    dev_inode->i_mode = 0x80000000 | 0755;
+    devices[devices_cnt++] = device;
     return 0;
 }
 

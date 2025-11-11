@@ -438,7 +438,7 @@ void __e1000_init_rx(void) {
     //__map_page((uint32_t)rx_descs, (uint32_t)rx_descs, PAGE_READ_WRITE | PAGE_CACHE_DISABLED | PAGE_WRITE_THROUGH);
 
     for (uint32_t i = 0; i < E1000_NUM_RX_DESC; ++i) {
-        uint32_t addr = (uint32_t)pgalloc();
+        uint32_t addr = (uint32_t)pgalloc(PAGE_MAP);
 
         //printk("%u: %p\n", i, addr);
 
@@ -485,7 +485,7 @@ void __e1000_init_tx(void) {
     //__map_page((uint32_t)tx_descs, (uint32_t)tx_descs, PAGE_READ_WRITE | PAGE_CACHE_DISABLED | PAGE_WRITE_THROUGH);
 
     for (uint32_t i = 0; i < E1000_NUM_TX_DESC; ++i) {
-        uint32_t addr = (uint32_t)pgalloc();
+        uint32_t addr = (uint32_t)pgalloc(PAGE_MAP);
 
         //printk("%u: %p\n", i, addr);
 

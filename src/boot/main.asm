@@ -1,7 +1,7 @@
 ;
-; FAT12 Bootloader
-;
-; Author: verner002
+; @file boot.asm
+; @author verner002
+; @date 11/11/2025
 ;
 
 cpu 486
@@ -37,7 +37,7 @@ __main:
     ;mov fs, ax
     ;mov gs, ax
     mov ss, ax
-    mov sp, 0x6000
+    mov sp, 0x7000
     cld
     sti
 
@@ -52,7 +52,7 @@ __main:
 
     mov ax, word [__bpb.sectrs_res]
     mov cx, word [__bpb.sectrs_per_fat]
-    mov bx, __FAT_OFFSET
+    mov bx, 0x9000
     call __read_sects ; load fat
     jc __halt
 
@@ -62,34 +62,35 @@ __main:
     add ax, cx
 
     mov cx, word [__data.rd_sz]
-    mov bx, __RD_OFFSET
-    call __read_sects ; load root dir
+    mov bx, 0xb000
+    call __read_sects ; load root directory
     jc __halt
 
     ; copy command line at expected address
-    ; up to 255 bytes allowed
     mov si, __data.command_line
-    mov di, __COMMAND_LINE_OFFSET
-    mov cx, (__data.command_line_end - __data.command_line + 1) & 0x00ff
+    mov di, 0x1000
+    mov cx, __data.command_line_end - __data.command_line + 1
     rep movsb
 
-    push __SYS_SEGMENT
+    ; 0x00010000
+    push 0x1000
     pop es
     xor bx, bx
     mov si, __data.kernel_sys
-    call __load_file ; load kernel.sys, up to 576 KiB
+    call __load_file ; load kernel.sys, up to 448 kib
     jc __halt
 
+    ; 0x00008000
     push 0x0000
     pop es
-    mov bx, __LDR_OFFSET
+    mov bx, 0x8000
     mov si, __data.loader_sys
-    call __load_file ; load loader.sys (loader must be the last file to load), up to 32 KiB
+    call __load_file ; load loader.sys (loader must be the last file to load), up to 32 kib
     jc __halt
 
     ; pass some arguments?
     mov dl, byte [__bpb.drv_num]
-    jmp near __LDR_OFFSET ; execute loader
+    jmp near 0x8000 ; execute loader
 
 ;
 ; __halt
@@ -110,7 +111,7 @@ __load_file:
     pop es
 
     mov ax, word [__bpb.num_of_rd_ents]
-    mov di, __RD_OFFSET
+    mov di, 0xb000
 
     .check_entry:
     mov cx, 0x000b ; filename length
@@ -153,7 +154,7 @@ __load_file:
     shr bx, 0x01
     add bx, ax
     test ax, 0x01
-    mov ax, word [bx+__FAT_OFFSET]
+    mov ax, word [bx+0x9000]
     pop bx
     jz .even
     shr ax, 0x04
@@ -252,9 +253,9 @@ __data:
     .command_line db `root=/dev/fd0`
     .command_line_end db 0x00
 
-%if (__data.command_line_end - __data.command_line + 1) > 255
+%if (__data.command_line_end - __data.command_line + 1) > 256
     ; in fact it will be much smaller because of the code
-    %error "cmd line can have only up to 255 chars including eos"
+    %error "command line can have only up to 256 chars including end of string"
 %endif
 
 ;

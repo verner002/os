@@ -6,3 +6,6 @@
 
 #include "fs/super.h"
 
+int32_t __register_fs(void) {
+    
+}

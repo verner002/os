@@ -59,9 +59,11 @@ int32_t __putc(uint8_t c) {
     __mutex_lock(&putc_mutex);
 
     if (state == 0) {
-        if (c == '\033') state = 1;
+        if (c == '\033')
+            state = 1;
         else {
-            if (c == '\r') cursor_x = 0;
+            if (c == '\r')
+                cursor_x = 0;
             else if (c == '\n') {
                 ++cursor_y;
                 cursor_x = 0;
@@ -77,7 +79,8 @@ int32_t __putc(uint8_t c) {
                     video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = ((uint16_t)color << 8) | (uint16_t)' ';
                 }
             } else {
-                if (c < 0x20 || c > 0xfe) c = '?'; // invalid character
+                if (c < 0x20 || c > 0xfe)
+                    c = '?'; // invalid character
 
                 video_memory[cursor_y * VIDEO_MEM_COLS + cursor_x] = ((uint16_t)color << 8) | (uint16_t)c;
 
@@ -95,7 +98,8 @@ int32_t __putc(uint8_t c) {
             __setcurpos(cursor_y, cursor_x);
         }
     } else if (state == 1) {
-        if (c == '[') state = 2;
+        if (c == '[')
+            state = 2;
         else {
             state = index = 0;
 

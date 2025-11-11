@@ -13,9 +13,10 @@
 */
 
 int32_t __mount(__kdev_t dev, char const *mpoint) {
-    __dev_init();
+    struct __dentry *mnt = __file_add(__get_dentry(), "mnt", 0, 0, 0x80000000 | 0755);
 
-    __file_add(__get_dentry()->io_ops.lookup(__get_dentry(), "/dev"), "fd0", 0, 0, 0x80000000 | 0755);
+    // and this will be done here
+    __file_add(__get_dentry()->io_ops.lookup(__get_dentry(), "/mnt"), "fd0", 0, 0, 0x80000000 | 0755);
     
     // "/mnt/test/fd0", "./test/fd0", "test/fd0", "test/fd0/"
     // '.' (dot) represent current directory relative

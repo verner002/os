@@ -75,7 +75,7 @@ void pgreserve(void *p) {
  *  1) call __mmap
 */
 
-void *pgalloc(void) {
+void *pgalloc(uint32_t flags) {
     for (uint32_t i = last_index; i < size; ++i) {
         if (~bitmap[i]) {
             uint32_t temp = bitmap[i];
@@ -100,7 +100,9 @@ void *pgalloc(void) {
             last_index = i; // update offset
             uint32_t address = (i * 32 + (uint32_t)temp) * 4096;
             
-            __map_page(address, address, PAGE_READ_WRITE | PAGE_USER);
+            if (flags & PAGE_MAP)
+                __map_page(address, address, PAGE_READ_WRITE | PAGE_USER);
+            
             return (void *)address;
         }
     }

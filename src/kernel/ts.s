@@ -17,7 +17,7 @@ global __yield
 
 extern __update_tick_counter
 extern __sched_lock
-extern thread_lcurrent
+extern thread_current
 extern __dispatch
 extern __set_kernel_stack
 extern __send_eoi
@@ -61,7 +61,7 @@ __yield:
     jc .return
 
     ; load pointer to current task
-    mov edx, dword [thread_lcurrent]
+    mov edx, dword [thread_current]
 
     ; is there a task?
     test edx, edx
@@ -84,7 +84,7 @@ __yield:
 
     call __dispatch
 
-    mov edx, dword [thread_lcurrent]
+    mov edx, dword [thread_current]
     mov esp, dword [edx]
 
     push dword [edx+8]
@@ -116,7 +116,7 @@ __schedule:
     jc .return
 
     ; load pointer to current task
-    mov edx, dword [thread_lcurrent]
+    mov edx, dword [thread_current]
 
     ; is there a task?
     test edx, edx
@@ -139,7 +139,7 @@ __schedule:
 
     call __dispatch
 
-    mov edx, dword [thread_lcurrent]
+    mov edx, dword [thread_current]
     mov esp, dword [edx]
 
     push dword [edx+8]

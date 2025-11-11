@@ -29,6 +29,9 @@ struct __thread_control_block {
     uint32_t t_kernel_esp; // current kernel esp
     uint32_t t_kernel_stack; // kernel stack bottom
     int32_t t_pid; // process id
+    uint32_t t_priority; // thread's priority
+    uint32_t t_ticks; // maximum number of ticks
+    uint32_t t_ticks_current; // current number of ticks
     uint32_t t_state; // task state
     uint32_t t_flags; // privilage level
     uint32_t t_page_dir; // paging directory
@@ -37,7 +40,6 @@ struct __thread_control_block {
     struct __thread_control_block *t_nextt; // next thread
     char const *t_name;
     struct __thread_fs *t_fs;
-    char *strtok_sptr; // strtok string pointer
     /*FILE *t_stdin;
     FILE *t_stdout;
     FILE *t_stderr;*/
@@ -45,9 +47,18 @@ struct __thread_control_block {
 
 bool __sched_lock = FALSE;
 struct __thread_control_block
-    *thread_lhead = NULL,
-    *thread_lcurrent = NULL,
-    *thread_ltail = NULL;
+    *thread_lhead = NULL;
+
+struct __thread_control_block
+    *thread_current = NULL;
+
+struct __thread_control_block
+    *thread_high_head = NULL,
+    *thread_high_tail = NULL;
+
+struct __thread_control_block
+    *thread_low_head = NULL,
+    *thread_low_tail = NULL;
 
 static int32_t __thread_next_pid = 0;
 
@@ -56,10 +67,10 @@ static int32_t __thread_next_pid = 0;
 */
 
 int32_t __get_pid(void) {
-    if (!thread_lcurrent)
+    if (!thread_current)
         return -1;
 
-    return thread_lcurrent->t_pid;
+    return thread_current->t_pid;
 }
 
 /**
@@ -67,10 +78,90 @@ int32_t __get_pid(void) {
 */
 
 struct __dentry *__get_dentry(void) {
-    if (!thread_lcurrent || !thread_lcurrent->t_fs)
+    if (!thread_current || !thread_current->t_fs)
         return NULL;
 
-    return thread_lcurrent->t_fs->t_dentry;
+    return thread_current->t_fs->t_dentry;
+}
+
+/**
+ * __get_state
+*/
+
+int32_t __get_state(int32_t pid, uint32_t *state) {
+    __mutex_lock(&__sched_lock);
+    struct __thread_control_block *thread = thread_high_head;
+
+    while (thread) {
+        if (thread->t_pid == pid) {
+            *state = thread->t_state;
+            __mutex_unlock(&__sched_lock);
+            return 0;
+        }
+
+        thread = thread->t_nextt;
+
+        if (thread == thread_high_head)
+            break;
+    }
+
+    thread = thread_low_head;
+
+    while (thread) {
+        if (thread->t_pid == pid) {
+            *state = thread->t_state;
+            __mutex_unlock(&__sched_lock);
+            return 0;
+        }
+
+        thread = thread->t_nextt;
+
+        if (thread == thread_low_head)
+            break;
+    }
+
+    __mutex_unlock(&__sched_lock);
+    return -1;
+}
+
+/**
+ * __get_exitcode
+*/
+
+int32_t __get_exitcode(int32_t pid, int32_t *exitcode) {
+    __mutex_lock(&__sched_lock);
+    struct __thread_control_block *thread = thread_high_head;
+
+    while (thread) {
+        if (thread->t_pid == pid) {
+            *exitcode = thread->t_exit_code;
+            __mutex_unlock(&__sched_lock);
+            return 0;
+        }
+
+        thread = thread->t_nextt;
+
+        if (thread == thread_high_head)
+            break;
+    }
+
+    thread = thread_low_head;
+
+    while (thread) {
+        if (thread->t_pid == pid) {
+            *exitcode = thread->t_exit_code;
+            __mutex_unlock(&__sched_lock);
+            return 0;
+        }
+
+        thread = thread->t_nextt;
+
+        if (thread == thread_low_head)
+            break;
+    }
+
+    __mutex_unlock(&__sched_lock);
+    return -1;
 }
 
 /**
@@ -79,8 +170,8 @@ struct __dentry *__get_dentry(void) {
 
 __attribute__((noreturn)) int32_t __exit(int32_t code) {
     __mutex_lock(&__sched_lock);
-    thread_lcurrent->t_state = THREAD_STATE_EXITING;
-    thread_lcurrent->t_exit_code = code;
+    thread_current->t_state = THREAD_STATE_EXITING;
+    thread_current->t_exit_code = code;
     __mutex_unlock(&__sched_lock);
     
     for(;;); // idle loop
@@ -99,21 +190,21 @@ static void __thread_setup(void) {
 */
 
 static void __thread_exit(void) {
-    __exit(thread_lcurrent->t_exit_code);
+    __exit(thread_current->t_exit_code);
 }
 
 /**
  * __create_thread
 */
 
-int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags) {
-    if (!thread_lcurrent)
+int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority) {
+    if (!thread_current)
         return -1;
 
     bool spawn_ring_0_thread = flags & THREAD_RING_0;
 
     // is thread allowed to spawn ring 0 thread?
-    if (spawn_ring_0_thread && !(thread_lcurrent->t_flags & THREAD_RING_0))
+    if (spawn_ring_0_thread && !(thread_current->t_flags & THREAD_RING_0))
         return -1;
 
     struct __thread_control_block *thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
@@ -121,14 +212,14 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     if (!thread)
         return -1;
 
-    uint32_t *stack = (uint32_t *)pgalloc();
+    uint32_t *stack = (uint32_t *)pgalloc(PAGE_MAP);
 
     if (!stack) {
         kfree(thread);
         return -1;
     }
 
-    uint32_t *kstack = (uint32_t *)pgalloc();
+    uint32_t *kstack = (uint32_t *)pgalloc(PAGE_MAP);
 
     if (!kstack) {
         pgfree(stack);
@@ -141,14 +232,15 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     memset(kstack, 0, 4096);
 
     thread->t_pid = __thread_next_pid++;
+    thread->t_priority = priority;
     thread->t_state = THREAD_STATE_IDLE;
     thread->t_flags = flags;
     thread->t_page_dir = 0;
     thread->t_exit_code = -1;
-    thread->t_parent_pid = thread_lcurrent->t_pid;
+    thread->t_parent_pid = thread_current->t_pid;
 
     thread->t_name = name;
-    thread->t_fs = thread_lcurrent->t_fs;
+    thread->t_fs = thread_current->t_fs;
     /*thread->t_stdin = NULL;
     thread->t_stdout = NULL;
     thread->t_stderr = NULL;*/
@@ -207,12 +299,35 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
 
     // set up kernel stack
     thread->t_kernel_esp = (uint32_t)kstack;
+
+    thread->t_ticks = 10;
+    thread->t_ticks_current = 0;
+    thread->t_nextt = NULL;
     
     // ----- CRITICAL -----
+
     __mutex_lock(&__sched_lock);
-    thread->t_nextt = thread_lhead;
-    thread_ltail->t_nextt = thread;
-    thread_ltail = thread;
+    switch (priority) {
+        case THREAD_PRIORITY_LOW:
+            if (!thread_low_head)
+                thread_low_head = thread;
+
+            if (thread_low_tail)
+                thread_low_tail->t_nextt = thread;
+
+            thread_low_tail = thread;
+            break;
+
+        case THREAD_PRIORITY_HIGH:
+            if (!thread_high_head)
+                thread_high_head = thread;
+
+            if (thread_high_tail)
+                thread_high_tail->t_nextt = thread;
+
+            thread_high_tail = thread;
+            break;
+    }
     __mutex_unlock(&__sched_lock);
     // ----- CRITICAL -----
     return thread->t_pid;
@@ -223,44 +338,48 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
 */
 
 int32_t __sched_init(struct __dentry *root_dentry) {
-    struct __thread_control_block *init = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
+    struct __thread_control_block *kernel_thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
     
-    if (!init)
+    if (!kernel_thread)
         return -1;
 
     struct __thread_fs *init_fs = (struct __thread_fs *)kmalloc(sizeof(struct __thread_fs));
 
     if (!init_fs) {
-        kfree(init);
+        kfree(kernel_thread);
         return -1;
     }
 
     init_fs->t_dentry = root_dentry;
 
-    init->t_name = "kernel";
-    init->t_parent_pid = -1;
-    init->t_pid = __thread_next_pid++;
-    init->t_state = THREAD_STATE_RUNNING;
-    init->t_flags = THREAD_RING_0;
-    init->t_exit_code = -1;
-    init->t_fs = init_fs;
-    //init->t_esp = 0;
-    init->t_stack = 0;
+    kernel_thread->t_name = "kernel";
+    kernel_thread->t_parent_pid = -1;
+    kernel_thread->t_pid = __thread_next_pid++;
+    kernel_thread->t_priority = THREAD_PRIORITY_LOW;
+    kernel_thread->t_state = THREAD_STATE_RUNNING;
+    kernel_thread->t_flags = THREAD_RING_0;
+    kernel_thread->t_exit_code = -1;
+    kernel_thread->t_fs = init_fs;
+    //kernel_thread->t_esp = 0;
+    kernel_thread->t_stack = 0;
     // not used by thread 0
-    init->t_kernel_esp = 0;
-    init->t_kernel_stack = 0;
+    kernel_thread->t_kernel_esp = 0;
+    kernel_thread->t_kernel_stack = 0;
+    kernel_thread->t_ticks = 10;
+    kernel_thread->t_ticks_current = 0;
     
     asm volatile (
         "mov %0, cr3"
-        : "=r" (init->t_page_dir)
+        : "=r" (kernel_thread->t_page_dir)
         :
         :
     );
 
-    init->t_nextt = init;
+    kernel_thread->t_nextt = NULL;
 
     __mutex_lock(&__sched_lock);
-    thread_lhead = thread_lcurrent = thread_ltail = init;
+    thread_current = kernel_thread;
+    thread_low_head = thread_low_tail = NULL;
     __mutex_unlock(&__sched_lock);
     return 0;
 }
@@ -270,48 +389,47 @@ int32_t __sched_init(struct __dentry *root_dentry) {
 */
 
 void __dispatch(void) {
-    if (thread_lcurrent->t_state == THREAD_STATE_RUNNING)
-        thread_lcurrent->t_state = THREAD_STATE_IDLE;
+    bool switch_required = thread_current->t_ticks_current++ >= thread_current->t_ticks;
 
-    struct __thread_control_block *prev_thread;
-    struct __thread_control_block *next_thread = thread_lcurrent;
-    bool next;
+    if (switch_required)
+        thread_current->t_ticks_current = 0;
+    else
+        return;
 
-    do {
-        prev_thread = next_thread;
-        next_thread = next_thread->t_nextt;
-        next = FALSE;
+    switch (thread_current->t_priority) {
+        case THREAD_PRIORITY_HIGH:
+            if (!thread_high_head)
+                thread_high_head = thread_current;
 
-        switch (next_thread->t_state) {
-            case THREAD_STATE_SLEEPING:
-                next = TRUE;
-                break;
+            if (thread_high_tail)
+                thread_high_tail->t_nextt = thread_current;
+            
+            thread_high_tail = thread_current;
+            break;
+        
+        case THREAD_PRIORITY_LOW:
+            if (!thread_low_head)
+                thread_low_head = thread_current;
 
-            case THREAD_STATE_EXITING:
-                if (next_thread->t_stack)
-                    pgfree((void *)next_thread->t_stack);
+            if (thread_low_tail)
+                thread_low_tail->t_nextt = thread_current;
+            
+            thread_low_tail = thread_current;
+            break;
+    }
 
-                if (next_thread->t_kernel_stack)
-                    pgfree((void *)next_thread->t_kernel_stack);
+    struct __thread_control_block *next_thread;
 
-                prev_thread->t_nextt = next_thread->t_nextt;
+    // skip blocked threads (waiting for an event (irq, mutex, etc.))
+    if (thread_high_head && (!switch_required || thread_high_head != thread_current)) {
+        next_thread = thread_high_head;
+        thread_high_head = thread_high_head->t_nextt;
+    } else if (thread_low_head) {
+        next_thread = thread_low_head;
+        thread_low_head = thread_low_head->t_nextt;
+    }
 
-                if (next_thread == thread_lhead)
-                    thread_lhead = next_thread->t_nextt;
-
-                if (next_thread == thread_ltail)
-                    thread_ltail = next_thread->t_nextt;
-
-                kfree(next_thread);
-                next_thread = prev_thread;
-                next = TRUE;
-                break;
-        }
-    } while (next);
-
-    thread_lcurrent = next_thread;
-    thread_lcurrent->t_state = THREAD_STATE_RUNNING;
-    return;
+    thread_current = next_thread;
 }
 
 /**
@@ -320,15 +438,15 @@ void __dispatch(void) {
 
 void __wake_on(bool *alarm) {
     //__mutex_lock(&__sched_lock);
-    //thread_lcurrent->t_state = THREAD_STATE_SLEEPING;
+    //thread_current->t_state = THREAD_STATE_SLEEPING;
     //__mutex_unlock(&__sched_lock);
 
     // something could wake the thread up
     // so we check both the alarm and the state
-    while (!*alarm/* && thread_lcurrent->t_state != THREAD_STATE_RUNNING*/);
+    while (!*alarm/* && thread_current->t_state != THREAD_STATE_RUNNING*/);
 
     __mutex_lock(&__sched_lock);
-    thread_lcurrent->t_state = THREAD_STATE_RUNNING;
+    thread_current->t_state = THREAD_STATE_RUNNING;
     __mutex_unlock(&__sched_lock);
 }
 
@@ -361,7 +479,7 @@ int32_t __sleep_task(int32_t pid) {
     // wait for ctx switch, TODO: invoke ctx switch?
 
     // if the thread is the current thread
-    while (thread_lcurrent->t_state != THREAD_STATE_RUNNING);
+    while (thread_current->t_state != THREAD_STATE_RUNNING);
     return 0;
 }
 
@@ -370,7 +488,7 @@ int32_t __sleep_task(int32_t pid) {
 */
 
 int32_t __sleep_me(void) {
-    return __sleep_task(thread_lcurrent->t_pid);
+    return __sleep_task(thread_current->t_pid);
 }
 
 /**
@@ -379,7 +497,7 @@ int32_t __sleep_me(void) {
 
 int32_t __wake_task(int32_t pid) {
     __mutex_lock(&__sched_lock);
-    struct __thread_control_block *thread = thread_lcurrent;
+    struct __thread_control_block *thread = thread_current;
     bool not_found = TRUE;
 
     do {
@@ -413,13 +531,23 @@ int32_t __wake_task(int32_t pid) {
 void __list_threads(void) {
     __mutex_lock(&__sched_lock);
     
-    struct __thread_control_block *thread = thread_lhead;
+    struct __thread_control_block *thread = thread_low_head;
     
-    do {
-        printk("thread pid=%u, state=%u, flags=%08x, name=%s\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name);
-        printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
-        thread = thread->t_nextt;
-    } while (thread != thread_lhead);
+    if (thread)
+        do {
+            printk("thread pid=%u, state=%u, flags=%08x, name=%s, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name, thread->t_priority);
+            printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
+            thread = thread->t_nextt;
+        } while (thread != thread_low_head);
+
+    thread = thread_high_head;
+    
+    if (thread)
+        do {
+            printk("thread pid=%u, state=%u, flags=%08x, name=%s, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name, thread->t_priority);
+            printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
+            thread = thread->t_nextt;
+        } while (thread != thread_high_head);
     
     __mutex_unlock(&__sched_lock);
 }

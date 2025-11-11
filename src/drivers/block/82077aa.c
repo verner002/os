@@ -1,18 +1,11 @@
 /**
- * 82077aa
- * 
- * Author: verner002
-*/
-
-/**
- * Includes
+ * @file 82077aa.c
+ * @author verner002
+ * @date 05/11/2025
 */
 
 #include "drivers/block/82077aa.h"
-
-/**
- * Static Global Variables
-*/
+#include "hal/dev.h"
 
 static struct {
     //uint8_t driveSelect; -- 0 for now
@@ -181,7 +174,8 @@ int32_t __fdc_reset(void) {
     for (uint32_t i = 0; i < 3; ++i) {
         errno = 0; // reset errno
         
-        if (__fdc_software_reset()) continue;
+        if (__fdc_software_reset())
+            continue;
 
         for (uint32_t j = 0; j < 4; ++j) { // send sense interrupt to each of four drives
             uint8_t st0, pcn;
@@ -196,13 +190,16 @@ int32_t __fdc_reset(void) {
             printk("..... PCN=%u\n", pcn);*/
         }
 
-        if (errno) continue;
+        if (errno)
+            continue;
 
         __fdc_outb(FDC_COMMAND_CONFIGURE);
-        if (errno) continue;
+        if (errno)
+            continue;
 
         __fdc_outb(0x00);
-        if (errno) continue;
+        if (errno)
+            continue;
 
         bool impliedSeekEnabled = TRUE;
         bool fifoDisabled = FALSE;
@@ -210,13 +207,16 @@ int32_t __fdc_reset(void) {
         uint8_t threshold = 8 - 1; // value - 1
 
         __fdc_outb((impliedSeekEnabled << 6) | (fifoDisabled << 5) | (drivePollingModeDisabled << 4) | threshold);
-        if (errno) continue;
+        if (errno)
+            continue;
 
         __fdc_outb(0x00); // precompensation = 0
-        if (errno) continue;
+        if (errno)
+            continue;
 
         __fdc_outb(FDC_COMMAND_SPECIFY);
-        if (errno) continue;
+        if (errno)
+            continue;
 
         uint8_t srt = 16 - (HEAD_ASSEMBLY * DATARATE / 500000);
         uint8_t hlt = HEAD_ACTIVATION * DATARATE / 1000000;
@@ -236,7 +236,7 @@ int32_t __fdc_reset(void) {
             __fdc_turn_motor_off();
             continue;
         }
-        
+
         __fdc_turn_motor_off();
         return 0;
     }
@@ -516,6 +516,30 @@ static int32_t __fdc_daemon(int argc, char **argv) {
     }
 }
 
+static struct __kobj_type fdc_driver_type = {
+    .k_attribs = NULL,
+    .release = NULL,
+    .k_ops = {
+        .read = NULL,
+        .write = NULL
+    }
+};
+
+/**
+ * __ioctl
+*/
+
+int32_t __ioctl(uint32_t cmd, uint8_t minor, void *data) {
+    switch (cmd) {
+        case 0:
+            break;
+
+        case 1:
+            
+            break;
+    }
+}
+
 /**
  * __init_fdc
 */
@@ -532,8 +556,8 @@ int32_t __init_fdc(void) {
     //printf("Done\n");
 
     if (!fdc.type) {
-        printk("\033[33mfdc:\033[37m No drive found\n");
-        return 0;
+        //printk("\033[33mfdc:\033[37m No drive found\n");
+        __exit(0);
     }
 
     //printk("\033[33mfdc:\033[37m Preparing IRQ6 handler... ");
@@ -546,18 +570,26 @@ int32_t __init_fdc(void) {
     //printf("Done\n");
 
     if (__fdc_reset()) {
-        printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
+        //printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
         __disable_irq(0x06);
-        return -1;
+        __exit(-1);
     }
 
     /*__mutex_lock(&motor_mutex);
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0);
+    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0, THREAD_PRIORITY_LOW);
 
-    printk("\033[33mfdc:\033[37m FDC daemon running, PID=%u\n", pid);
-    printk("\033[33mfdc:\033[37m Initialized\n");
-    return 0;   
+    if (pid < 0)
+        __exit(-1);
+
+    // creates device file in /dev -> /dev/fd0
+    if (__dev_add(MAJMIN(FLOPPY_MAJOR, 0), "fd0", NULL, NULL, NULL))
+        __exit(-1);
+
+    if (!__register_driver("fdc", FLOPPY_MAJOR, &fdc_driver_type))
+        __exit(-1);
+
+    __exit(0);
 }

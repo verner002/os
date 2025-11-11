@@ -59,7 +59,7 @@ struct __bus *__register_bus(char const *name, struct __driver const *driver) {
     __kobj_init(bus_kobj, bus_ktype);
     __kobj_rename(bus_kobj, name);
     //__kobj_add(bus_kobj, sysfs);
-    //__kobj_put(bus); -- use by caller (caller should call __kobj_put)
+    //__kobj_put(bus); -- used by caller (caller should call __kobj_put)
 
     struct __bus *bus = (struct __bus *)kmalloc(sizeof(struct __bus));
 
