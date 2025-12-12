@@ -25,10 +25,12 @@ static uint32_t index = 0;
 static uint32_t values[16]; // TODO: define constant
 
 /**
- * __init_vga
+ * __vga_init
+ * 
+ * TODO: map video memory (if not already mapped)
 */
 
-void __init_vga(void) {
+void __vga_init(void) {
     __outb(VGA_MISCELLANEOUS_OUTPUT_REGISTER_W, __inb(VGA_MISCELLANEOUS_OUTPUT_REGISTER_R) | 0x01); // map crt controller to 0x03dx
     
     __inb(VGA_INPUT_STATUS_1_REGISTER); // reset 0x03c0 flip-flop
@@ -47,7 +49,7 @@ void __clear(void) {
     for (uint32_t i = 0; i < VIDEO_MEM_COLS * VIDEO_MEM_ROWS; ++i)
         video_memory[i] = ((uint16_t)color << 8) | (uint16_t)' ';
 
-    __setcurpos(0, 0);
+    __vga_set_cursor_position(0, 0);
 }
 
 /**
@@ -95,7 +97,7 @@ int32_t __putc(uint8_t c) {
                 __scroll_down();
             }
 
-            __setcurpos(cursor_y, cursor_x);
+            __vga_set_cursor_position(cursor_y, cursor_x);
         }
     } else if (state == 1) {
         if (c == '[')
@@ -179,10 +181,10 @@ int32_t __putc(uint8_t c) {
 }
 
 /**
- * __setcurpos
+ * __vga_set_cursor_position
 */
 
-void __setcurpos(uint32_t line, uint32_t column) {
+void __vga_set_cursor_position(uint32_t line, uint32_t column) {
     static bool setcurpos_mutex = FALSE;
     __mutex_lock(&setcurpos_mutex);
 

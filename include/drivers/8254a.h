@@ -17,4 +17,4 @@
  * Declarations
 */
 
-void __init_pit(void);
+void __pit_init(void);

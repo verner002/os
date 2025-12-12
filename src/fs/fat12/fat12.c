@@ -201,7 +201,7 @@ char *__8dot3_to_filename(FAT12_RECORD *record) {
 */
 
 char *__vfat_to_filename() {
-
+    return NULL;
 }
 
 /**
@@ -343,7 +343,7 @@ int32_t __fat12_list_rootdir(void) {
         FAT12_RECORD *record = &((FAT12_RECORD *)root_dir)[i];
         uint8_t *filename = record->filename;
 
-        char ch = *filename;
+        uint8_t ch = *filename;
 
         if (ch == 0x00)
             break; // last record
@@ -379,7 +379,7 @@ int32_t __fat12_list_rootdir(void) {
                 uint16_t *ptr = ucs2_filename;
                 uint16_t ch;
 
-                while (ch = *ptr++)
+                while ((ch = *ptr++))
                     fname[fname_index++] = ch & 0xff00 ? '?' : ch;
 
                 fname[fname_index] = '\0';
@@ -447,4 +447,6 @@ int32_t __fat12_list_rootdir(void) {
         printf("%u %s\n", minutes, fname);
         kfree(fname);
     }
+
+    return 0;
 }

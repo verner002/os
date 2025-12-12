@@ -4,6 +4,7 @@
  * @date 05/11/2025
 */
 
+#include "macros.h"
 #include "drivers/block/82077aa.h"
 #include "hal/dev.h"
 
@@ -103,7 +104,7 @@ uint8_t __fdc_inb(void) {
  * __fdc_irq6_handler
 */
 
-__attribute__((interrupt)) void __fdc_irq6_handler(INTERRUPT_FRAME *frame) {
+__attribute__((interrupt)) void __fdc_irq6_handler(struct __interrupt_frame *frame) {
     //__disable_interrupts();
     fdc.irqReceived = TRUE;
     __send_eoi(0x06);
@@ -493,7 +494,8 @@ char const*__get_drive_type_string(DRIVE drive) {
         "2.88 MB 3.5'"
     };
 
-    if ((uint32_t)drive.type >= sizeof(names) / sizeof(char *)) return "Unknown";
+    if ((uint32_t)drive.type >= sizeofarray(names))
+        return "Unknown";
 
     return names[(uint32_t)drive.type];
 }
@@ -563,7 +565,7 @@ int32_t __init_fdc(void) {
     //printk("\033[33mfdc:\033[37m Preparing IRQ6 handler... ");
 
     __disable_interrupts();
-    __set_handler(0x26, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__fdc_irq6_handler);
+    __idt_set_handler(0x26, 0x0008, IDT_ENTRY_PRESENT | IDT_32BIT_INTERRUPT_ENTRY, &__fdc_irq6_handler);
     __enable_interrupts();
     __enable_irq(0x06); // irq6
 
@@ -579,7 +581,7 @@ int32_t __init_fdc(void) {
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0, THREAD_PRIORITY_LOW);
+    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0, THREAD_PRIORITY_HIGH);
 
     if (pid < 0)
         __exit(-1);

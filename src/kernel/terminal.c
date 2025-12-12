@@ -10,6 +10,7 @@
 #include "kstdlib/stdlib.h"
 
 extern void panic(void);
+extern bool deffered_job;
 
 /**
  * xatoi
@@ -105,6 +106,10 @@ void __terminal_task(void) {
 
         char chr;
 
+        /*while(1)
+        for (int i = 0; i < 3; ++i)
+            putchar('A' + i);*/
+
         while ((chr = getchar()) != EOF && chr != '\n') {
             if (index + 1 >= size) {
                 size *= 2; //size = size * 1.5f + 0.5f; // growth factor
@@ -136,11 +141,13 @@ void __terminal_task(void) {
         char *cmd = strtok(input_buffer, " ");
 
         if (!strcmp(cmd, "heap")) {
-            __dump_heap(); // at this point can lead to a deadlock
+            //__dump_heap(); // at this point can lead to a deadlock
+            printk("this function is disabled since it can cause dead-lock\n");
         } else if (!strcmp(cmd, "clear")) {
             __clear();
         } else if (!strcmp(cmd, "ps")) {
-            __list_threads();
+            //__list_threads();
+            printk("this function is disabled since it can cause dead-lock\n");
         } else if (!strcmp(cmd, "e820")) {
             __e820_dump_mmap();
         } else if (!strcmp(cmd, "ls")) {
@@ -317,6 +324,8 @@ void __terminal_task(void) {
             __tree(__get_dentry());
         else if (!strcmp(cmd, "ping")) {
             char *target = strtok(NULL, " ");
+
+            deffered_job = TRUE;
 
             if (!target) {
                 printf("ping: expected target\n");

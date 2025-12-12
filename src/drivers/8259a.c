@@ -11,10 +11,10 @@
 #include "drivers/8259a.h"
 
 /**
- * __init_pics
+ * __pic_init
 */
 
-void __init_pics(uint8_t master_vec_offset, uint8_t slave_vec_offset) {
+void __pic_init(uint8_t master_vec_offset, uint8_t slave_vec_offset) {
     printk("\033[33mpic:\033[37m Initializing... ");
     
     /*uint8_t

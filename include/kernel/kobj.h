@@ -9,23 +9,9 @@
 #include "types.h"
 #include "hal/vfs.h"
 
-struct  __sysfs_attrib;
-struct __kobj;
-struct __kobj_type;
-
-struct __sysfs_ops {
-    uint32_t (*read)(struct __kobj *kobj, struct __sysfs_attrib *attrib, char *buffer);
-    void (*write)(struct __kobj *kobj, struct __sysfs_attrib *attrib, char const *buffer, uint32_t size);
-};
-
-struct  __sysfs_attrib {
-    char *name;
-};
-
-struct __kobj_type {
-    void (*release)(struct __kobj *);
-    struct __sysfs_ops k_ops;
-    struct __sysfs_attrib **k_attribs;
+struct __sysfs_attrib {
+    char const *__name;
+    char const *__path;
 };
 
 struct __kobj {
@@ -38,6 +24,17 @@ struct __kobj {
     struct __kobj_type *k_type;
     struct __dentry *k_dentry;
     // RFC: add mutex?
+};
+
+struct __sysfs_ops {
+    int32_t (*read)(struct __kobj *kobj, char const *name, char *buffer);
+    int32_t (*write)(struct __kobj *kobj, char const *name, char const *buffer, uint32_t size);
+};
+
+struct __kobj_type {
+    void (*release)(struct __kobj *);
+    struct __sysfs_ops k_ops;
+    struct __sysfs_attrib **k_attribs;
 };
 
 void __kobj_init(struct __kobj *kobj, struct __kobj_type *kobj_type);

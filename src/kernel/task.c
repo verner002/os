@@ -9,7 +9,6 @@
 */
 
 #include "kernel/task.h"
-#include "drivers/vga.h"
 
 #define THREAD_STATE_IDLE 0
 #define THREAD_STATE_RUNNING 1
@@ -40,10 +39,17 @@ struct __thread_control_block {
     struct __thread_control_block *t_nextt; // next thread
     char const *t_name;
     struct __thread_fs *t_fs;
-    /*FILE *t_stdin;
-    FILE *t_stdout;
-    FILE *t_stderr;*/
+    FILE t_stdin;
+    FILE t_stdout;
+    FILE t_stderr;
 };
+
+extern FILE
+    *stdin,
+    *stdout,
+    *stderr;
+
+extern int32_t __alloc_buffer(FILE *file, char const *name, uint32_t size);
 
 bool __sched_lock = FALSE;
 struct __thread_control_block
@@ -61,6 +67,14 @@ struct __thread_control_block
     *thread_low_tail = NULL;
 
 static int32_t __thread_next_pid = 0;
+
+FILE *__task_stdout(struct __thread_control_block *thread) {
+    return &thread->t_stdout;
+}
+
+struct __thread_control_block *__task_next(struct __thread_control_block *thread) {
+    return thread->t_nextt;
+}
 
 /**
  * __get_pid
@@ -174,7 +188,9 @@ __attribute__((noreturn)) int32_t __exit(int32_t code) {
     thread_current->t_exit_code = code;
     __mutex_unlock(&__sched_lock);
     
-    for(;;); // idle loop
+    // idle loop
+    for(;;)
+        __yield();
 }
 
 /**
@@ -196,6 +212,8 @@ static void __thread_exit(void) {
 /**
  * __create_thread
 */
+
+extern FILE *stdin;
 
 int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority) {
     if (!thread_current)
@@ -227,6 +245,27 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
         return -1;
     }
 
+    uint32_t const stdin_size = 512;
+
+    char *stdin_base = (char *)kmalloc(stdin_size * sizeof(char));
+
+    if (!stdin_base) {
+        pgfree((void *)kstack);
+        pgfree((void *)stack);
+        kfree(thread);
+        return -1;
+    }
+
+    thread->t_stdout.__lock = FALSE;
+
+    if (__alloc_buffer(&thread->t_stdout, "stdout", 256)) {
+        kfree(stdin);
+        pgfree((void *)kstack);
+        pgfree((void *)stack);
+        kfree(thread);
+        return -1;
+    }
+
     // clear stack
     memset(stack, 0, 4096);
     memset(kstack, 0, 4096);
@@ -238,12 +277,25 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     thread->t_page_dir = 0;
     thread->t_exit_code = -1;
     thread->t_parent_pid = thread_current->t_pid;
-
     thread->t_name = name;
     thread->t_fs = thread_current->t_fs;
-    /*thread->t_stdin = NULL;
-    thread->t_stdout = NULL;
-    thread->t_stderr = NULL;*/
+
+    thread->t_stdin = (FILE){
+        .__base = stdin_base,
+        .__ptr = stdin_base,
+        .__index = 0,
+        .__count = 0,
+        .__flags = 0,
+        .__size = stdin_size,
+        .__fname = "stdin",
+        .__lock = FALSE
+    };
+
+    // all the data goes to terminal
+    if (!strcmp(name, "terminal"))
+        stdin = &thread->t_stdin;
+
+    //thread->t_stderr = NULL;
 
     // set stack bottom for pgfree
     thread->t_stack = (uint32_t)stack;
@@ -305,7 +357,6 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     thread->t_nextt = NULL;
     
     // ----- CRITICAL -----
-
     __mutex_lock(&__sched_lock);
     switch (priority) {
         case THREAD_PRIORITY_LOW:
@@ -350,12 +401,31 @@ int32_t __sched_init(struct __dentry *root_dentry) {
         return -1;
     }
 
+    uint32_t const stdin_size = 256;
+
+    char *stdin_base = (char *)kmalloc(stdin_size * sizeof(char));
+
+    if (!stdin_base) {
+        kfree(init_fs);
+        kfree(kernel_thread);
+        return -1;
+    }
+
+    kernel_thread->t_stdout.__lock = FALSE;
+
+    if (__alloc_buffer(&kernel_thread->t_stdout, "stdout", 256)) {
+        kfree(stdin);
+        kfree(init_fs);
+        kfree(kernel_thread);
+        return -1;
+    }
+
     init_fs->t_dentry = root_dentry;
 
     kernel_thread->t_name = "kernel";
     kernel_thread->t_parent_pid = -1;
     kernel_thread->t_pid = __thread_next_pid++;
-    kernel_thread->t_priority = THREAD_PRIORITY_LOW;
+    kernel_thread->t_priority = THREAD_PRIORITY_HIGH;
     kernel_thread->t_state = THREAD_STATE_RUNNING;
     kernel_thread->t_flags = THREAD_RING_0;
     kernel_thread->t_exit_code = -1;
@@ -365,8 +435,19 @@ int32_t __sched_init(struct __dentry *root_dentry) {
     // not used by thread 0
     kernel_thread->t_kernel_esp = 0;
     kernel_thread->t_kernel_stack = 0;
-    kernel_thread->t_ticks = 10;
+    kernel_thread->t_ticks = 5;
     kernel_thread->t_ticks_current = 0;
+    
+    kernel_thread->t_stdin = (FILE){
+        .__base = stdin_base,
+        .__ptr = stdin_base,
+        .__index = 0,
+        .__count = 0,
+        .__flags = 0,
+        .__size = stdin_size,
+        .__fname = "stdin",
+        .__lock = FALSE
+    };
     
     asm volatile (
         "mov %0, cr3"
@@ -386,15 +467,20 @@ int32_t __sched_init(struct __dentry *root_dentry) {
 
 /**
  * __dispatch
+ * 
+ * TODO: ok, this needs a little refactoring to
+ *  work correctly
 */
 
 void __dispatch(void) {
-    bool switch_required = thread_current->t_ticks_current++ >= thread_current->t_ticks;
-
-    if (switch_required)
-        thread_current->t_ticks_current = 0;
-    else
+    if (++thread_current->t_ticks_current < thread_current->t_ticks)
         return;
+
+    // reset tick counter
+    thread_current->t_ticks_current = 0;
+
+    if (thread_current == THREAD_STATE_RUNNING)
+        thread_current->t_state = THREAD_STATE_IDLE;
 
     switch (thread_current->t_priority) {
         case THREAD_PRIORITY_HIGH:
@@ -421,7 +507,8 @@ void __dispatch(void) {
     struct __thread_control_block *next_thread;
 
     // skip blocked threads (waiting for an event (irq, mutex, etc.))
-    if (thread_high_head && (!switch_required || thread_high_head != thread_current)) {
+    // TODO: find first IDLE task
+    if (thread_high_head/* && thread_high_head->t_state != THREAD_STATE_SLEEPING*/) {
         next_thread = thread_high_head;
         thread_high_head = thread_high_head->t_nextt;
     } else if (thread_low_head) {
@@ -430,6 +517,8 @@ void __dispatch(void) {
     }
 
     thread_current = next_thread;
+    stdout = &thread_current->t_stdout;
+    stderr = &thread_current->t_stderr;
 }
 
 /**
@@ -437,13 +526,14 @@ void __dispatch(void) {
 */
 
 void __wake_on(bool *alarm) {
-    //__mutex_lock(&__sched_lock);
-    //thread_current->t_state = THREAD_STATE_SLEEPING;
-    //__mutex_unlock(&__sched_lock);
+    __mutex_lock(&__sched_lock);
+    thread_current->t_state = THREAD_STATE_SLEEPING;
+    __mutex_unlock(&__sched_lock);
 
     // something could wake the thread up
     // so we check both the alarm and the state
-    while (!*alarm/* && thread_current->t_state != THREAD_STATE_RUNNING*/);
+    while (!*alarm/* && thread_current->t_state != THREAD_STATE_RUNNING*/)
+        __yield();
 
     __mutex_lock(&__sched_lock);
     thread_current->t_state = THREAD_STATE_RUNNING;
@@ -526,6 +616,13 @@ int32_t __wake_task(int32_t pid) {
 
 /**
  * __list_threads
+ * 
+ * TODO: merge print of high and low tasks
+ * 
+ * ATTENTION: DO NOT USE THIS FUNCTION TO LIST
+ *  TASKS, IT CAUSES DEAD-LOCK SINCE IT LOCKS
+ *  THE SCHEDULER (i have to find another way
+ *  to list tasks)
 */
 
 void __list_threads(void) {
@@ -535,7 +632,8 @@ void __list_threads(void) {
     
     if (thread)
         do {
-            printk("thread pid=%u, state=%u, flags=%08x, name=%s, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name, thread->t_priority);
+            printk("thread pid=%u, state=%u, flags=%08x, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_priority);
+            printk("  name: %s\n", thread->t_name);
             printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
             thread = thread->t_nextt;
         } while (thread != thread_low_head);
@@ -544,7 +642,8 @@ void __list_threads(void) {
     
     if (thread)
         do {
-            printk("thread pid=%u, state=%u, flags=%08x, name=%s, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_name, thread->t_priority);
+            printk("thread pid=%u, state=%u, flags=%08x, prior=%u\n", thread->t_pid, thread->t_state, thread->t_flags, thread->t_priority);
+            printk("  name: %s\n", thread->t_name);
             printk("  esp: %p, cr3: %p\n", thread->t_esp, thread->t_page_dir);
             thread = thread->t_nextt;
         } while (thread != thread_high_head);

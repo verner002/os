@@ -8,11 +8,6 @@
 #include "kernel/sysfs.h"
 #include "mm/heap.h"
 
-struct __driver {
-    struct __kobj *d_kobj;
-    int32_t (* release)(struct __driver * driver);
-};
-
 struct __driver *drivers[256];
 
 static struct __kobj *local_group; // local group (driver)
@@ -104,6 +99,10 @@ struct __driver *__register_driver(char const *name, uint8_t major, struct __kob
     driver->release = NULL;
     drivers[major] = driver;
     return driver;
+}
+
+struct __driver *__driver_lookup(uint8_t major) {
+    return drivers[major];
 }
 
 /**

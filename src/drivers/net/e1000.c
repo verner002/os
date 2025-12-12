@@ -257,7 +257,7 @@ static uint32_t curr_tx_i = 0;
  *  the nic and return 
 */
 
-__attribute__((interrupt)) void __e1000_handler(INTERRUPT_FRAME *frame) {
+__attribute__((interrupt)) void __e1000_handler(struct __interrupt_frame *frame) {
     uint32_t status = __e1000_read(REG_ICR);
 
     if (status & 0x04)
@@ -658,7 +658,7 @@ int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
 
         uint8_t interrupt = e1000.irq <= 7 ? (0x20 + e1000.irq) : (0x70 + e1000.irq - 8);
 
-        __set_handler(interrupt, 0x0008, INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE, &__e1000_handler);
+        __idt_set_handler(interrupt, 0x0008, IDT_ENTRY_PRESENT | IDT_32BIT_INTERRUPT_ENTRY, &__e1000_handler);
         
         __enable_interrupts();
         __enable_irq(e1000.irq);

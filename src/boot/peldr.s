@@ -1,35 +1,29 @@
 ;
-; Portable Executable Loader
+; @file peldr.s
+; @author verner002
+; @date 20/11/2025
 ;
-; Author: verner002
-;
-
-%ifndef __PELDR
-%define __PELDR
 
 %include "pe.inc"
 
 ;
-; __parse_pe
-;
-; Input: EAX (pe ptr)
-; Output: EAX (entry point), CF (set on error)
+; parse_pe
 ;
 
-__parse_pe:
+parse_pe:
     push eax
-    cmp word [eax+__mz_header.magic], __MZ_MAGIC
+    cmp word [eax+__mz_header.magic], MZ_MAGIC
     jnz .terminate ; invalid mz magic
 
     add eax, dword [eax+__mz_header.e_lfanew] ; points to pe_signature
 
-    cmp dword [eax+__pe_signature.magic], __PE_MAGIC
+    cmp dword [eax+__pe_signature.magic], PE_MAGIC
     jnz .terminate ; invalid pe magic
 
-    cmp word [eax+__coff_header.machine_type], __MACHINE_I386
+    cmp word [eax+__coff_header.machine_type], MACHINE_I386
     jnz .terminate ; invalid machine type
 
-    cmp word [eax+__opt_header.magic], __OPT_MAGIC
+    cmp word [eax+__opt_header.magic], OPT_MAGIC
     jnz .terminate ; invalid opt magic
 
     movzx ecx, word [eax+__coff_header.sections_count]
@@ -38,6 +32,8 @@ __parse_pe:
     add esi, __pe_signature_size+__coff_header_size
     add esi, eax ; eax=e_lfanew+base
 
+    ; start of physical location for
+    ; parsed pe sections
     mov ebp, 0x00100000
 
     ; eax=ptr to pe_signature
@@ -46,8 +42,8 @@ __parse_pe:
     ; esi=ptr to section table
     ; ebp=kernel physical address
 
-    .map_section:
-    call __skip_sections
+.map_section:
+    call skip_section
     jz .skip_section
 
     mov edx, dword [esi+__section.virtual_size]
@@ -60,14 +56,8 @@ __parse_pe:
     and edi, 0xfffff000 ; make sure address is page aligned
 
     push edx
-    push eax ; TODO: add 0x0fff to edx and div it by 0x1000
-    mov ax, dx
-    shr edx, 0x0c ; /4096
-    and ax, 0x0fff
-    setnz al
-    movzx eax, al
-    add edx, eax ; pages count
-    pop eax
+    add edx, 0x00000fff
+    shr edx, 0x0c
 
     ; eax=ptr to pe_signature
     ; ebx=image base
@@ -78,17 +68,18 @@ __parse_pe:
     ; ebp=kernel physical address
 
     push edi
-    .map_page:
-    call __map_kern_page ; maps up to 4 MiB
+
+.map_page:
+    call map_page ; maps up to 4 mib
     add edi, 0x00001000 ; next page
     add ebp, 0x00001000 ; next page
     dec edx
     jnz .map_page
+    
     pop edi
     pop edx
 
-    ; what if __SYS_SEGMENT<<4 == virtual address (skip copying)? (unlikely)
-
+    ; copy data
     push ecx
     push edi ; rfc: do i need to push edi???
     push esi
@@ -98,23 +89,23 @@ __parse_pe:
     mov esi, dword [esi+__section.raw_data_ptr]
     test esi, esi
     jz .zero ; FIXME: .bss initialization (make it more readable)
-    add esi, __SYS_ADDRESS ; FIXME: use eax
+    add esi, 0x1000 ; FIXME: use eax
     rep movsb ; copy raw data
     jmp .popall
 
-    .zero:
+.zero:
     push eax
     xor al, al
     mov ecx, edx
     rep stosb
     pop eax
 
-    .popall:
+.popall:
     pop esi
     pop edi
     pop ecx
 
-    .skip_section:
+.skip_section:
     add esi, __section_size
     loop .map_section
     pop edx ; pe ptr
@@ -125,81 +116,76 @@ __parse_pe:
     clc
     ret
 
-    .terminate:
+.terminate:
     pop eax
     stc
     ret
 
 ;
-; __skip_sections
-;
-; Input: EDI (section ptr)
-; Output: ZF (set if equal->skip)
+; skip_section
 ;
 
-__skip_sections:
+skip_section:
     push edi
-    test dword [esi], 0xffff ; long name
+    ; has long name?
+    test dword [esi], 0xffff
     jz .return
 
-    test byte [esi], '/' ; long name (some tools use this format)
+    ; has long name (some tools use this format)
+    test byte [esi], '/'
     jz .return
 
     mov edi, .section_comment
-    call __match_section
+    call match_section
     jz .return
 
     mov edi, .section_edata
-    call __match_section
+    call match_section
     jz .return
 
     mov edi, .section_idata
-    call __match_section
+    call match_section
     jz .return
 
     mov edi, .section_rsrc
-    call __match_section
+    call match_section
     jz .return
 
     mov edi, .section_tls
-    call __match_section
+    call match_section
     ;jz .return
 
-    .return:
+.return:
     pop edi
     ret
 
-    .section_comment db `.comment`
-    .section_edata db `.edata\0\0`
-    .section_idata db `.idata\0\0`
-    .section_rsrc db `.rsrc\0\0\0`
-    .section_tls db `.tls\0\0\0\0`
+.section_comment    db `.comment`
+.section_edata      db `.edata\0\0`
+.section_idata      db `.idata\0\0`
+.section_rsrc       db `.rsrc\0\0\0`
+.section_tls        db `.tls\0\0\0\0`
 
 ;
-; __match_section
-;
-; Input: EDI (section ptr), ESI (null-term char arr ptr)
-; Output: ZF (set if equal)
+; match_section
 ;
 
-__match_section:
-    ;push ecx
-    ;push esi
-    ;push edi
-    pushad
-    mov ecx, 0x00000008 ; section name length
+match_section:
+    push ecx
+    push esi
+    push edi
+    ; section name length
+    mov ecx, 0x00000008
     repz cmpsb
-    popad
-    ;pop edi
-    ;pop esi
-    ;pop ecx
+    pop edi
+    pop esi
+    pop ecx
     ret
 
 ;
-; __map_kern_page
+; map_page
 ;
 
-__map_kern_page:
+map_page:
     push edi
     shr edi, 22 ; /(4096*1024), pd entry
     cmp edi, 512 ; only this pd entry!!!
@@ -210,12 +196,10 @@ __map_kern_page:
     push edi
     shr edi, 12 ; /4096
     and edi, 0x000003ff ; pt entry
-    or bp, 0x0007 ; user, r/w, present
-    mov dword [edi*4+__KERN_PT_OFFSET], ebp; raw address
+    or bp, 0x0007 ; user, r/w, present, 4k
+    mov dword [edi*4+0x93000], ebp
     pop edi
     pop ebp
 
-    .terminate:
+.terminate:
     ret
-
-%endif

@@ -121,7 +121,7 @@ extern uint32_t
  * Declarations
 */
 
-int32_t __init_ps2(void);
+int32_t __ps2_init(void);
 void __set_scancode_handler(uint32_t *table, uint32_t scancode, uint32_t handler);
 void __enable_ps2_a_port(void);
 void __disable_ps2_a_port(void);

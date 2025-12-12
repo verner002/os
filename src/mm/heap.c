@@ -54,6 +54,10 @@ void __init_heap(void *p, uint32_t s) {
 
 /**
  * __dump_heap
+ * 
+ * ATTENTION: SAME AS FOR __list_threads, THIS FUNCTION CAN
+ *  LEAD TO DEAD-LOCK SINCE IT LOCKS HEAP MUTEX, DON'T USE
+ *  IT (have to find another way for listing)
 */
 
 void __dump_heap(void) {

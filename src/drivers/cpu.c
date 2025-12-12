@@ -1,36 +1,102 @@
 /**
- * CPU
- * 
- * Author: verner002
-*/
-
-/**
- * Includes
+ * @file cpu.c
+ * @author verner002
+ * @date 22/11/2025
 */
 
 #include "drivers/cpu.h"
 #include "drivers/isr.h"
 
-/**
- * Static Global Variable
-*/
+struct __attribute__((__packed__)) __gdt_ptr {
+    uint16_t length;
+    uint32_t base;
+};
 
-static GLOBAL_DESCRIPTOR gdt[6]; // global descriptor table
-static INTERRUPT_DESCRIPTOR *idt; // interrupt descriptor table
-static TASK_STATE_SEGMENT tss; // task state segment
+struct __attribute__((__packed__)) __idt_ptr {
+    uint16_t length;
+    uint32_t base;
+};
+
+struct __attribute__((__packed__)) __global_descriptor {
+    uint32_t limit_low                  : 16;
+    uint32_t base_low                   : 24;
+    uint32_t accessed                   : 1;
+    uint32_t read_write                 : 1;
+    uint32_t direction_conforming       : 1;
+    uint32_t executable                 : 1;
+    uint32_t descriptor_type            : 1;
+    uint32_t descriptor_privilage_level : 2;
+    uint32_t present                    : 1;
+    uint32_t limit_high                 : 4;
+    uint32_t reserved                   : 1; // available?
+    uint32_t long_mode                  : 1;
+    uint32_t size                       : 1;
+    uint32_t granularity                : 1;
+    uint32_t base_high                  : 8;
+};
+
+struct __attribute__((__packed__)) __interrupt_descriptor {
+    uint16_t offset_low;
+    uint16_t selector;
+    uint8_t _reserved;
+    uint8_t attributes;
+    uint16_t offset_high;
+};
+
+struct __attribute__((__packed__)) __tss {
+    uint16_t link_old_tss;
+    uint16_t reserved1;
+    uint32_t esp0;
+    uint16_t ss0;
+    uint16_t reserved2;
+    uint32_t esp1;
+    uint16_t ss1;
+    uint16_t reserved3;
+    uint32_t esp2;
+    uint16_t ss2;
+    uint16_t reserved4;
+    uint32_t reserved5;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t ebx;
+    uint32_t esp;
+    uint32_t ebp;
+    uint32_t esi;
+    uint32_t edi;
+    uint16_t es;
+    uint16_t reserved6;
+    uint16_t cs;
+    uint16_t reserved7;
+    uint16_t ss;
+    uint16_t reserved8;
+    uint16_t ds;
+    uint16_t reserved9;
+    uint16_t fs;
+    uint16_t reserved10;
+    uint16_t gs;
+    uint16_t reserved11;
+    uint16_t ldt;
+    uint16_t reserved12;
+    uint16_t trap           : 1;
+    uint16_t reserved13     : 15;
+    uint16_t io_map_base;
+};
+
+static struct __global_descriptor gdt[6]; // global descriptor table
+static struct __interrupt_descriptor idt[256]; // interrupt descriptor table
+static struct  __tss tss; // task state segment
 static uint64_t ticks; // current tick count, 1 tick = 1 ms
+
+/**
+ * __isr
+*/
 
 void __isr(uint8_t vector, struct __interrupt_frame *frame) {
     printk("isr: %u: unhandled interrupt\n", vector);
     for(;;);
-}
-
-/**
- * __enable_interrupts
-*/
-
-void __enable_interrupts(void) {
-    asm volatile ("sti");
 }
 
 /**
@@ -39,6 +105,14 @@ void __enable_interrupts(void) {
 
 void __disable_interrupts(void) {
     asm volatile ("cli");
+}
+
+/**
+ * __enable_interrupts
+*/
+
+void __enable_interrupts(void) {
+    asm volatile ("sti");
 }
 
 /**
@@ -60,18 +134,11 @@ uint32_t __cpuid_features(void) {
 }
 
 /**
- * __init_gdt
+ * __gdt_init
 */
 
-void __init_gdt(uint16_t ss0, uint32_t esp0) {
-    printk("\033[33mcpu:\033[37m Initializing GDT... ");
-
-    GDT_PTR gdt_ptr = {
-        .length = sizeof(gdt) - 1,
-        .base = (uint32_t)&gdt
-    };
-
-    gdt[0] = (GLOBAL_DESCRIPTOR) { // null descriptor
+void __gdt_init(uint16_t ss0/*, uint32_t esp0*/) {
+    gdt[0] = (struct __global_descriptor) { // null descriptor
         .limit_low = 0,
         .base_low = 0,
         .accessed = 0,
@@ -89,7 +156,7 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
         .base_high = 0
     };
 
-    gdt[1] = (GLOBAL_DESCRIPTOR) { // code descriptor
+    gdt[1] = (struct __global_descriptor) { // code descriptor
         .limit_low = 0xffff,
         .base_low = 0x000000,
         .accessed = 0,
@@ -107,7 +174,7 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
         .base_high = 0x00
     };
 
-    gdt[2] = (GLOBAL_DESCRIPTOR) { // data descriptor
+    gdt[2] = (struct __global_descriptor) { // data descriptor
         .limit_low = 0xffff,
         .base_low = 0x000000,
         .accessed = 0,
@@ -125,7 +192,7 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
         .base_high = 0x00
     };
 
-    gdt[3] = (GLOBAL_DESCRIPTOR) { // code descriptor
+    gdt[3] = (struct __global_descriptor) { // code descriptor
         .limit_low = 0xffff,
         .base_low = 0x000000,
         .accessed = 0,
@@ -143,7 +210,7 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
         .base_high = 0x00
     };
 
-    gdt[4] = (GLOBAL_DESCRIPTOR) { // data descriptor
+    gdt[4] = (struct __global_descriptor) { // data descriptor
         .limit_low = 0xffff,
         .base_low = 0x000000,
         .accessed = 0,
@@ -162,9 +229,9 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
     };
 
     uint32_t base = (uint32_t)&tss;
-    uint32_t size = sizeof(TASK_STATE_SEGMENT);
+    uint32_t size = sizeof(struct __tss);
 
-    gdt[5] = (GLOBAL_DESCRIPTOR) { // tss
+    gdt[5] = (struct __global_descriptor) { // tss
         .limit_low = size,
         .base_low = base,
         .accessed = 1,
@@ -184,13 +251,21 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
 
     memset(&tss, 0, size);
 
+    // kernel stack segment and pointer
     tss.ss0 = ss0;
-    tss.esp0 = esp0;
+    //tss.esp0 = esp0;
 
-    tss.io_map_base = size; // no io bitmap
+    // no io bitmap
+    tss.io_map_base = size;
 
+    // user code and data segments
     tss.cs = 0x000b;
     tss.ss = tss.ds = tss.es = tss.fs = tss.gs = 0x0013;
+
+    struct __gdt_ptr gdt_ptr = {
+        .length = sizeof(gdt) - 1,
+        .base = (uint32_t)&gdt
+    };
 
     asm volatile (
         "lgdt %0"
@@ -200,51 +275,27 @@ void __init_gdt(uint16_t ss0, uint32_t esp0) {
     ); // flush gdt
 
     __flush_tss();
-    printf("Ok\n");
 }
 
 /**
- * __set_kernel_stack
- * 
- * Note:
- *  Sets a kernel stack for each task.
+ * __gdt_set_kstack
 */
 
-void __set_kernel_stack(uint32_t stack) {
+void __gdt_set_kstack(uint32_t stack) {
     tss.esp0 = stack;
 }
 
 /**
- * __init_idt
+ * __idt_init
 */
 
-int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
-    printk("\033[33mcpu:\033[37m Initializing IDT... ");
-    
-    idt = (INTERRUPT_DESCRIPTOR *)__e820_rmalloc(2048, TRUE);
-
-    if (!idt) {
-        printf("Error\n");
-        return -1;
-    }
-
-    IDT_PTR idt_ptr = {
-        .length = 0x07ff, // 256*sizeof(INTERRUPT_DESCRIPTOR)-1
-        .base = (uint32_t)idt
-    };
-
-    INTERRUPT_DESCRIPTOR __default_descriptor = {
-        .offset_low = (uint16_t)((uint32_t)default_isr & 0xffff),
-        .selector = 0x0008, // code segment selector
-        ._reserved = 0,
-        .attributes = INTERRUPT_DESCRIPTOR_PRESENT | INTERRUPT_DESCRIPTOR_32BIT_INTERRUPT_GATE,
-        .offset_high = (uint16_t)(((uint32_t)default_isr >> 16) & 0xffff)
-    };
-
-    /*for (uint32_t i = 0; i < 256; ++i)
-        idt[i] = __default_descriptor;*/
-
+void __idt_init(void) {
     __isr_init();
+
+    struct __idt_ptr idt_ptr = {
+        .length = sizeof(idt) - 1,
+        .base = (uint32_t)&idt
+    };
 
     asm volatile (
         "lidt %0"
@@ -252,17 +303,14 @@ int32_t __init_idt(void (*default_isr)(INTERRUPT_FRAME *frame)) {
         : "m" (idt_ptr)
         :
     ); // flush idt
-
-    printf("Ok\n");
-    return 0;
 }
 
 /**
- * __set_handler
+ * __idt_set_handler
 */
 
-void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*isr)(INTERRUPT_FRAME *frame)) {
-    INTERRUPT_DESCRIPTOR id = {
+void __idt_set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*isr)(struct __interrupt_frame *frame)) {
+    struct __interrupt_descriptor id = {
         .offset_low = (uint16_t)((uint32_t)isr & 0xffff),
         .selector = selector,
         ._reserved = 0,
@@ -270,8 +318,6 @@ void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*is
         .offset_high = (uint16_t)(((uint32_t)isr >> 16) & 0xffff)
     };
 
-    idt[irq] = id;
-    idt[irq] = id;
     idt[irq] = id;
 }
 
@@ -281,9 +327,6 @@ void __set_handler(uint8_t irq, uint16_t selector, uint8_t attributes, void (*is
 
 void __init_tick_counter(void) {
     ticks = 0;
-
-    // TODO: set pit channel 0 to generate irq
-    // TODO: map irq to isr __update_tick_counter
 }
 
 /**

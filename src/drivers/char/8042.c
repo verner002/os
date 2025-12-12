@@ -475,10 +475,10 @@ uint32_t table_extended[] = {
 };
 
 /**
- * __init_ps2
+ * __ps2_init
 */
 
-int32_t __init_ps2(void) {
+int32_t __ps2_init(void) {
     printk("\033[33mps2:\033[37m Initializing... ");
 
     uint8_t buffer;

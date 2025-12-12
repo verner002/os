@@ -47,5 +47,5 @@ struct __pci_h_device {
 };
 
 uint32_t __pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset);
-int32_t __init_pci(void);
+int32_t __pci_init(void);
 uint32_t __pci_fix_bar(uint32_t bar);

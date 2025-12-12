@@ -20,11 +20,11 @@ static void __bus_kobj_release(struct __kobj *kobj) {
     
 }
 
-static uint32_t __bus_kobj_read(struct __kobj *kobj, struct __sysfs_attrib *attrib, char *buffer) {
+static uint32_t __bus_kobj_read(struct __kobj *kobj, char const *name, char *buffer) {
 
 }
 
-static void __bus_kobj_write(struct __kobj *kobj, struct __sysfs_attrib *attrib, char const *buffer, uint32_t size) {
+static void __bus_kobj_write(struct __kobj *kobj, char const *name, char const *buffer, uint32_t size) {
 
 }
 
@@ -35,10 +35,10 @@ int32_t __init_buses(void) {
         return -1;
 
     bus_type->release = &__bus_kobj_release;
-    bus_type->k_ops = (struct __sysfs_ops){
+    /*bus_type->k_ops = (struct __sysfs_ops){
         .read = &__bus_kobj_read,
         .write = &__bus_kobj_write
-    };
+    };*/
     bus_type->k_attribs = NULL;
 
     bus_ktype = bus_type;

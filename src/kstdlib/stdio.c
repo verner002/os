@@ -58,10 +58,14 @@ bool feof(FILE *stream) {
 bool __wake;
 
 int getc(FILE *stream) {
+    __mutex_lock(&stream->__lock);
+
     // buffer empty -> sleep the task
     if (!stream->__count) {
         __wake = FALSE;
+        __mutex_unlock(&stream->__lock);
         __wake_on(&__wake);
+        __mutex_lock(&stream->__lock);
     }
 
     /*if (!stream->__count) {
@@ -74,6 +78,7 @@ int getc(FILE *stream) {
 
     int c = *stream->__ptr;
     stream->__ptr = (stream->__ptr - stream->__base + 1) % stream->__size + stream->__base;
+    __mutex_unlock(&stream->__lock);
     return c;
 }
 
@@ -93,30 +98,45 @@ int getchar(void) {
 */
 
 int32_t putc(int c, FILE *stream) {
-    if (stream == stdout)
-        return __putc((uint8_t)c);
-    else if (stream == stderr)
-        return __putc((uint8_t)c);
-    else if (stream == stdin) {
-        if (c == '\b') {
-            if (stream->__count) {
-                --stream->__count;
-                --stream->__index;
-            }
+    if (stream == &_stdout)
+        return __putc(c);
 
-            return 0;
-        } else if (stream->__count < stream->__size) {
-            ++stream->__count;
-            stream->__base[stream->__index++ % stream->__size] = c;
+    __mutex_lock(&stream->__lock);
 
-            if (c == '\n')
-                __wake = TRUE;
-
-            return 0;
+    if (c == '\b') {
+        if (stream->__count) {
+            --stream->__count;
+            --stream->__index;
         }
+
+        __mutex_unlock(&stream->__lock);
+        return 0;
+    }
+
+    // is there a space in stream to
+    // write data? if no, let other
+    // tasks read the stream
+    while (stream->__count >= stream->__size) {
+        __mutex_unlock(&stream->__lock);
+        __yield();
+        __mutex_lock(&stream->__lock);
     }
     
-    return -1;
+    /*else if (stream->__count < stream->__size) {*/
+        ++stream->__count;
+        stream->__base[stream->__index++ % stream->__size] = c;
+
+        if (c == '\n')
+            __wake = TRUE;
+
+        __mutex_unlock(&stream->__lock);
+        return 0;
+    /*}
+    
+    __mutex_unlock(&stream->__lock);
+    // wait till buffer is read instead
+    // returning -1?
+    return -1;*/
 }
 
 /**
@@ -152,7 +172,7 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                                     char const *string = va_arg(args, char const *);
 
                                     for (uint32_t j = 0; j < limit; ++j)
-                                        putchar(string[j]);
+                                        putc(string[j], stdout);
                                     break;
                                 }
 
@@ -341,19 +361,27 @@ void printk(char const *s, ...) {
 
     printf("\033[32m[");
 
-    if (ticks <= (uint64_t)999999999999) { // we can handle up to about 32 years
+    // we can handle up to about 32 years
+    if (ticks <= (uint64_t)999999999999) {
         uint32_t s = ticks / 1000;
         uint32_t ms = ticks % 1000;
 
         padding = 8 - log10(s);
-        for (uint32_t i = 0; i < padding; ++i) putchar(' ');
-        printf("%u.", s); 
+        
+        for (uint32_t i = 0; i < padding; ++i)
+            putchar(' ');
+        
+            printf("%u.", s); 
 
         padding = 2 - log10(ms);
-        for (uint32_t i = 0; i < padding; ++i) putchar('0');
-        printf("%u", ms);
         
-    } else printf("---------.---");
+        for (uint32_t i = 0; i < padding; ++i)
+            putchar('0');
+        
+            printf("%u", ms);
+        
+    } else
+        printf("---------.---");
 
     printf("]\033[37m ");
     vprintf(s, args);

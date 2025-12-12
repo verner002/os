@@ -1,17 +1,13 @@
 ;
-; Portable Executable
-;
-; Author: verner002
+; @file pe.inc
+; @author verner002
+; @date 20/11/2025
 ;
 
-%define __MZ_MAGIC 0x5a4d
-%define __PE_MAGIC 0x00004550
-%define __MACHINE_I386 0x014c
-%define __OPT_MAGIC 0x010b
-
-;
-; MZ Header
-;
+%define MZ_MAGIC 0x5a4d
+%define PE_MAGIC 0x00004550
+%define MACHINE_I386 0x014c
+%define OPT_MAGIC 0x010b
 
 struc __mz_header
     .magic      resw 0x0001
@@ -19,17 +15,9 @@ struc __mz_header
     .e_lfanew   resd 0x0001
 endstruc
 
-;
-; PE Signature
-;
-
 struc __pe_signature
     .magic  resd 0x0001
 endstruc
-
-;
-; COFF Header
-;
 
 struc __coff_header, __pe_signature+__pe_signature_size
     .machine_type           resw 0x0001
@@ -40,10 +28,6 @@ struc __coff_header, __pe_signature+__pe_signature_size
     .opt_header_size        resw 0x0001
     .characteristic         resw 0x0001
 endstruc
-
-;
-; Optional Header
-;
 
 struc __opt_header, __coff_header+__coff_header_size
     .magic                  resw 0x0001
@@ -77,10 +61,6 @@ struc __opt_header, __coff_header+__coff_header_size
     .loader_flags           resd 0x0001
     .rva_and_sizes_count    resd 0x0001
 endstruc
-
-;
-; Section
-;
 
 struc __section
     .name               resb 0x0008

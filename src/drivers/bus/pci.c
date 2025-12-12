@@ -148,7 +148,7 @@ static struct __kobj_type pci_driver_type = {
  * __pci_init
 */
 
-int32_t __init_pci(void) {
+int32_t __pci_init(void) {
     struct __driver *driver = __register_driver("pci", 143, &pci_driver_type);
 
     if (!driver)
@@ -172,8 +172,11 @@ int32_t __init_pci(void) {
                 struct __pci_header dev_header;
 
                 for (uint32_t i = 0; i < sizeof(struct __pci_header) / sizeof(uint32_t); ++i)
-                    ((uint32_t *)&dev_header)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
+                    ((uint32_t *)&dev_header)[i] = __pci_config_read(bus_i, dev_i, func_i, sizeof(uint32_t) * i);
 
+                // RFC: do we have to continue with scanning
+                //  another functions if no device on func 0
+                //  was found?
                 if (dev_header.h_vendor == 0xffff)
                     continue;
 
@@ -223,7 +226,7 @@ int32_t __init_pci(void) {
                         pci_device->h = dev_header;
 
                         for (uint32_t i = sizeof(struct __pci_header) / sizeof(uint32_t); i < sizeof(struct __pci_h_device) / sizeof(uint32_t); ++i)
-                            ((uint32_t *)pci_device)[i] = __pci_config_read(bus_i, dev_i, 0, sizeof(uint32_t) * i);
+                            ((uint32_t *)pci_device)[i] = __pci_config_read(bus_i, dev_i, func_i, sizeof(uint32_t) * i);
                         
                         init_header = (struct __pci_header *)pci_device;
                         break;
@@ -255,6 +258,7 @@ int32_t __init_pci(void) {
         }
     }
 
+    printk("Scanning completed...\n");
     return 0;
 }
 

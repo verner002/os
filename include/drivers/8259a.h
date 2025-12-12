@@ -17,7 +17,7 @@
  * Declarations
 */
 
-void __init_pics(uint8_t master_vec_offset, uint8_t slave_vec_offset);
+void __pic_init(uint8_t master_vec_offset, uint8_t slave_vec_offset);
 void __send_master_eoi(void);
 void __send_slave_eoi(void);
 void __send_eoi(uint8_t irq_number);

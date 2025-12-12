@@ -4,9 +4,9 @@
  * Author: verner002
 */
 
-/**
- * Includes
-*/
+#define LCG_FACTOR      1103515245
+#define LCG_CONSTANT    12345
+#define LCG_MODULO      (1 << 31)
 
 #include "bool.h"
 #include "mm/heap.h"
@@ -77,4 +77,24 @@ int32_t atoi(char const *s) {
         value = 10 * value + (c - '0');
 
     return minus ? -value : value;
+}
+
+/**
+ * srand
+*/
+
+static uint32_t random = 0xdeadbeef;
+
+void srand(uint32_t seed) {
+    random = seed;
+}
+
+/**
+ * rand
+*/
+
+uint32_t rand(void) {
+    random = ((LCG_FACTOR * random) + LCG_CONSTANT) % LCG_MODULO;
+    
+    return random;
 }

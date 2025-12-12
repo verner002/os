@@ -164,10 +164,10 @@ static void __parse_fadt_table(SDT_HEADER *hdr) {
 }
 
 /**
- * __init_acpi
+ * __acpi_init
 */
 
-int32_t __init_acpi(void) {
+int32_t __acpi_init(void) {
     printk("\033[33macpi:\033[37m Looking for RSDP in EBDA... ");
 
     RSDP *rsdp = __find_rsdp((void *)(*(uint16_t *)0x0000040e << 4), 1024); // 40:0e - ebda base >> 4 (or lpt 4 address on non-ps/2 systems!!!, FIXME???)

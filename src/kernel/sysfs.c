@@ -14,7 +14,7 @@ static uint32_t groups_cnt = 0;
 // TODO: implement kernel objects set
 static struct __kobj  *groups[16];
 
-int32_t __init_sysfs(struct __dentry *mpoint) {
+int32_t __sysfs_init(struct __dentry *mpoint) {
     sysfs = (struct __kobj *)kmalloc(sizeof(struct __kobj));
     
     if (!sysfs) {

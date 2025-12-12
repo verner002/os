@@ -17,7 +17,7 @@
 #include "mm/heap.h"
 #include "kernel/mutex.h"
 #include "hal/vfs.h"
-#include "kstdlib/stdio.h"
+#include "kstdlib/file.h"
 
 #define THREAD_RING_0 1
 
@@ -27,7 +27,6 @@
 typedef struct __thread_control_block THREAD;
 
 extern THREAD *thread_current;
-
 
 __attribute__((interrupt)) void __schedule(void *frame);
 int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority);
@@ -40,3 +39,5 @@ void __yield(void);
 void __wake_on(bool *alarm);
 __attribute__((noreturn)) int32_t __exit(int32_t code);
 void __list_threads(void);
+FILE *__task_stdout(struct __thread_control_block *thread);
+struct __thread_control_block *__task_next(struct __thread_control_block *thread);

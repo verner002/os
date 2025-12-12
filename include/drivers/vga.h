@@ -28,8 +28,8 @@
  * Declarations
 */
 
-void __init_vga(void);
+void __vga_init(void);
 void __clear(void);
 int32_t __putc(uint8_t c);
-void __setcurpos(uint32_t line, uint32_t column);
+void __vga_set_cursor_position(uint32_t line, uint32_t column);
 void __scroll_down(void);

@@ -20,20 +20,24 @@ modules:
 	done ;
 
 link:
-	$(CL) $(OBJECTS) --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o ./bin/kernel.sys -g
+	$(CL) $(OBJECTS) --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o ./bin/kernel -g
+	cat ./bin/head > ./bin/image
+	cat ./bin/kernel >> ./bin/image
 
 image:
 	$(DD) if=/dev/zero of=./fdd.img bs=512 count=2880
-	$(MKFSFAT) ./fdd.img
-	$(DD) if=./bin/boot.bin of=./fdd.img bs=512 count=1 conv=notrunc
+	$(MKFSFAT) -R 5 ./fdd.img
+	$(DD) if=./bin/boot of=./fdd.img bs=512 count=1 conv=notrunc
+	$(DD) if=./bin/setup of=./fdd.img bs=512 seek=1 count=4 conv=notrunc
 	sudo mkdir /mnt/$(MOUNT)
 	sudo mount ./fdd.img /mnt/$(MOUNT)
 	sudo mkdir /mnt/$(MOUNT)/etc
-	sudo cp ./bin/loader.sys /mnt/$(MOUNT)/loader.sys
-	sudo cp ./bin/kernel.sys /mnt/$(MOUNT)/kernel.sys
+	sudo cp ./bin/image /mnt/$(MOUNT)/image
 	ls -l /mnt/$(MOUNT)
 	sudo umount /mnt/$(MOUNT)
 	sudo rm -rf /mnt/$(MOUNT)
+
+.PHONY: image
 
 clean:
 	$(RM) -r ./build

@@ -11,6 +11,6 @@
 
 extern struct __kobj *sysfs;
 
-int32_t __init_sysfs(struct __dentry *mpoint);
+int32_t __sysfs_init(struct __dentry *mpoint);
 void __sysfs_group_init(struct __kobj *kobj, char const *name);
 void __sysfs_group_add(struct __kobj *kobj);

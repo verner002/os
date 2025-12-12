@@ -19,7 +19,7 @@ extern __update_tick_counter
 extern __sched_lock
 extern thread_current
 extern __dispatch
-extern __set_kernel_stack
+extern __gdt_set_kstack
 extern __send_eoi
 
 ;
@@ -88,7 +88,7 @@ __yield:
     mov esp, dword [edx]
 
     push dword [edx+8]
-    call __set_kernel_stack
+    call __gdt_set_kstack
     add esp, 4
 
     pop gs
@@ -143,7 +143,7 @@ __schedule:
     mov esp, dword [edx]
 
     push dword [edx+8]
-    call __set_kernel_stack
+    call __gdt_set_kstack
     add esp, 4
 
     pop gs

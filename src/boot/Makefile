@@ -12,6 +12,8 @@ directories:
 	mkdir -p $(BIN)
 
 boot:
-	$(ASM) -I../../include/asm -I. ./main.asm -o $(BIN)/boot.bin
+	$(ASM) -I../../include/asm -I. ./boot.s -o $(BIN)/boot
+	$(ASM) -I../../include/asm -I. ./setup.s -o $(BIN)/setup
+	$(ASM) -I../../include/asm -I. ./head.s -o $(BIN)/head
 
 ASM ?= nasm

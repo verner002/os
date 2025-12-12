@@ -18,6 +18,7 @@
 #include "kernel/task.h"
 #include "kstdlib/math.h"
 #include "kstdlib/errno.h"
+#include "kstdlib/file.h"
 
 /**
  * Constants
@@ -34,24 +35,12 @@
  * Types Definitions
 */
 
-typedef struct __file FILE;
 typedef struct __dir DIR;
 typedef __builtin_va_list va_list;
 
 /**
  * Structures
 */
-
-struct __file {
-    char *__base; // buffer base
-    char *__ptr; // read ptr
-    uint32_t __index; // write index
-    uint32_t __count; // chars in buffer
-    uint32_t __flags; // flags
-    uint32_t __size; // buffer size
-    char *__fname; // filename
-    bool __lock; // mutex
-};
 
 struct __dir {
     char *__buffer; // buffer base

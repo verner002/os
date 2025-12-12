@@ -176,4 +176,4 @@ struct __fadt {
  * Declarations
 */
 
-int32_t __init_acpi(void);
+int32_t __acpi_init(void);
