@@ -34,8 +34,8 @@ void __update_dor(void) {
 */
 
 void __fdc_enter_reset_mode(void) {
-    fdc.irqsEnabled = FALSE;
-    fdc.operationMode = FALSE; // reset mode
+    fdc.irqsEnabled = false;
+    fdc.operationMode = false; // reset mode
     __update_dor();
 }
 
@@ -44,8 +44,8 @@ void __fdc_enter_reset_mode(void) {
 */
 
 void __fdc_exit_reset_mode(void) {
-    fdc.irqsEnabled = TRUE;
-    fdc.operationMode = TRUE; // normal mode
+    fdc.irqsEnabled = true;
+    fdc.operationMode = true; // normal mode
     __update_dor();
 }
 
@@ -54,7 +54,7 @@ void __fdc_exit_reset_mode(void) {
 */
 
 void __fdc_turn_motor_off(void) {
-    fdc.motorOn = FALSE;
+    fdc.motorOn = false;
     __update_dor();
 }
 
@@ -63,7 +63,7 @@ void __fdc_turn_motor_off(void) {
 */
 
 void __fdc_turn_motor_on(void) {
-    fdc.motorOn = TRUE;
+    fdc.motorOn = true;
     __update_dor();
 }
 
@@ -106,7 +106,7 @@ uint8_t __fdc_inb(void) {
 
 __attribute__((interrupt)) void __fdc_irq6_handler(struct __interrupt_frame *frame) {
     //__disable_interrupts();
-    fdc.irqReceived = TRUE;
+    fdc.irqReceived = true;
     __send_eoi(0x06);
     //__enable_interrupts();
 }
@@ -136,7 +136,7 @@ int32_t __fdc_wait_for_irq6(void) {
 */
 
 static int32_t __fdc_software_reset(void) {
-    fdc.irqReceived = FALSE;
+    fdc.irqReceived = false;
 
     __fdc_enter_reset_mode();
     __delay_ms(1); // 4 us would be enough
@@ -202,9 +202,9 @@ int32_t __fdc_reset(void) {
         if (errno)
             continue;
 
-        bool impliedSeekEnabled = TRUE;
-        bool fifoDisabled = FALSE;
-        bool drivePollingModeDisabled = TRUE;
+        bool impliedSeekEnabled = true;
+        bool fifoDisabled = false;
+        bool drivePollingModeDisabled = true;
         uint8_t threshold = 8 - 1; // value - 1
 
         __fdc_outb((impliedSeekEnabled << 6) | (fifoDisabled << 5) | (drivePollingModeDisabled << 4) | threshold);
@@ -222,7 +222,7 @@ int32_t __fdc_reset(void) {
         uint8_t srt = 16 - (HEAD_ASSEMBLY * DATARATE / 500000);
         uint8_t hlt = HEAD_ACTIVATION * DATARATE / 1000000;
         uint8_t hut = HEAD_DEACTIVATION * DATARATE / 8000000;
-        bool ndma = FALSE; // use dma
+        bool ndma = false; // use dma
 
         __fdc_outb((srt << 4) | (hut & 0x0f));
         if (errno) continue;
@@ -252,7 +252,7 @@ int32_t __fdc_reset(void) {
 
 int32_t __fdc_recalibrate(void) {
     for (uint32_t i = 0; i < 3; ++i) {
-        fdc.irqReceived = FALSE;
+        fdc.irqReceived = false;
 
         __fdc_outb(FDC_COMMAND_RECALIBRATE);
         __fdc_outb(0); // drive 0
@@ -281,7 +281,7 @@ int32_t __fdc_recalibrate(void) {
 
 int32_t __fdc_seek(uint32_t head, uint32_t cylinder) {
     for (uint32_t i = 0; i < 3; ++i) {
-        fdc.irqReceived = FALSE;
+        fdc.irqReceived = false;
 
         __fdc_outb(FDC_COMMAND_SEEK);
         __fdc_outb((head << 2) | 0);
@@ -375,7 +375,7 @@ int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32
             __init_fdc_dma(buffer, 512);
             __fdc_dma_prepare_read();
 
-            fdc.irqReceived = FALSE;
+            fdc.irqReceived = false;
             __fdc_outb(FDC_COMMAND_READ_DATA | FDC_COMMAND_EXTENSION_MULTITRACK /*| FDC_COMMAND_EXTENSION_SKIP*/ | FDC_COMMAND_EXTENSION_DENSITY);
             if (errno)
                 return -1;

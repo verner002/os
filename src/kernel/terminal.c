@@ -138,16 +138,17 @@ void __terminal_task(void) {
 
         input_buffer[index] = '\0';
 
-        char *cmd = strtok(input_buffer, " ");
+        char *strtok_buffer;
+        char *cmd = strtok_r(input_buffer, " ", &strtok_buffer);
 
         if (!strcmp(cmd, "heap")) {
             //__dump_heap(); // at this point can lead to a deadlock
-            printk("this function is disabled since it can cause dead-lock\n");
+            printk("this function is disabled since it may cause dead-lock\n");
         } else if (!strcmp(cmd, "clear")) {
             __clear();
         } else if (!strcmp(cmd, "ps")) {
             //__list_threads();
-            printk("this function is disabled since it can cause dead-lock\n");
+            printk("this function is disabled since it may cause dead-lock\n");
         } else if (!strcmp(cmd, "e820")) {
             __e820_dump_mmap();
         } else if (!strcmp(cmd, "ls")) {
@@ -159,7 +160,7 @@ void __terminal_task(void) {
 
             struct __dentry *child = __get_dentry()->d_child;
 
-            while (s = strtok(NULL, " ")) {
+            while (s = strtok_r(NULL, " ", &strtok_buffer)) {
                 if (!strcmp(s, "-l"))
                     mode = 1;
                 else if (s) {
@@ -205,7 +206,7 @@ void __terminal_task(void) {
                     putchar('\n');
             }
         } else if (!strcmp(cmd, "hexdump")) {
-            char *address = strtok(NULL, " ");
+            char *address = strtok_r(NULL, " ", &strtok_buffer);
 
             if (!address) {
                 printf("hexdump: expected address\n");
@@ -213,7 +214,7 @@ void __terminal_task(void) {
                 continue;
             }
             
-            char *count = strtok(NULL, " ");
+            char *count = strtok_r(NULL, " ", &strtok_buffer);
 
             if (!count) {
                 printf("hexdump: expected count\n");
@@ -323,9 +324,9 @@ void __terminal_task(void) {
         } else if (!strcmp(cmd, "tree"))
             __tree(__get_dentry());
         else if (!strcmp(cmd, "ping")) {
-            char *target = strtok(NULL, " ");
+            char *target = strtok_r(NULL, " ", &strtok_buffer);
 
-            deffered_job = TRUE;
+            deffered_job = true;
 
             if (!target) {
                 printf("ping: expected target\n");

@@ -177,42 +177,68 @@ void __ide_strncpy(char *dest, char const *src, uint32_t len) {
 */
 
 void __ide_identify_drives(void) {
+    printf("Identifying drives...\n");
+
     for (uint8_t ch = 0; ch < 2; ++ch) {
         for (uint8_t drv = 0; drv < 2; ++drv) {
             drives[drvs_cnt].d_type = 0;
 
             __ide_write(ch, IDE_HDDEVSEL_REG, 0xa0 | (drv << 4));
-            __delay_ms(1);
+            //__delay_ms(1);
 
             __ide_write(ch, IDE_LBA0_REG, 0x00);
             __ide_write(ch, IDE_LBA1_REG, 0x00);
             __ide_write(ch, IDE_LBA2_REG, 0x00);
 
             __ide_write(ch, IDE_COMMAND_REG, IDE_IDENTIFY_CMD);
-            __delay_ms(1);
+            //__delay_ms(1);
 
             if (!__ide_read(ch, IDE_STATUS_REG))
                 continue; // drive does not exist
 
             // poll until not busy
-            while (__ide_read(ch, IDE_STATUS_REG) & IDE_STATUS_BSY);
+            // RFC: check overflow?
+            uint64_t ticks_end = __current_tick_count() + 500; // 500ms
+            bool timeout = false;
+
+            while (__ide_read(ch, IDE_STATUS_REG) & IDE_STATUS_BSY) {
+                if (__current_tick_count() >= ticks_end) {
+                    timeout = true;
+                    break;
+                }
+            }
+
+            if (timeout) {
+                printf("Drive (%u, %u) time out\n", ch, drv);
+                continue;
+            }
 
             if (__ide_read(ch, IDE_LBA1_REG) || __ide_read(ch, IDE_LBA2_REG))
                 continue; // not ata (atapi?)
 
-            bool error = FALSE;
+            ticks_end = __current_tick_count() + 500;
+            //timeout = false;
+            bool error = false;
 
-            // TODO: implement timeout
             for (;;) {
                 uint8_t status = __ide_read(ch, IDE_STATUS_REG);
 
                 // pata drives should set drq
                 // sata, patapi and satapi should set err
                 if (status & IDE_STATUS_ERR) {
-                    error = TRUE;
+                    error = true;
                     break;
                 } else if (status & IDE_STATUS_DRQ)
                     break;
+                else if (__current_tick_count() >= ticks_end) {
+                    timeout = true;
+                    break;
+                }
+            }
+
+            if (timeout) {
+                printf("Drive (%u, %u) time out\n", ch, drv);
+                continue;
             }
 
             uint8_t type;
@@ -303,6 +329,8 @@ void __ide_identify_drives(void) {
             ++drvs_cnt;
         }
     }
+
+    printf("Done\n");
 }
 
 /**
@@ -399,7 +427,7 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
     uint16_t port = channels[channel].r_io_base;
 
     for (uint32_t i = 0; i < count; ++i) {
-        if (__ide_poll(channel, TRUE))
+        if (__ide_poll(channel, true))
             return -4;
 
         asm volatile (
@@ -477,6 +505,5 @@ int32_t __init_ide(struct __bus *b, struct __pci_header *h) {
 
     // identify drives
     __ide_identify_drives();
-    
     return 0;
 }

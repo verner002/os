@@ -18,21 +18,21 @@ static uint32_t last_index;
 int32_t __init_pager(void) {
     E820_ENTRY *last_entry = &smap.entries[smap.count - 1];
 
-    uint32_t pages_count = last_entry->base / 4096 + last_entry->size / 4096;
+    uint32_t pages_count = (last_entry->base / 4096) + (last_entry->size / 4096);
 
     printk("\033[33mpmm:\033[37m Initializing... \n");
 
-    bitmap = (uint32_t *)__e820_rmalloc(pages_count / 8, TRUE);
+    bitmap = (uint32_t *)e820_alloc(pages_count / 8, true, 768*1024*1024);
 
     if (!bitmap) {
         printf("Failed\n");
         return -1;
     }
 
-    size = pages_count / 32;
+    size = pages_count / sizeof(uint32_t);
 
     for (uint32_t i = 0; i < size; ++i)
-        bitmap[i] = 0xffffffff; // free
+        bitmap[i] = 0xffffffff; // reserved
 
     for (uint32_t i = 0; i < smap.count; ++i) {
         if (smap.entries[i].type != 1)

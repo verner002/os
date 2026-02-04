@@ -96,7 +96,7 @@
 #define E1000_NUM_RX_DESC 32
 #define E1000_NUM_TX_DESC 8
 
-static bool init = FALSE;
+static bool init = false;
 
 struct {
     uint8_t irq;
@@ -601,11 +601,11 @@ int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
 
     __e1000_write(REG_EEPROM, 0x00000010);
 
-    bool eeprom_present = FALSE;
+    bool eeprom_present = false;
 
     for (uint32_t i = 0; i < 1000; ++i) {
         if (__e1000_read(REG_EEPROM) & (1 << 8)) {
-            eeprom_present = TRUE;
+            eeprom_present = true;
             break;
         }
     }
@@ -673,6 +673,6 @@ int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
     printf("        Link state              : %s\n", (__e1000_read(REG_STATUS) & (1 << 1)) ? "UP" : "DOWN");
 
     __e1000_write(REG_CTRL, __e1000_read(REG_CTRL) | (1 << 10));
-    init = TRUE; // TODO: we should use mutex
+    init = true; // TODO: we should use mutex
     return 0;
 }

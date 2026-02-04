@@ -97,6 +97,8 @@ int32_t __vbe_init(void const *vbe_info, VBE_MODE_INFO const *vbe_mode_info, cha
     if (double_buffering) {
         buffer = __buffer = (uint32_t)pgsalloc(__pages);
 
+        // TODO: clear buffer
+
         if (!buffer)
             return -1;
 
@@ -163,9 +165,9 @@ void __vbe_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
 }
 
 void __vbe_put_char(uint32_t x, uint32_t y, char character, uint32_t foreground_color, bool transparent, uint32_t background_color) {
-    for (uint32_t i = 0; i < 14; ++i)
+    for (uint32_t i = 0; i < 16; ++i)
         for (uint32_t j = 0; j < 8; ++j)
-            if (font[character * 14 + i] & (1 << (8 - j - 1)))
+            if (font[character * 16 + i] & (1 << (8 - j - 1)))
                 __vbe_put_pixel(x + j, y + i, foreground_color);
             else if (!transparent)
                 __vbe_put_pixel(x + j, y + i, background_color);
@@ -173,8 +175,8 @@ void __vbe_put_char(uint32_t x, uint32_t y, char character, uint32_t foreground_
 
 void __vbe_scrolldown(void) {
     uint32_t destination = buffer;
-    uint32_t source = buffer + bytes_per_pixel * 14 * mode->width;
-    uint32_t size = bytes_per_pixel * mode->width * (mode->height - 14);
+    uint32_t source = buffer + bytes_per_pixel * 16 * mode->width;
+    uint32_t size = bytes_per_pixel * mode->width * (mode->height - 16);
 
     if (!(size & 3)) {
         asm volatile (
@@ -199,8 +201,8 @@ void __vbe_scrolldown(void) {
         );
     }
 
-    destination = buffer + bytes_per_pixel * mode->width * (mode->height - 14);
-    size = bytes_per_pixel * 14 * mode->width;
+    destination = buffer + bytes_per_pixel * mode->width * (mode->height - 16);
+    size = bytes_per_pixel * 16 * mode->width;
 
     if (!(size & 3)) {
         asm volatile (

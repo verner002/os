@@ -6,7 +6,7 @@
 */
 
 #define CONFIG_FDC
-#define COMMAND_LINE 0x00090200
+#define COMMAND_LINE 0x00080200
 
 #ifndef VERSION
     #define VERSION "unknown"
@@ -144,7 +144,6 @@ __attribute__((interrupt)) static void __general_protection_fault(struct __inter
 }
 
 __attribute__((interrupt)) static void __page_fault(struct __interrupt_frame *frame) {
-    // TODO: TEST THIS CODE!!!
     uint32_t vas;
 
     asm volatile (
@@ -155,21 +154,6 @@ __attribute__((interrupt)) static void __page_fault(struct __interrupt_frame *fr
     );
 
     printk("page-fault when accessing address %p\n", vas);
-
-    vas &= 0xfffff000;
-
-    /*void *pas = __e820_rmalloc(4096, TRUE);
-
-    if (!pas) {
-        printk("kernel: page-fault: out of memory\n");
-        panic();
-    }*/
-
-    if (__map_page(vas, vas, PAGE_READ_WRITE)) {
-        printk("kernel: page-fault: map failed\n");
-        panic();
-    }
-
     panic();
 }
 
@@ -194,34 +178,34 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(struct __interrupt_fra
     static uint32_t state = 0;
 
     static bool
-        extended = FALSE,
-        released = FALSE,
-        shift = FALSE;
+        extended = false,
+        released = false,
+        shift = false;
 
     uint8_t data = __inb(PS2_DATA_PORT_REGISTER);
 
     if (state == 0 && data == 0xe0) {
-        extended = TRUE;
+        extended = true;
         ++state;
     } else if ((state == 0 || state == 1) && data == 0xf0) {
-        released = TRUE;
+        released = true;
         ++state;
     } else if (state == 0 || state == 1 || state == 2) {
         if (released) {
             // key released
             switch (data) {
                 case 0x12:
-                    shift = FALSE;
+                    shift = false;
                     break;
             }
 
-            extended = FALSE;
-            released = FALSE;
+            extended = false;
+            released = false;
         } else {
             // key pressed
             switch (data) {
                 case 0x12:
-                    shift = TRUE;
+                    shift = true;
                     break;
                 
                 default:
@@ -248,13 +232,17 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(struct __interrupt_fra
                         if (!c)
                             break;
 
+                        if (c == '\b' && stdin->__count || c != '\b') {
+                            __putc(c); //__graphix_putc(c);
+                            //__vbe_redraw();
+                        }
+
                         /*if (*/putc(c, stdin);/*)*/
                             //printk("ps2: stdin full\n"); // TODO: realloc buffer
 
                         // FIXME: this can cause dead-lock!!!
                         //  we should something like queue
 
-                        __putc(c);
                         //putc(c, (FILE *)0xdeadbabe);
                         
                         /*if (c == '\n' && wake_task != -1)
@@ -264,7 +252,7 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(struct __interrupt_fra
                     break;
             }
 
-            extended = FALSE;
+            extended = false;
         }
 
         state = 0;
@@ -315,17 +303,17 @@ __kdev_t root_dev = NO_DEV;
 char *envs[16];
 
 struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
-    static bool init = TRUE;
+    static bool init = true;
 
     if (!path)
         return NULL;
     
     char *name = strtok(init ? path : NULL, "/");
-    init = FALSE;
+    init = false;
 
     // we've reached the end of the path
     if (!name) {
-        init = TRUE;
+        init = true;
         return node;
     }
 
@@ -338,19 +326,19 @@ struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
         child = child->d_next;
     }
 
-    init = TRUE;
+    init = true;
     return NULL;
 }
 
 // use atomic operations
-bool net_rx_pending = FALSE;
+bool net_rx_pending = false;
 
 void receive_packet() {
     printf("processing packet...\n");
-    net_rx_pending = FALSE;
+    net_rx_pending = false;
 }
 
-bool deffered_job = FALSE;
+bool deffered_job = false;
 
 void __softirq_daemon(void) {
     __wake_on(&deffered_job);
@@ -358,20 +346,27 @@ void __softirq_daemon(void) {
     for (;;) {
         if (net_rx_pending) {
             receive_packet();
-            //net_rx_pending = FALSE;
+            //net_rx_pending = false;
         }
     }
 
-    deffered_job = FALSE;
+    deffered_job = false;
 }
 
 /**
- * entry
- * 
- * stack is at 0x0009fffe-(return+args)
+ * main
 */
 
-void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, uint32_t cursor_x, uint32_t cursor_y, uint32_t boot_drv, uint32_t bytes_per_char, uint32_t  character_rows, uint32_t font_address) {
+void main(void) {
+    // TODO: create system information block structure
+    uint32_t e820_entries_count = *(uint32_t *)0x90003;
+    E820_ENTRY *e820_entries = (E820_ENTRY *)0x94000;
+    uint32_t cursor_x = *(uint8_t *)0x90001;
+    uint32_t cursor_y = *(uint8_t *)0x90002;
+    uint32_t bytes_per_char = *(uint32_t *)0x90007;
+    uint32_t character_rows = *(uint8_t *)0x90009;
+    uint32_t font_address = *(uint32_t *)0x9000a;
+    
     // initialize gdt
     __gdt_init(0x0010);
 
@@ -406,6 +401,82 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, uint32_t curso
     // keep only the address
     page_directory &= ~31;
 
+    // at this point up to the first 4 MiBs of memory is
+    // directly mapped and accessible to kernel, now we
+    // have to map the remaining 764 MiBs (if present in
+    // the system) and reserve memory for dynamic mapping
+    // of the last 256 MiBs, 1 MiB is required to map all
+    // the page tables (for 768 MiB + 256 MiB kernel mapping)
+    //
+    // so we tell e820 allocator to reserve 1 MiB block and
+    // use memory from up to the first 4 MiB (directly mapped)
+    // for that
+    //
+    // RFC: do we always want to perform this? what if there
+    //  is less than 768 MiB in the system?
+    PAGE_TABLE_ENTRY *page_table_entries = (PAGE_TABLE_ENTRY *)e820_alloc(1*1024*1024, true, 4*1024*1024);
+
+    if (!page_table_entries)
+        panic();
+
+    for (uint32_t i = 4*1024*1024/4096; i < 768*1024*1024/4096; ++i) {
+        page_table_entries[i] = (PAGE_TABLE_ENTRY){
+            .address = i*4096,
+            .present = 1,
+            .cache_disabled = 1,
+            .read_write = 1,
+            .user_supervisor = 1,
+            .write_through = 1,
+            .page_attribute_table = 0
+        };
+    }
+
+    for (uint32_t i = 1; i < 768*1024*1024/4096/1024; ++i) {
+        void *page_table = (void *)page_table_entries + i*(sizeof(PAGE_TABLE_ENTRY[1024]));
+        PAGE_DIRECTORY_ENTRY *pde = &((PAGE_DIRECTORY_ENTRY *)page_directory)[i];
+        pde->address = (uint32_t)page_table >> 12;
+        pde->granularity = 0;
+        pde->read_write = 1;
+        pde->user_supervisor = 1;
+        pde->cache_disabled = 1;
+        pde->write_through = 1;
+        pde->present = 1;
+    }
+
+    // map up to 768 MiB of ram statically and remaining
+    // 256 MiB dynamically (3g/1g scheme)
+    // allocate page for a page table that will be used
+    // to map the 1 MiB block for 3g/1g scheme mapping
+    // page tables
+
+    // allocate 1 MiB of physical memory for page tables
+    // memory for static and dynamic mappingsizeof(PAGE_TABLE_ENTRY) * 
+    // 768 mb for static, 256 mb for dynamic
+    // 768 mb will be always immediately available
+    // for kernel to use, 256 mb will be used for DMA,
+    // on-demand mapping, etc.
+
+    // each process virtual address space will contain 1g kernel
+    // mapped virtual address space (its paging directory will
+    // have reference to kernel page tables), since more virtual
+    // addresses can refer to the same physical address, kernel
+    // can perform allocations from its mapped physical address
+    // space and add an mapping to lower 3g virtual address space
+    //
+    // basically up to 768 MiB will be always statically mapped by
+    // kernel but also usable by user space if needed (if kernel
+    // performs mapping to given virtual address space)
+
+    // TODO: map up to 768 MiB of memory to 0xc0000000 line
+    // this allow use to always access some physical memory
+    // without need to perform mapping (dependend od memory
+    // allocation itself), remaininf 256 MiB will be used
+    // as dynamically mapped memory in case we run out of
+    // statically mapped memory
+    //
+    // NOTE: let the kernel start at address 0? but we use executable
+    // format for kernel image, that could be a problem
+
     if (__parse_config((char const *)COMMAND_LINE))
         printk("kernel: warning: failed to parse command line\n");
 
@@ -418,7 +489,9 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, uint32_t curso
 
     // allocate page-aligned memory
     // for kernel heap
-    void *heap = __e820_rmalloc(16*1024, TRUE);
+    uint32_t const heap_size = 16*1024;
+
+    void *heap = e820_alloc(heap_size, true, 768*1024*1024);
 
     if (!heap) {
         printk("kernel: error: failed to allocate memory for heap\n");
@@ -437,12 +510,14 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, uint32_t curso
         panic();
     }
 
+    //__graphix_init((void *)0x90400, (VBE_MODE_INFO *)0x90600, (char const *)font_address, bytes_per_char);
+
     // initialize kernel heap manager
-    __init_heap(heap, 16*1024);
+    __init_heap(heap, heap_size);
 
     // initialize graphix (vbe)
     // initialize vga again? (already initialized by default)
-    //__graphix_init(NULL, (VBE_MODE_INFO *)0x90600, (char const *)font_address, bytes_per_char, FALSE);
+    //__graphix_init(NULL, (VBE_MODE_INFO *)0x90600, (char const *)font_address, bytes_per_char, false);
 
     // there is only one root dentry
     // because multitasking is disabled
@@ -634,7 +709,7 @@ void entry(uint32_t e820_entries_count, E820_ENTRY *e820_entries, uint32_t curso
     printf("\033[97mWelcome!\033[37m\n");
     printf("\033[97m%s-%s\033[37m\n", VERSION, ARCH);
 
-    __mount(root_dev, "/dev/fd0");
+    //__mount(root_dev, "/dev/fd0");
 
     // idle loop
     for (;;)

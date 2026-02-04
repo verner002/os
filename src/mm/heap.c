@@ -19,8 +19,8 @@ struct __chunk {
         *next_chunk;
 };
 
-static bool mutex = FALSE;
-static bool init = FALSE;
+static bool mutex = false;
+static bool init = false;
 static CHUNK *first_chunk = NULL;
 static CHUNK *first_free_chunk = NULL;
 
@@ -41,14 +41,14 @@ void __init_heap(void *p, uint32_t s) {
 
     __mutex_lock(&mutex);
     CHUNK *heap = (CHUNK *)p;
-    heap->free = TRUE;
+    heap->free = true;
     heap->size = s - sizeof(CHUNK); // `s' is real size of area reserved for heap
     heap->previous_chunk = NULL;
     heap->next_chunk = NULL;
 
     first_free_chunk = heap;
     first_chunk = heap;
-    init = TRUE;
+    init = true;
     __mutex_unlock(&mutex);
 }
 
@@ -136,7 +136,7 @@ void *__kmalloc(uint32_t n) {
             
             if (remainder > sizeof(CHUNK)) { // split chunk
                 next_chunk = (CHUNK *)((uint32_t)chunk + sizeof(CHUNK) + n);
-                next_chunk->free = TRUE;
+                next_chunk->free = true;
                 next_chunk->size = remainder - sizeof(CHUNK); // usable size, without metadata
                 next_chunk->previous_chunk = chunk;
                 next_chunk->next_chunk = chunk->next_chunk;
@@ -149,7 +149,7 @@ void *__kmalloc(uint32_t n) {
             }
 
             first_free_chunk = next_chunk;
-            chunk->free = FALSE;
+            chunk->free = false;
 
             return (void *)((uint32_t)chunk + (uint32_t)sizeof(CHUNK));
         }
@@ -178,12 +178,12 @@ void *__kzalloc(uint32_t size, uint32_t alignment) {
             uint32_t padding = (alignment - (start % alignment)) % alignment;
 
             if (remainder >= padding) {
-                chunk->free = FALSE;
+                chunk->free = false;
                 remainder -= padding;
 
                 if (remainder > sizeof(CHUNK)) {
                     CHUNK *free = ((void *)chunk + sizeof(CHUNK) + size + padding);
-                    free->free = TRUE;
+                    free->free = true;
                     free->previous_chunk = chunk;
                     free->next_chunk = chunk->next_chunk;
 
@@ -221,7 +221,7 @@ void __kfree(void *p) {
     if (curr_chunk->free)
         return;
 
-    curr_chunk->free = TRUE;
+    curr_chunk->free = true;
     curr_chunk = __merge_chunks(curr_chunk);
 
     if ((uint32_t)curr_chunk < (uint32_t)first_free_chunk)
@@ -358,7 +358,7 @@ void *__krealloc(void *p, uint32_t n) {
         } else if (extra_bytes > sizeof(CHUNK)) {
             curr_chunk->size = n;
             CHUNK *new_chunk = (CHUNK *)((uint32_t)curr_chunk + n);
-            new_chunk->free = TRUE;
+            new_chunk->free = true;
             new_chunk->size = extra_bytes - sizeof(CHUNK);
             new_chunk->previous_chunk = curr_chunk;
             new_chunk->next_chunk = next_chunk;

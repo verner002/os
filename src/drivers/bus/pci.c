@@ -49,8 +49,8 @@ static struct __subclass const unclassified[] = {
 static struct __subclass const mass_storage_controller[] = {
     { 1, "IDE controller", &__init_ide },
     { 2, "Floppy disk controller", NULL },
-    /*{ 5, "ATA controller", NULL },
-    { 6, "SATA controller", NULL }*/
+    { 5, "ATA controller", &__init_ide },
+    { 6, "SATA controller", &__init_ide }
 };
 
 static struct __subclass const network_controller[] = {
@@ -205,7 +205,9 @@ int32_t __pci_init(void) {
 
                     //printk("pci: info:    subclass [%s]\n", dev_subclass ? dev_subclass->s_name : "unknown");
                     dev_name = dev_subclass ? dev_subclass->s_name : dev_class->c_name;
-                    dev_init = dev_subclass->s_init;
+                    
+                    if (dev_subclass)
+                        dev_init = dev_subclass->s_init;
                 } else
                     dev_name = "Unknown";
 

@@ -20,9 +20,11 @@ modules:
 	done ;
 
 link:
-	$(CL) $(OBJECTS) --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o ./bin/kernel -g
-	cat ./bin/head > ./bin/image
-	cat ./bin/kernel >> ./bin/image
+#	$(CL) $(OBJECTS) --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o ./bin/kernel -g
+	$(CL) -T./link.ld $(OBJECTS) -m elf_i386 -o ./bin/image
+#	$(CL) -T./lds $(OBJECTS) -m elf_i386 -o ./bin/kernel
+#	cat ./bin/head > ./bin/image
+#	cat ./bin/kernel >> ./bin/image
 
 image:
 	$(DD) if=/dev/zero of=./fdd.img bs=512 count=2880

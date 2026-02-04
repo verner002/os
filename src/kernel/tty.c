@@ -12,6 +12,7 @@
 #include "kstdlib/stdio.h"
 #include "kernel/task.h"
 #include "kernel/task.h"
+#include "drivers/graphics/graphix.h"
 
 static uint32_t buffer_count = 0;
 static FILE *buffers[16];
@@ -66,7 +67,7 @@ int32_t __alloc_buffer(FILE *file, char const *name, uint32_t size) {
     file->__fname = name;
     __mutex_unlock(&file->__lock);
 
-    // TODO: increment should better be atomic
+    // TODO: increment better be atomic
     //  or we should use mutex
     buffers[buffer_count++] = file;
     return 0;
@@ -75,10 +76,24 @@ int32_t __alloc_buffer(FILE *file, char const *name, uint32_t size) {
 int32_t __tty0(int argc, char **argv) {
     while (1)
         for (uint32_t i = 0; i < buffer_count; ++i) {
-            char c;
+            FILE *stream = buffers[i];
+
+            if (__test_set(&stream->__lock))
+                continue;
+
+            if (stream->__count) {
+                --stream->__count;
+                int c = *stream->__ptr;
+                stream->__ptr = (stream->__ptr - stream->__base + 1) % stream->__size + stream->__base;
+                __putc(c); //__graphix_putc(c);
+            }
+
+            __mutex_unlock(&stream->__lock);
+
+            /*char c;
 
             while ((c = nonblocking_getc(buffers[i])) != -1)
-                __putc(c);
+                __graphix_putc(c);*/
         }
 }
 

@@ -17,4 +17,5 @@ void *memcpy(void *destination, void const *source, uint32_t n);
 void *memmove(void *destination, void const *source, uint32_t n);
 int32_t strncmp(char const *str1, char const *str2, uint32_t n);
 char *peek(char *str, char const *delimiters, bool eq);
+char *strtok_r(char *str, char const *delimiters, char **saveptr);
 char *strtok(char *str, char const *delimiters);

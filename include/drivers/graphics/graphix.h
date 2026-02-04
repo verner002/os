@@ -7,6 +7,9 @@
 #pragma once
 
 #include "types.h"
+#include "drivers/graphics/vbe.h"
+
+#define RGB(r, g, b) (((r) << 16) | ((g) << 8) | ((b) << 0))
 
 // TODO: add mode? (text/graphics)
 struct __display {
@@ -25,5 +28,5 @@ struct __font {
     char *bitmap;
 };
 
-int32_t __graphix_init(void);
+int32_t __graphix_init(void const *vbe_info, VBE_MODE_INFO const *vbe_mode_info, char const *font_bitmap, uint32_t bytes_per_char);
 int32_t __graphix_putc(uint8_t c);

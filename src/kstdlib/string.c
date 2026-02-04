@@ -36,7 +36,7 @@ char *strcpy(char *d, char const *s) {
 */
 
 char *strncpy(char *d, char const *s, uint32_t n) {
-    bool t = TRUE;
+    bool t = true;
 
     for (uint32_t i = 0; i < n; ++i)
         d[i] = t = t ? s[i] : '\0';
@@ -137,6 +137,34 @@ char *peek(char *str, char const *delimiters, bool eq) {
 }
 
 /**
+ * strtok_r
+*/
+
+char *strtok_r(char *str, char const *delimiters, char **saveptr) {
+    if (!str)
+        str = *saveptr;
+
+    // find first char that is not delim
+    char *start = peek(str, delimiters, false);
+    // find first char that is delim
+    char *end = peek(start, delimiters, true);
+
+    // we've reached the end
+    if (start == end)
+        return NULL;
+
+    *saveptr = end;
+
+    // continue with next symbol
+    if (*end) {
+        ++*saveptr;
+        *end = '\0';
+    }
+
+    return start;
+}
+
+/**
  * strtok
  * 
  * NOTE: not thread-safe
@@ -145,25 +173,5 @@ char *peek(char *str, char const *delimiters, bool eq) {
 char *strtok(char *str, char const *delimiters) {
     static char *last;
 
-    if (!str)
-        str = last;
-
-    // find first char that is not delim
-    char *start = peek(str, delimiters, FALSE);
-    // find first char that is delim
-    char *end = peek(start, delimiters, TRUE);
-
-    // we've reached the end
-    if (start == end)
-        return NULL;
-
-    last = end;
-
-    // continue with next symbol
-    if (*end) {
-        ++last;
-        *end = '\0';
-    }
-
-    return start;
+    return strtok_r(str, delimiters, &last);    
 }

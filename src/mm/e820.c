@@ -129,27 +129,21 @@ static void __insert_region(E820_ENTRY entry, uint32_t index) {
 void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
     map[count++] = (E820_ENTRY){
         .base = 0x00000000,
-        .size = 1024+256+22*1024+768,
+        .size = 512*1024,
         .type = 2
-    }; // IVT, BDA and stack
+    }; // kernel
 
     map[count++] = (E820_ENTRY){
-        .base = 0x0000d000,
-        .size = 3*4096,
+        .base = 0x00080000,
+        .size = 64*1024,
         .type = 2
-    }; // page directory, 1st mib page table and kernel page table
+    }; // page directory, page table, system information block, kernel stack
 
     map[count++] = (E820_ENTRY){
         .base = 0x000a0000,
         .size = 128*1024+32*1024+160*1024+64*1024,
         .type = 2
     }; // video memory, video bios, bios expansion, rom bios
-
-    map[count++] = (E820_ENTRY){
-        .base = 0x00100000,
-        .size = 4*1024*1024,
-        .type = 2
-    }; // kernel
 
     // convert map to list of address descriptors
     for (uint32_t i = 0; i < count; ++i) {
@@ -165,7 +159,7 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
     // let's use bubble sort here
     // TODO: use swap-index optimization?
     do {
-        swap = FALSE;
+        swap = false;
 
         for (uint32_t i = 1; i < count; ++i) {
             // sort by address
@@ -173,7 +167,7 @@ void __e820_sanitize(uint32_t count, E820_ENTRY *map) {
                 ADDRESS_DESCRIPTOR temp = descriptors[i - 1];
                 descriptors[i - 1] = descriptors[i];
                 descriptors[i] = temp;
-                swap = TRUE;
+                swap = true;
             }
         }
     } while (swap);
@@ -302,10 +296,14 @@ void __e820_dump_mmap(void) {
 }
 
 /**
- * __e820_alloc
+ * e820_alloc
+ * 
+ * @arg n Number of bytes to allocate
+ * @arg a Return page-aligned address
+ * @arg l Address space limit (0 for no limit)
 */
 
-void *__e820_alloc(uint32_t n, bool a, bool f) {
+void *e820_alloc(uint32_t n, bool a, uint32_t l) {
     if (!n)
         return NULL;
 
@@ -326,7 +324,7 @@ void *__e820_alloc(uint32_t n, bool a, bool f) {
             size = diff < size ? (size - diff) : 0;
         }
 
-        if (f && fixed_base + n > 1024*1024)
+        if (l && fixed_base + n > l)
             break;
         else if (entry->type == 1 && size >= n) {
             if (size > n) { // there is a remainder
@@ -357,17 +355,17 @@ void *__e820_alloc(uint32_t n, bool a, bool f) {
 }
 
 /**
- * __e820_malloc
+ * e820_malloc
 */
 
-void *__e820_malloc(uint32_t n) {
-    return __e820_alloc(n, FALSE, FALSE);
+void *e820_malloc(uint32_t n) {
+    return e820_alloc(n, false, 0);
 }
 
 /**
- * __e820_rmalloc
+ * e820_rmalloc
 */
 
-void *__e820_rmalloc(uint32_t n, bool a) {
-    return __e820_alloc(n, a, TRUE);
+void *e820_rmalloc(uint32_t n, bool a) {
+    return e820_alloc(n, a, 4*1024*1024);
 }

@@ -11,6 +11,7 @@
 */
 
 #include "kstdlib/stdio.h"
+#include "drivers/graphics/graphix.h"
 
 /**
  * Static Global Variables
@@ -62,7 +63,7 @@ int getc(FILE *stream) {
 
     // buffer empty -> sleep the task
     if (!stream->__count) {
-        __wake = FALSE;
+        __wake = false;
         __mutex_unlock(&stream->__lock);
         __wake_on(&__wake);
         __mutex_lock(&stream->__lock);
@@ -99,7 +100,7 @@ int getchar(void) {
 
 int32_t putc(int c, FILE *stream) {
     if (stream == &_stdout)
-        return __putc(c);
+        return __putc(c); //__graphix_putc(c);
 
     __mutex_lock(&stream->__lock);
 
@@ -127,7 +128,7 @@ int32_t putc(int c, FILE *stream) {
         stream->__base[stream->__index++ % stream->__size] = c;
 
         if (c == '\n')
-            __wake = TRUE;
+            __wake = true;
 
         __mutex_unlock(&stream->__lock);
         return 0;
@@ -155,13 +156,19 @@ int32_t putchar(int c) {
 
 int32_t vfprintf(FILE *stream, char const *s, va_list args) {
     char c;
-    int errno = 0;
+    int error = 0;
 
-    for (uint32_t i = 0; !errno && (c = s[i]); ++i) {
+    for (uint32_t i = 0; !error && (c = s[i]); ++i) {
         if (c == '%') {
             switch (/*c = */s[++i]) { // variable arguments
-                case 'c': errno = putc(va_arg(args, int), stream); break;
-                case 's': errno = fprintf(stream, va_arg(args, char const *)); break;
+                case 'c':
+                    error = putc(va_arg(args, int), stream);
+                    break;
+                
+                case 's':
+                    error = fprintf(stream, va_arg(args, char const *));
+                    break;
+                
                 case '.': {
                     switch (s[++i]) {
                         case '*': {
@@ -173,12 +180,14 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
 
                                     for (uint32_t j = 0; j < limit; ++j)
                                         putc(string[j], stdout);
+
                                     break;
                                 }
 
                                 default:
                                     return -1;
                             }
+
                             break;
                         }
 
@@ -193,9 +202,10 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                     uint32_t j = 0;
 
                     do n[j++] = u % 10 + '0'; while (u /= 10);
-                    do errno = putc(n[--j], stream); while (j && !errno);
+                    do error = putc(n[--j], stream); while (j && !error);
                     break;
                 }
+
                 case 'p': {
                     uint32_t p = va_arg(args, uint32_t);
                     //fprintf(stream, "0x%08x", p); -- implement!!!
@@ -209,8 +219,10 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                         
                         putc(d, stream);
                     }
+
                     break;
                 }
+
                 case '0': { // TODO: use variable arguments, if (s[i] >= '0' && s[i] <= '9')
                     switch (s[++i]) {
                         case '2': {
@@ -286,10 +298,10 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
                 default:
                     return -1;
             }
-        } else errno = putc(c, stream);
+        } else error = putc(c, stream);
     }
 
-    return errno;
+    return error;
 }
 
 /**
@@ -308,11 +320,11 @@ int32_t fprintf(FILE *stream, char const *s, ...) {
     va_list args;
     va_start(args, s);
 
-    int errno = vfprintf(stream, s, args);
+    int error = vfprintf(stream, s, args);
 
     va_end(args);
 
-    return errno;
+    return error;
 }
 
 /**
@@ -323,18 +335,18 @@ int32_t fprintf(FILE *stream, char const *s, ...) {
 */
 
 int32_t printf(char const *s, ...) {
-    static bool printf_mutex = FALSE;
+    static bool printf_mutex = false;
     __mutex_lock(&printf_mutex);
     
     va_list args;
     va_start(args, s);
 
-    int errno = vprintf(s, args);
+    int error = vprintf(s, args);
 
     va_end(args);
 
     __mutex_unlock(&printf_mutex);
-    return errno;
+    return error;
 }
 
 /**
@@ -350,7 +362,7 @@ int32_t puts(char const *s) {
 */
 
 void printk(char const *s, ...) {
-    static bool printk_mutex = FALSE;
+    static bool printk_mutex = false;
     __mutex_lock(&printk_mutex);
 
     va_list args;
@@ -359,7 +371,7 @@ void printk(char const *s, ...) {
     uint32_t padding;
     uint64_t ticks = __current_tick_count();
 
-    printf("\033[32m[");
+    fprintf(&_stdout, "\033[32m[");
 
     // we can handle up to about 32 years
     if (ticks <= (uint64_t)999999999999) {
@@ -369,22 +381,22 @@ void printk(char const *s, ...) {
         padding = 8 - log10(s);
         
         for (uint32_t i = 0; i < padding; ++i)
-            putchar(' ');
+            putc(' ', &_stdout);
         
-            printf("%u.", s); 
+            fprintf(&_stdout, "%u.", s); 
 
         padding = 2 - log10(ms);
         
         for (uint32_t i = 0; i < padding; ++i)
-            putchar('0');
+            putc('0', &_stdout);
         
-            printf("%u", ms);
+            fprintf(&_stdout, "%u", ms);
         
     } else
-        printf("---------.---");
+        fprintf(&_stdout, "---------.---");
 
-    printf("]\033[37m ");
-    vprintf(s, args);
+    fprintf(&_stdout, "]\033[37m ");
+    vfprintf(&_stdout, s, args);
     va_end(args);
 
     __mutex_unlock(&printk_mutex);

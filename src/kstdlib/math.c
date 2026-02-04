@@ -29,6 +29,8 @@ uint32_t log2b(uint32_t n) {
 
 /**
  * log10
+ * 
+ * FIXME: with -O0 this function returns weird results
 */
 
 uint32_t log10(uint32_t n) {
@@ -97,4 +99,25 @@ uint64_t __umoddi3(uint64_t dividend, uint64_t divisor) {
     }
 
     return remainder;
+}
+
+void __udivmoddi4(uint64_t dividend, uint64_t divisor, uint64_t *q, uint64_t *r) {
+    if (!divisor)
+        return;
+
+    uint64_t quotient = 0;
+    uint64_t remainder = 0;
+
+    for (int32_t i = 63; i >= 0; --i) {
+        remainder <<= 1;
+        remainder |= (dividend >> i) & 1;
+
+        if (remainder >= divisor) {
+            remainder -= divisor;
+            quotient |= (1ULL << i);
+        }
+    }
+
+    *q = quotient;
+    *r = remainder;
 }

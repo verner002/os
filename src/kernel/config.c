@@ -99,7 +99,7 @@ int32_t __parse_config(char const *config) {
                     while (*ptr != '\n' && *ptr != '\0')
                         ++ptr;
 
-                    printk("config:%u:%u: expected eol or eof\n", line, column);
+                    printk("config:%u:%u: expected end of line or end of file\n", line, column);
                     break;
                 }
 

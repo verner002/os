@@ -17,7 +17,7 @@
 */
 
 static uint8_t *fat = NULL;
-static bool update_root_dir = TRUE;
+static bool update_root_dir = true;
 static FAT12_RECORD *root_dir = NULL;
 
 /**
@@ -51,7 +51,7 @@ int32_t __fat12_read_root_dir(void) {
 
     if (update_root_dir) {
         error = __fdc_read_sectors(9 * 2 + 1, (224 * 32) / 512, (uint32_t)root_dir);
-        update_root_dir = FALSE;
+        update_root_dir = false;
     }
 
     return error;
@@ -64,16 +64,16 @@ int32_t __fat12_read_root_dir(void) {
 bool __fat12_file_exists(char const *filename) {
     if (!root_dir)
         if (__fat12_read_root_dir())
-            return FALSE;
+            return false;
 
     for (uint32_t i = 0; i < 224; ++i) {
         FAT12_RECORD *record = &root_dir[i];
 
         if (!strncmp(record->filename, filename, 11))
-            return TRUE;
+            return true;
     }
 
-    return FALSE;
+    return false;
 }
 
 /**

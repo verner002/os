@@ -18,6 +18,9 @@ entry:
     mov ds, ax
     mov es, ax
 
+    ; 0x0000 - boot drive
+    mov byte [0x0000], dl
+
     call test_a20
     jnz .a20_enabled
 
@@ -34,9 +37,6 @@ entry:
     jz halt
 
 .a20_enabled:
-    ; 0x0000 - boot drive
-    mov byte [0x0000], dl
-
     ; 0x0001 - cursor x
     ; 0x0002 - cursor y
     mov ah, 0x03
@@ -87,17 +87,19 @@ entry:
     ; get font info
     push es
     mov ax, 0x1130
-    mov bh, 0x02 ; get font 8x14
+    mov bh, 0x06 ;0x02 ; get font 8x14
     int 0x10
 
-    mov word [0x0007], cx ; bytes per character
-    mov byte [0x0009], dl ; character rows - 1
     xor eax, eax
     mov ax, es
+    push cs
+    pop es
+    mov word [es:0x0007], cx ; bytes per character
+    mov byte [es:0x0009], dl ; character rows - 1
     shl eax, 0x04
     movzx ebp, bp
     add eax, ebp
-    mov dword [0x000a], eax ; font address
+    mov dword [es:0x000a], eax ; font address
     pop es
 
 .pop_ds:
@@ -118,13 +120,11 @@ entry:
     mov es, ax
 
     ; move 8 segments
-    mov dl, 0x08
+    mov dx, 0x0008
 
     xor si, si
     xor di, di
 
-; TODO: don't perform kernel
-;  move, it's useless
 .copy:    
     mov cx, 0x8000
     rep movsw
@@ -137,7 +137,7 @@ entry:
     add ah, 0x10
     mov es, ax
 
-    dec dl
+    dec dx
     jnz .copy
 
     mov ax, cs
@@ -301,32 +301,32 @@ a20_ps2:
     cli
     ; disable first ps2
     mov al, 0xad
-    ;call ps2_wait_in
+    call ps2_wait_in
     out 0x64, al
 
     ; read controller output port
     mov al, 0xd0
-    ;call ps2_wait_in
+    call ps2_wait_in
     out 0x64, al
 
-    ;call ps2_wait_out
     ; enable a20
+    call ps2_wait_out
     in al, 0x60
     or al, 0x02
 
     push ax
     ; write to controller output port
     mov al, 0xd1
-    ;call ps2_in
+    call ps2_wait_in
     out 0x64, al
     pop ax
 
-    ;call ps2_wait_in
+    call ps2_wait_in
     out 0x60, al
 
     ; enable first ps2
     mov al, 0xae
-    ;call ps2_wait_in
+    call ps2_wait_in
     out 0x64, al
     sti
     ret
@@ -338,10 +338,10 @@ a20_ps2:
 ps2_wait_in:
     push ax
 
-.wait:
+.wait_in:
     in al, 0x64
     test al, 0x02
-    jnz .wait
+    jnz .wait_in
 
     pop ax
     ret
@@ -353,10 +353,10 @@ ps2_wait_in:
 ps2_wait_out:
     push ax
 
-.wait:
+.wait_out:
     in al, 0x64
     test al, 0x01
-    jz .wait
+    jz .wait_out
 
     pop ax
     ret

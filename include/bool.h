@@ -22,5 +22,5 @@ typedef uint32_t bool;
  * Constants
 */
 
-#define FALSE ((bool)0)
-#define TRUE (!FALSE)
+#define false ((bool)0)
+#define true (!false)

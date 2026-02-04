@@ -39,6 +39,6 @@ extern E820_MAP smap;
 
 void __e820_sanitize(uint32_t count, E820_ENTRY *map);
 void __e820_dump_mmap(void);
-void *__e820_alloc(uint32_t n, bool a, bool f);
-void *__e820_malloc(uint32_t n);
-void *__e820_rmalloc(uint32_t n, bool a);
+void *e820_alloc(uint32_t n, bool a, uint32_t l);
+void *e820_malloc(uint32_t n);
+void *e820_rmalloc(uint32_t n, bool a);

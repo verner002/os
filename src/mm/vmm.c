@@ -4,6 +4,7 @@
  * @date 23/09/2025
 */
 
+#include "macros.h"
 #include "mm/vmm.h"
 
 typedef struct __avl_node AVL_NODE;
@@ -37,14 +38,23 @@ static AVL_NODE *root;
 //CR3 page_directory;
 uint32_t page_directory;
 
+static bool bitmap_lock = false;
+static uint32_t bitmap[256*1024*1024/4096/32];
+
 /**
  * __init_vmm
 */
 
 int32_t __init_vmm(void) {
-    printk("\033[33mvmm:\033[37m Initializing... ");
+    __mutex_lock(&bitmap_lock);
 
-    /*root = (AVL_NODE *)__e820_malloc(sizeof(AVL_NODE));
+    // all pages in pool are free
+    for (uint32_t i = 0; i < sizeofarray(bitmap); ++i)
+        bitmap[i] = 0;
+
+    __mutex_unlock(&bitmap_lock);
+    
+    /*root = (AVL_NODE *)e820_malloc(sizeof(AVL_NODE));
 
     if (!root) {
         printf("Error\n");
@@ -53,17 +63,17 @@ int32_t __init_vmm(void) {
 
     root->start = 0x80000000;
     root->size = 2*1024*1024; // half of the virtual memory
-    root->free = TRUE;
+    root->free = true;
     root->height = 0;
     root->left = NULL;
     root->right = NULL;*/
-
-    printf("Ok\n");
     return 0;
 }
 
 /**
  * __map_page
+ * 
+ * TODO: take page tables from page tables pool
 */
 
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags) {
@@ -77,18 +87,24 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
     
     uint32_t page = (uint32_t)virtual_memory / PAGE_SIZE;
 
-    PAGING_DIRECTORY_ENTRY *pde = &((PAGING_DIRECTORY_ENTRY *)page_directory)[page / 1024]; // TODO: use ptr arithmetic?
+    PAGE_DIRECTORY_ENTRY *pde = &((PAGE_DIRECTORY_ENTRY *)page_directory)[page / 1024]; // TODO: use ptr arithmetic?
 
-    PAGING_TABLE_ENTRY *page_table;
+    PAGE_TABLE_ENTRY *page_table;
 
     if (!(pde->address & 0x000fffff)) { // no page table, create one
-        page_table = (PAGING_TABLE_ENTRY *)pgalloc(PAGE_MAP);
+        // TODO:
+        //  do not allocate a memory by standard allocation functions
+        //  take page from dynamic mapping page pool, if there is no
+        //  free page try do swap-out (implement swapping :-)) and if
+        //  no page is still available, sleep process
+        page_table = (PAGE_TABLE_ENTRY *)pgalloc(PAGE_MAP);
 
         if (!page_table) {
             printk("page-map: not enough memory for page table\n");
             return -1;
         }
 
+        // clear page table
         memset(page_table, 0, PAGE_TABLE_SIZE);
 
         pde->address = (uint32_t)page_table >> 12;
@@ -99,9 +115,9 @@ int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t fl
         pde->write_through = !!PAGE_WRITE_THROUGH;
         pde->present = 1;
     } else
-        page_table = (PAGING_TABLE_ENTRY *)(pde->address << 12);
+        page_table = (PAGE_TABLE_ENTRY *)(pde->address << 12);
 
-    PAGING_TABLE_ENTRY *pte = &(page_table[page % 1024]);
+    PAGE_TABLE_ENTRY *pte = &(page_table[page % 1024]);
 
     // FIXME: do we want this???
     //if (pte->address & 0x000fffff) return -1; // already mapped
@@ -347,12 +363,12 @@ void *__alloc(uint32_t size) {
 
     if (node > size) { // node > size + 16
         // split
-        AVL_NODE *remainder = new_node(node->start + size, node->size - size, TRUE);
+        AVL_NODE *remainder = new_node(node->start + size, node->size - size, true);
         remainder->previous = node;
         node->next = remainder;
 
-        insert_node(root, node->start, size, FALSE);
-        insert_node(root, node->start + size, node->size - size, TRUE);
+        insert_node(root, node->start, size, false);
+        insert_node(root, node->start + size, node->size - size, true);
         //delete_node(node);
     }
 
@@ -364,11 +380,53 @@ void *__alloc(uint32_t size) {
 }
 
 /**
- * __mmap
+ * map_page
+ * 
+ * TODO: perform mapping for given length
+ * RFC: what to do if there is a request for mapping
+ *  that starts in low mem and end in high mem???
 */
 
-void *__mmap(void *physical_memory, uint32_t length, uint8_t flags) {
-    // get the first free va with required length
+void *map_page(void *addr, uint32_t length, uint8_t flags) {
+    if (addr + length <= 768*1024*1024)
+        return addr; // low memory is directly mapped
+
+    // search, swap pages, search again, on fail sleep
+    // process till next swap and repeate
+
+    while (true) {
+        __mutex_lock(&bitmap_lock);
+        
+        for (uint32_t i = 0; i < sizeofarray(bitmap); ++i) {
+            if (~bitmap[i]) {
+                for (uint32_t j = 0; j < 32; ++j)
+                    if (!(bitmap[i] & (1 << j))) {
+                        bitmap[i] |= (1 << j);
+                        __mutex_unlock(&bitmap_lock);
+                        // TODO: map the page
+                        return (void *)((i * 32 + j) * 4096 + 768*1024*1024/* + 0xc0000000*/);
+                    }
+            }
+        }
+
+        __mutex_unlock(&bitmap_lock);
+
+        // TODO: swap and repeate
+        // TODO: sleep process
+    }
+}
+
+/**
+ * unmap_page
+*/
+
+int32_t unmap_page(void *addr, uint32_t length) {
+    __mutex_lock(&bitmap_lock);
+    uint32_t address = ((uint32_t)addr - 768*1024*1024) / 4096;
+    // TODO: unmap the page
+    bitmap[address / 32] &= ~(1 << (address % 32));
+    __mutex_unlock(&bitmap_lock);
+    return 0;
 }
 
 /**

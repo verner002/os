@@ -50,7 +50,7 @@ void __inode_init(struct __inode *inode, struct __dentry *dentry) {
     inode->i_gid = 0777;
 }
 
-static struct __dentry *__internal_lookup(struct __dentry *node, char *path, uint32_t max_depth, uint32_t depth) {
+static struct __dentry *__internal_lookup(struct __dentry *node, char **saveptr, char *path, uint32_t max_depth, uint32_t depth) {
     printk("looking for [%s] in [%s]\n", path, node->name);
     
     if (depth > max_depth)
@@ -59,7 +59,7 @@ static struct __dentry *__internal_lookup(struct __dentry *node, char *path, uin
     if (strcmp(node->name, path))
         return NULL;
 
-    char *subpath = strtok(NULL, "/");
+    char *subpath = strtok_r(NULL, "/", saveptr);
 
     printk("sp=%p\n", subpath);
 
@@ -69,7 +69,7 @@ static struct __dentry *__internal_lookup(struct __dentry *node, char *path, uin
     struct __dentry *child = node->d_child;
 
     while (child) {
-        struct __dentry *temp = __internal_lookup(child, subpath, max_depth, depth + 1);
+        struct __dentry *temp = __internal_lookup(child, saveptr, subpath, max_depth, depth + 1);
 
         if (temp)
             return temp;
@@ -81,8 +81,10 @@ static struct __dentry *__internal_lookup(struct __dentry *node, char *path, uin
 struct __dentry *__lookup(struct __dentry *node, char const *path, uint32_t max_depth) {
     struct __dentry *child = node->d_child;
 
+    char *strtok_buffer;
+
     while (child) {
-        struct __dentry *temp = __internal_lookup(child, strtok(path, "/"), max_depth, 1);
+        struct __dentry *temp = __internal_lookup(child, &strtok_buffer, strtok_r(path, "/", &strtok_buffer), max_depth, 1);
 
         if (temp)
             return temp;

@@ -89,7 +89,7 @@ parse_pe:
     mov esi, dword [esi+__section.raw_data_ptr]
     test esi, esi
     jz .zero ; FIXME: .bss initialization (make it more readable)
-    add esi, 0x1000 ; FIXME: use eax
+    add esi, 0x00011000 ; FIXME: use eax
     rep movsb ; copy raw data
     jmp .popall
 

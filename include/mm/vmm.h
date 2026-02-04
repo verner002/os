@@ -20,8 +20,8 @@
 */
 
 typedef struct __cr3 CR3;
-typedef struct __paging_directory_entry PAGING_DIRECTORY_ENTRY;
-typedef struct __paging_table_entry PAGING_TABLE_ENTRY;
+typedef struct __page_directory_entry PAGE_DIRECTORY_ENTRY;
+typedef struct __page_table_entry PAGE_TABLE_ENTRY;
 
 /**
  * Constants
@@ -57,7 +57,7 @@ enum __page_flags {
     uint32_t address            : 27;
 };*/
 
-struct __attribute__((__packed__)) __paging_directory_entry {
+struct __attribute__((__packed__)) __page_directory_entry {
     uint32_t present            : 1;
     uint32_t read_write         : 1;
     uint32_t user_supervisor    : 1;
@@ -70,7 +70,7 @@ struct __attribute__((__packed__)) __paging_directory_entry {
     uint32_t address            : 20; // paging table address
 };
 
-struct __attribute__((__packed__)) __paging_table_entry {
+struct __attribute__((__packed__)) __page_table_entry {
     uint32_t present                : 1;
     uint32_t read_write             : 1;
     uint32_t user_supervisor        : 1;
@@ -98,4 +98,5 @@ extern uint32_t page_directory;
 int32_t __init_vmm(void);
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags);
 //void *__alloc(uint32_t size);
-void *__mmap(void * physical_memory, uint32_t length, uint8_t flags);
+void *map_page(void *addr, uint32_t length, uint8_t flags);
+int32_t unmap_page(void *addr, uint32_t length);

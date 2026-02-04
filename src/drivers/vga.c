@@ -27,7 +27,8 @@ static uint32_t values[16]; // TODO: define constant
 /**
  * __vga_init
  * 
- * TODO: map video memory (if not already mapped)
+ * TODO: map video memory (if not already mapped),
+ *  allow double buffering
 */
 
 void __vga_init(void) {
@@ -57,7 +58,7 @@ void __clear(void) {
 */
 
 int32_t __putc(uint8_t c) {
-    static bool putc_mutex = FALSE;
+    static bool putc_mutex = false;
     __mutex_lock(&putc_mutex);
 
     if (state == 0) {
@@ -185,7 +186,7 @@ int32_t __putc(uint8_t c) {
 */
 
 void __vga_set_cursor_position(uint32_t line, uint32_t column) {
-    static bool setcurpos_mutex = FALSE;
+    static bool setcurpos_mutex = false;
     __mutex_lock(&setcurpos_mutex);
 
     cursor_y = line;
@@ -206,7 +207,7 @@ void __vga_set_cursor_position(uint32_t line, uint32_t column) {
 */
 
 void __scroll_down(void) {
-    static bool scrolldown_mutex = FALSE;
+    static bool scrolldown_mutex = false;
     __mutex_lock(&scrolldown_mutex);
 
     for (uint32_t i = 0, j = VIDEO_MEM_COLS; i < VIDEO_MEM_COLS * (VIDEO_MEM_ROWS - 1); ++i, ++j)

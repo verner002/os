@@ -19,6 +19,8 @@ To build the project (including the bootable floppy image) use:
 $ make
 ```
 
+# Kernel Image
+
 # Stage 1
 
 ## Physical Memory Map
@@ -28,7 +30,7 @@ This memory map is related to `boot.s` which is the first code to be run after l
 |:-----:|:---:|:----:|-------------|
 | `0x00000000` | `0x000003ff` | 1 KiB | Interrupt Vector Table
 | `0x00000400` | `0x000004ff` | 256 B | BIOS Data Area
-| `0x00000500` | `0x0000ffff` | ??? KiB  | Free
+| `0x00000500` | `0x0000ffff` | ... KiB  | Free
 | `0x00010000` | `0x0008ffff` | 512 KiB | Image
 | `0x00090000` | `0x000901ff` | 512 B  | Boot Loader
 | `0x00090200` | `0x000909ff` | 2 KiB  | Setup
@@ -77,8 +79,8 @@ Now the `setup.s` takes control: Its task is to gather system information and pl
 | `0x000c0000` | `0x000c7fff` | 32 KiB | Video BIOS
 | `0x000c8000` | `0x000effff` | 160 KiB | BIOS Expansion
 | `0x000f0000` | `0x000fffff` | 64 KiB | ROM BIOS
-| `0x00100000` | `0x004fffff` | 4 MiB | Kernel
-| `0x00500000` | `0x00efffff` | 10 MiB | Free
+| `0x00100000` | `0x004fffff` | 4 MiB | Kernel (possibly memory mapped hardware!!!)
+| `0x00500000` | `0x00efffff` | 10 MiB | Free (possibly memory mapped hardware)
 | `0x00f00000` | `0x00ffffff` | 1 MiB | ISA Memory Hole (possibly memory mapped hardware)
 | `0x01000000` | `0x01ffffff` | 16 MiB | Usable Memory & Memory Mapped Hardware
 | `0x02000000` | `0xffffffff` | 4064 MiB | Usable Memory & Memory Mapped Hardware (Extra Memory)

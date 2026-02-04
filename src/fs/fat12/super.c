@@ -20,6 +20,9 @@ int32_t get_super(__kdev_t kdev, struct __superblock *super) {
     // read the super block
     struct __driver *driver = __driver_lookup(MAJOR(kdev));
     
+    if (!driver)
+        return -1; // no driver loaded
+    
     
 
     return -1;

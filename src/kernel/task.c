@@ -51,7 +51,7 @@ extern FILE
 
 extern int32_t __alloc_buffer(FILE *file, char const *name, uint32_t size);
 
-bool __sched_lock = FALSE;
+bool __sched_lock = false;
 struct __thread_control_block
     *thread_lhead = NULL;
 
@@ -256,7 +256,7 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
         return -1;
     }
 
-    thread->t_stdout.__lock = FALSE;
+    thread->t_stdout.__lock = false;
 
     if (__alloc_buffer(&thread->t_stdout, "stdout", 256)) {
         kfree(stdin);
@@ -288,7 +288,7 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
         .__flags = 0,
         .__size = stdin_size,
         .__fname = "stdin",
-        .__lock = FALSE
+        .__lock = false
     };
 
     // all the data goes to terminal
@@ -411,7 +411,7 @@ int32_t __sched_init(struct __dentry *root_dentry) {
         return -1;
     }
 
-    kernel_thread->t_stdout.__lock = FALSE;
+    kernel_thread->t_stdout.__lock = false;
 
     if (__alloc_buffer(&kernel_thread->t_stdout, "stdout", 256)) {
         kfree(stdin);
@@ -446,7 +446,7 @@ int32_t __sched_init(struct __dentry *root_dentry) {
         .__flags = 0,
         .__size = stdin_size,
         .__fname = "stdin",
-        .__lock = FALSE
+        .__lock = false
     };
     
     asm volatile (
@@ -547,12 +547,12 @@ void __wake_on(bool *alarm) {
 int32_t __sleep_task(int32_t pid) {
     __mutex_lock(&__sched_lock);
     struct __thread_control_block *thread = thread_lhead;
-    bool not_found = TRUE;
+    bool not_found = true;
 
     // TODO: compare current thread pid with pid
     do {
         if (thread->t_pid == pid) {
-            not_found = FALSE;
+            not_found = false;
             break;
         }
 
@@ -588,11 +588,11 @@ int32_t __sleep_me(void) {
 int32_t __wake_task(int32_t pid) {
     __mutex_lock(&__sched_lock);
     struct __thread_control_block *thread = thread_current;
-    bool not_found = TRUE;
+    bool not_found = true;
 
     do {
         if (thread->t_pid == pid) {
-            not_found = FALSE;
+            not_found = false;
             break;
         }
 
@@ -623,6 +623,9 @@ int32_t __wake_task(int32_t pid) {
  *  TASKS, IT CAUSES DEAD-LOCK SINCE IT LOCKS
  *  THE SCHEDULER (i have to find another way
  *  to list tasks)
+ * 
+ * SOLUTION: do not print informations here,
+ *  return new list with threads instead
 */
 
 void __list_threads(void) {

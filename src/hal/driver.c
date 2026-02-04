@@ -95,7 +95,7 @@ struct __driver *__register_driver(char const *name, uint8_t major, struct __kob
 
     //__kobj_put(bus); -- used by caller (caller should call __kobj_put)
 
-    driver->d_kobj = kobj;
+    driver->kobj = kobj;
     driver->release = NULL;
     drivers[major] = driver;
     return driver;

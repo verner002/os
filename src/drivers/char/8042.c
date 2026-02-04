@@ -577,11 +577,11 @@ int32_t __ps2_init(void) {
             continue;
 
         uint8_t *device_id_bytes = device->bytes;
-        bool invalid = FALSE;
+        bool invalid = false;
 
         for (uint32_t j = 0; j < id_length; ++j)
             if (id_bytes[j] != device_id_bytes[j]) {
-                invalid = TRUE;
+                invalid = true;
                 break;
             }
         
@@ -592,12 +592,12 @@ int32_t __ps2_init(void) {
         break;
     }
 
-    if (!ps2_port_a) {
+    /*if (!ps2_port_a) {
         printf("Unknown\n");
         return -1;
-    }
+    }*/
 
-    printf("%s\n", ps2_port_a->name);
+    printf("%s\n", ps2_port_a ? ps2_port_a->name : "Unknown");
 
     printk("\033[33mps2:\033[37m port-a: Setting scan code set 2... ");
     errno = 0;
@@ -852,7 +852,7 @@ PS2_ID *__ps2_identify(void) {
             return NULL;
         }
 
-        bool error = FALSE;
+        bool error = false;
 
         for (uint32_t i = 0; i < sizeof(id) / sizeof(uint8_t); ++i) {
             uint8_t id_byte = __ps2_read_byte();
@@ -865,7 +865,7 @@ PS2_ID *__ps2_identify(void) {
             }
 
             if (errno) {
-                error = TRUE;
+                error = true;
                 printk("ps2: error: hardware failure while reading id\n");
                 break;
             }
