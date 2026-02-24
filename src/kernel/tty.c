@@ -81,11 +81,16 @@ int32_t __tty0(int argc, char **argv) {
             if (__test_set(&stream->__lock))
                 continue;
 
-            if (stream->__count) {
+            int c;
+
+            while (stream->__count) {
                 --stream->__count;
                 int c = *stream->__ptr;
                 stream->__ptr = (stream->__ptr - stream->__base + 1) % stream->__size + stream->__base;
                 __putc(c); //__graphix_putc(c);
+
+                if (/*c == '\0' || */c == '\n')
+                    break;
             }
 
             __mutex_unlock(&stream->__lock);
@@ -98,7 +103,7 @@ int32_t __tty0(int argc, char **argv) {
 }
 
 int32_t __tty_init(void) {
-    int32_t pid = __create_thread("tty0", &__tty0, THREAD_RING_0, THREAD_PRIORITY_HIGH);
+    int32_t pid = __create_thread("tty0", &__tty0, THREAD_RING_0, THREAD_PRIORITY_HIGH, NULL);
 
     if (pid == -1) {
         //printk("failed to start tty0\n");

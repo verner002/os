@@ -518,15 +518,6 @@ static int32_t __fdc_daemon(int argc, char **argv) {
     }
 }
 
-static struct __kobj_type fdc_driver_type = {
-    .k_attribs = NULL,
-    .release = NULL,
-    .k_ops = {
-        .read = NULL,
-        .write = NULL
-    }
-};
-
 /**
  * __ioctl
 */
@@ -545,6 +536,10 @@ int32_t __ioctl(uint32_t cmd, uint8_t minor, void *data) {
 /**
  * __init_fdc
 */
+
+int fdc_read_sectors(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
+    return __fdc_read_sectors(lba, count, (uint32_t)buffer);
+}
 
 int32_t __init_fdc(void) {
     //printk("Initializing FDC...\n");
@@ -574,24 +569,25 @@ int32_t __init_fdc(void) {
     if (__fdc_reset()) {
         //printk("\033[33mfdc:\033[37m Failed to initialize FDC\n");
         __disable_irq(0x06);
-        __exit(-1);
+        return -1;
     }
 
     /*__mutex_lock(&motor_mutex);
     motor_off_counter = 0;
     __mutex_unlock(&motor_mutex);*/
 
-    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0, THREAD_PRIORITY_HIGH);
+    int32_t pid = __create_thread("fdc-daemon", (int32_t (*)(int argc, char **argv))&__fdc_daemon, THREAD_RING_0, THREAD_PRIORITY_HIGH, NULL);
 
     if (pid < 0)
-        __exit(-1);
+        return -1;
 
     // creates device file in /dev -> /dev/fd0
     if (__dev_add(MAJMIN(FLOPPY_MAJOR, 0), "fd0", NULL, NULL, NULL))
-        __exit(-1);
+        return -1;
 
-    if (!__register_driver("fdc", FLOPPY_MAJOR, &fdc_driver_type))
-        __exit(-1);
+    /*if (!__register_driver("fdc", FLOPPY_MAJOR, &fdc_driver_type))
+        __exit(-1);*/
 
-    __exit(0);
+    register_blk_driver(FLOPPY_MAJOR, &fdc_read_sectors);
+    return 0;
 }

@@ -5,9 +5,13 @@
 */
 
 #include "kernel/terminal.h"
-#include "hal/vfs.h"
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
+#include "hal/driver.h"
+
+#include "fs/file.h"
+
+#include "hal/dev.h"
 
 extern void panic(void);
 extern bool deffered_job;
@@ -41,13 +45,13 @@ int32_t xatoi(char const *s) {
  * __path
 */
 
-static void __path(struct __dentry *node) {
-    if (!node->d_parent) {
+static void __path(struct dentry *node) {
+    if (!node->parent) {
         printf(node->name);
         return;
     }
 
-    __path(node->d_parent);
+    __path(node->parent);
     printf("/%s", node->name);
 }
 
@@ -55,17 +59,17 @@ static void __path(struct __dentry *node) {
  * __tree
 */
 
-static void __tree(struct __dentry *node) {
-    struct __dentry *child = node->d_child;
+static void __tree(struct dentry *node) {
+    struct dentry *child = node->inode->child;
 
     while (child) {
         __path(child);
         putchar('\n');
 
-        if (child->d_child)
+        if (child->inode->child && strcmp(child->name, ".") && strcmp(child->name, ".."))
             __tree(child);
 
-        child = child->d_next;
+        child = child->next;
     }
 }
 
@@ -76,25 +80,10 @@ int32_t wake_task = -1; // TODO: use list for "tasks to wake"
 */
 
 void __terminal_task(void) {
+    //while (!stdin);
+
     wake_task = __get_pid();
     printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
-
-    struct __dentry *dhome = (struct __dentry *)kmalloc(sizeof(struct __dentry));
-
-    if (!dhome)
-        panic();
-
-    struct __inode *ihome = (struct __inode *)kmalloc(sizeof(struct __inode));
-
-    if (!ihome)
-        panic();
-
-    __dentry_init(dhome);
-    dhome->name = "home";
-    __inode_init(ihome, dhome);
-    ihome->i_mode = 0x80000000 | 0777;
-    dhome->d_inode = ihome;
-    __dentry_add(dhome, __get_dentry());
 
     char *pwd = "/";
 
@@ -105,10 +94,6 @@ void __terminal_task(void) {
         char *input_buffer = (char *)kmalloc(sizeof(char) * size);
 
         char chr;
-
-        /*while(1)
-        for (int i = 0; i < 3; ++i)
-            putchar('A' + i);*/
 
         while ((chr = getchar()) != EOF && chr != '\n') {
             if (index + 1 >= size) {
@@ -128,7 +113,7 @@ void __terminal_task(void) {
             printf("terminal: failed to read stdin\n");
 
             wake_task = -1;
-            int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_LOW);
+            int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_LOW, NULL);
 
             if (terminal_pid == -1)
                 printk("failed to start terminal\n");
@@ -147,8 +132,8 @@ void __terminal_task(void) {
         } else if (!strcmp(cmd, "clear")) {
             __clear();
         } else if (!strcmp(cmd, "ps")) {
-            //__list_threads();
-            printk("this function is disabled since it may cause dead-lock\n");
+            __list_threads();
+            //printk("this function is disabled since it may cause dead-lock\n");
         } else if (!strcmp(cmd, "e820")) {
             __e820_dump_mmap();
         } else if (!strcmp(cmd, "ls")) {
@@ -158,14 +143,14 @@ void __terminal_task(void) {
 
             uint32_t mode = 0;
 
-            struct __dentry *child = __get_dentry()->d_child;
+            struct dentry *child = current_dentry()->inode->child;
 
             while (s = strtok_r(NULL, " ", &strtok_buffer)) {
                 if (!strcmp(s, "-l"))
                     mode = 1;
                 else if (s) {
-                    child = __get_dentry();
-                    child = child->io_ops.lookup(child, s);
+                    child = current_dentry();
+                    child = child->d_ops->lookup(child, s);
 
                     if (!child) {
                         printf("ls: cannot access '%s': No such file or directory\n", s);
@@ -173,18 +158,45 @@ void __terminal_task(void) {
                         continue;
                     }
 
-                    child = child->d_child;
+                    child = child->inode->child;
                 }
             }
 
             if (child) {
+                int max_size = 0;
+
+                struct dentry *temp = child;
+
+                while (temp) {
+                    if (temp->inode->size > max_size)
+                        max_size = temp->inode->size;
+
+                    temp = temp->next;
+                }
+
                 while (child) {
-                    if ((child->d_inode->i_mode & 0777) == 0777)
+                    mode_t fmode = child->inode->mode;
+
+                    if (mode == 1) {
+                        putchar(fmode & 0x80000000 ? 'd' : '-');
+                        putchar(fmode & 0400 ? 'r' : '-');
+                        putchar(fmode & 0200 ? 'w' : '-');
+                        putchar(fmode & 0100 ? 'x' : '-');
+                        putchar(fmode & 0040 ? 'r' : '-');
+                        putchar(fmode & 0020 ? 'w' : '-');
+                        putchar(fmode & 0010 ? 'x' : '-');
+                        putchar(fmode & 0004 ? 'r' : '-');
+                        putchar(fmode & 0002 ? 'w' : '-');
+                        putchar(fmode & 0001 ? 'x' : '-');
+                        printf(" %s %s %*i ", "root", "root", digits(max_size), child->inode->size);
+                    }
+
+                    if ((fmode & 0777) == 0777)
                         printf("\033[30;42m");
 
-                    if (child->d_inode->i_mode & 0x80000000)
+                    if (fmode & 0x80000000)
                         printf("\033[94m");
-                    else if (child->d_inode->i_mode & 0x40000000)
+                    else if (fmode & 0x40000000)
                         printf("\033[93m");
 
                     printf("%s\033[37;40m", child->name);
@@ -199,7 +211,7 @@ void __terminal_task(void) {
                             break;
                     }
 
-                    child = child->d_next;
+                    child = child->next;
                 }
                 
                 if (!mode)
@@ -303,6 +315,22 @@ void __terminal_task(void) {
                 putchar('\n');
             }
         } else if (!strcmp(cmd, "lsblk")) {
+            struct device **list;
+            int count;
+
+            int result = get_devs(&list, &count);
+
+            if (result) {
+                printf("failed to retrieve devs list: %i\n", result);
+                continue;
+            }
+
+            for (int i = 0; i < count; ++i) {
+                struct device *device = list[i];
+                kdev_t majmin = device->dev;
+                printf("dev: id=%i, major=%u, minor=%u\n", i, MAJOR(majmin), MINOR(majmin));
+            }
+
             //printk("NAME     DRIVER    TYPE      MOUNTPOINT\n");
 
             /*printf("NAME");
@@ -322,8 +350,21 @@ void __terminal_task(void) {
             for (uint32_t i = 0; i < devs_count; ++i)
                 printf("%s %u:%u %s (address=%p)\n", devs[i].name, devs[i].major, devs[i].minor, devs[i].driver->module_name, devs[i].driver);*/
         } else if (!strcmp(cmd, "tree"))
-            __tree(__get_dentry());
-        else if (!strcmp(cmd, "ping")) {
+            __tree(current_dentry());
+        else if (!strcmp(cmd, "touch")) {
+            char *name = strtok_r(NULL, " ", &strtok_buffer);
+
+            struct dentry *root = current_dentry();
+            struct dentry *home = root->d_ops->lookup(root, "/root");
+
+            if (!home) {
+                printf("/root not found\n");
+                continue;
+            }
+
+            if (!create_file(home, name, 0, 0, 0))
+                printf("touch: failed to create regular file\n");
+        } else if (!strcmp(cmd, "ping")) {
             char *target = strtok_r(NULL, " ", &strtok_buffer);
 
             deffered_job = true;

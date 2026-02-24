@@ -14,4 +14,5 @@ struct __file {
     uint32_t __size; // buffer size
     char *__fname; // filename
     bool __lock; // mutex
+    bool __ready; // ready flag
 };

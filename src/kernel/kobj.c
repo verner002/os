@@ -28,7 +28,7 @@ void __kobj_add(struct __kobj *kobj, struct __kobj *parent) {
     if (!kobj || !parent)
         return;
 
-    atomic_inc(kobj->k_refs);
+    atomic_increment(&kobj->k_refs);
     kobj->k_parent = parent;
 }
 
@@ -49,7 +49,7 @@ void __kobj_release(struct __kobj *kobj) {
 }
 
 void __kobj_put(struct __kobj *kobj) {
-    atomic_dec(kobj->k_refs);
+    atomic_decrement(&kobj->k_refs);
 
     if (unlikely(kobj->k_refs <= 0))
         __kobj_release(kobj);

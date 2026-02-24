@@ -16,7 +16,7 @@
 #include "kernel/ts.h"
 #include "mm/heap.h"
 #include "kernel/mutex.h"
-#include "hal/vfs.h"
+#include "fs/dentry.h"
 #include "kstdlib/file.h"
 
 #define THREAD_RING_0 1
@@ -29,15 +29,13 @@ typedef struct __thread_control_block THREAD;
 extern THREAD *thread_current;
 
 __attribute__((interrupt)) void __schedule(void *frame);
-int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority);
-int32_t __sched_init(struct __dentry *root_dentry);
+int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority, void (*on_exit_handler)(int exit_code));
+int32_t __sched_init(struct dentry *root_dentry);
 int32_t __get_pid(void);
-struct __dentry *__get_dentry(void);
+struct dentry *current_dentry(void);
 int32_t __get_state(int32_t pid, uint32_t *state);
 int32_t __get_exitcode(int32_t pid, int32_t *exitcode);
 void __yield(void);
 void __wake_on(bool *alarm);
 __attribute__((noreturn)) int32_t __exit(int32_t code);
 void __list_threads(void);
-FILE *__task_stdout(struct __thread_control_block *thread);
-struct __thread_control_block *__task_next(struct __thread_control_block *thread);

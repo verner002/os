@@ -1,37 +1,20 @@
 /**
- * Standard Input/Output
- * 
- * Author: verner002
+ * @file stdio.c
+ * @author verner002
+ * @date 15/02/2026
  * 
  * TODO: use errno from errno.h(c?)
-*/
-
-/**
- * Includes
 */
 
 #include "kstdlib/stdio.h"
 #include "drivers/graphics/graphix.h"
 
-/**
- * Static Global Variables
-*/
-
-static FILE
-    _stdin,
-    _stdout = (FILE){
-    },
-    _stderr = (FILE){
-    };
-
-/**
- * Global Variables
-*/
+#define DIGITS_COUNT(x) (((x) * 8 * 1233 >> 12) + 1)
 
 FILE
-    *stdin = &_stdin,
-    *stdout = &_stdout,
-    *stderr = &_stderr;
+    *stdin = NULL,
+    *stdout = NULL,
+    *stderr = NULL;
 
 /**
  * __stack_chk_fail
@@ -45,7 +28,7 @@ void __stack_chk_fail(void) {
  * feof
 */
 
-bool feof(FILE *stream) {
+int feof(FILE *stream) {
     return stream->__flags & FILE_EOF;
 }
 
@@ -56,16 +39,14 @@ bool feof(FILE *stream) {
  *  THIS IS A BLOCKING IMPLEMENTATION OF GETC
 */
 
-bool __wake;
-
 int getc(FILE *stream) {
     __mutex_lock(&stream->__lock);
 
     // buffer empty -> sleep the task
     if (!stream->__count) {
-        __wake = false;
+        stream->__ready = false;
         __mutex_unlock(&stream->__lock);
-        __wake_on(&__wake);
+        __wake_on(&stream->__ready);
         __mutex_lock(&stream->__lock);
     }
 
@@ -91,18 +72,9 @@ int getchar(void) {
     return getc(stdin);
 }
 
-/**
- * putc
- * 
- * NOTE:
- *  THIS IS NON-CANONICAL IMPLEMENTATION OF PUTC
-*/
-
-int32_t putc(int c, FILE *stream) {
-    if (stream == &_stdout)
+int internal_putc(int c, FILE *stream) {
+    if (!stream)
         return __putc(c); //__graphix_putc(c);
-
-    __mutex_lock(&stream->__lock);
 
     if (c == '\b') {
         if (stream->__count) {
@@ -110,7 +82,7 @@ int32_t putc(int c, FILE *stream) {
             --stream->__index;
         }
 
-        __mutex_unlock(&stream->__lock);
+        //__mutex_unlock(&stream->__lock);
         return 0;
     }
 
@@ -118,8 +90,12 @@ int32_t putc(int c, FILE *stream) {
     // write data? if no, let other
     // tasks read the stream
     while (stream->__count >= stream->__size) {
+        // we unlock the stream so that other threads
+        // can read from it
+        // RFC: use SHARE_READ instead?
         __mutex_unlock(&stream->__lock);
         __yield();
+        // and lock the stream again
         __mutex_lock(&stream->__lock);
     }
     
@@ -127,11 +103,29 @@ int32_t putc(int c, FILE *stream) {
         ++stream->__count;
         stream->__base[stream->__index++ % stream->__size] = c;
 
-        if (c == '\n')
-            __wake = true;
+        if (/*c == '\0' ||*/ c == '\n')
+            stream->__ready = true; // TODO: WAKE UP THE SLEEPING PROCESS
+
+    return 0;
+}
+
+/**
+ * putc
+ * 
+ * NOTE:
+ *  THIS IS NON-CANONICAL IMPLEMENTATION OF PUTC
+*/
+
+int putc(int c, FILE *stream) {
+    if (!stream)
+        return __putc(c); //__graphix_putc(c);
+
+    __mutex_lock(&stream->__lock);
+
+    int error = internal_putc(c, stream);
 
         __mutex_unlock(&stream->__lock);
-        return 0;
+        return error;
     /*}
     
     __mutex_unlock(&stream->__lock);
@@ -144,162 +138,218 @@ int32_t putc(int c, FILE *stream) {
  * putchar
 */
 
-int32_t putchar(int c) {
+int putchar(int c) {
     return putc(c, stdout);
 }
 
 /**
  * vfprintf
  * 
- * TODO: implement escape sequences
+ * TODO: merge duplicate code for int a unsigned int
 */
 
-int32_t vfprintf(FILE *stream, char const *s, va_list args) {
+int __fprintf(FILE *stream, char const *s, ...);
+
+int __vfprintf(FILE *stream, char const *str, va_list args) {
+    int err = 0;
     char c;
-    int error = 0;
+    int i = 0;
 
-    for (uint32_t i = 0; !error && (c = s[i]); ++i) {
-        if (c == '%') {
-            switch (/*c = */s[++i]) { // variable arguments
-                case 'c':
-                    error = putc(va_arg(args, int), stream);
-                    break;
-                
-                case 's':
-                    error = fprintf(stream, va_arg(args, char const *));
-                    break;
-                
-                case '.': {
-                    switch (s[++i]) {
-                        case '*': {
-                            uint32_t limit = va_arg(args, uint32_t);
+    while ((c = str[i++]) && !err) {
+        switch (c) {
+            case '%': {
+                bool lp;
 
-                            switch (s[++i]) {
-                                case 's': {
-                                    char const *string = va_arg(args, char const *);
+                if (str[i] == '*') {
+                    lp = true;
+                    ++i;
+                } else
+                    lp = false;
 
-                                    for (uint32_t j = 0; j < limit; ++j)
-                                        putc(string[j], stdout);
+                switch (str[i++]) {
+                    case '%': // '%' character
+                        err = internal_putc('%', stream);
+                        break;
 
-                                    break;
-                                }
+                    case 'c': // character
+                        err = internal_putc(va_arg(args, int), stream);
+                        break;
 
-                                default:
-                                    return -1;
-                            }
+                    case 's': // string
+                        err = __fprintf(stream, va_arg(args, char const *));
+                        break;
 
-                            break;
+                    case 'i': { // integer
+                        int length;
+
+                        if (lp)
+                            length = va_arg(args, int);
+
+                        int value = va_arg(args, int);
+
+                        if (lp) {
+                            int spaces = length - digits(value);
+
+                            for (int s = 0; s < spaces; ++s)
+                                internal_putc(' ', stream);
                         }
 
-                        default:
-                            return -1;
+                        unsigned int nvalue;
+
+                        if (value < 0) {
+                            err = internal_putc('-', stream);
+
+                            // neg dword [value]
+                            nvalue = (unsigned int)-value;
+                        } else
+                            nvalue = (unsigned int)value;
+
+                        // efficient only when we print '-'
+                        if (err)
+                            break;
+
+                        // ((sizeof(int) * 8) * 1233 >> 12) + 1
+                        int digits[DIGITS_COUNT(sizeof(int))];
+                        int j = 0;
+
+                        do
+                            digits[j++] = nvalue % 10 + '0';
+                        while (nvalue /= 10);
+
+                        do {
+                            err = internal_putc(digits[--j], stream);
+
+                            if (err)
+                                break;
+                        } while (j);
+
+                        break;
                     }
-                    break;
-                }
-                case 'u': {
-                    uint8_t n[10];
-                    uint32_t u = va_arg(args, uint32_t);
-                    uint32_t j = 0;
 
-                    do n[j++] = u % 10 + '0'; while (u /= 10);
-                    do error = putc(n[--j], stream); while (j && !error);
-                    break;
-                }
+                    case 'u': { // unsigned integer
+                        unsigned int value = va_arg(args, unsigned int);
 
-                case 'p': {
-                    uint32_t p = va_arg(args, uint32_t);
-                    //fprintf(stream, "0x%08x", p); -- implement!!!
-                    putc('0', stream);
-                    putc('x', stream);
+                        int digits[DIGITS_COUNT(sizeof(unsigned int))];
+                        int j = 0;
 
-                    for (uint32_t j = 0; j < sizeof(uint32_t) * 2; ++j) {
-                        uint8_t d = ((p = (p << 4) | (p >> 28)) & 0x0f) + '0';
+                        do
+                            digits[j++] = value % 10 + '0';
+                        while (value /= 10);
 
-                        if (d > '9') d += 'a' - '9' - 1;
+                        do {
+                            err = internal_putc(digits[--j], stream);
+
+                            if (err)
+                                break;;
+                        } while (j);
+
+                        break;
+                    }
+
+                    case 'p': { // pointer
+                        unsigned int value = va_arg(args, unsigned int);
+
+                        err = internal_putc('0', stream);
+
+                        if (err)
+                            break;
+
+                        err = internal_putc('x', stream);
                         
-                        putc(d, stream);
+                        if (err)
+                            break;
+
+                        for (uint32_t j = 0; j < 2 * sizeof(unsigned int); ++j) {
+                            uint8_t d = ((value = (value << 4) | (value >> 28)) & 0x0f) + '0';
+
+                            // RFC: use lookup table?
+                            if (d > '9')
+                                d += 'a' - '9' - 1;
+                            
+                            err = internal_putc(d, stream);
+                            
+                            if (err)
+                                break;
+                        }
+                        
+                        break;
                     }
 
-                    break;
-                }
+                    case '0': {
+                        unsigned int value = va_arg(args, unsigned int);
+                        int digits;
 
-                case '0': { // TODO: use variable arguments, if (s[i] >= '0' && s[i] <= '9')
-                    switch (s[++i]) {
-                        case '2': {
-                            switch (s[++i]) {
-                                case 'x': {
-                                    uint8_t n = va_arg(args, uint32_t);
+                        switch (str[i++]) {
+                            case '2': digits = sizeof(uint8_t); break;
+                            case '4': digits = sizeof(uint16_t); break;
+                            case '8': digits = sizeof(uint32_t); break;
+                            default: digits = -1; break;
+                        }
 
-                                    for (uint32_t j = 0; j < sizeof(uint8_t) * 2; ++j) {
-                                        // n = rotate_left(n)
-                                        uint8_t d = ((n = (n << 4) | (n >> 4)) & 0x0f) + '0';
-
-                                        if (d > '9')
-                                            d += 'a' - '9' - 1;
-                                        
-                                        putc(d, stream);
-                                    }
-                                    break;
-                                }
-                                default:
-                                    return -1;
-                            }
+                        if (digits == -1) {
+                            err = -1;
                             break;
                         }
 
-                        case '4': {
-                            switch (s[++i]) {
-                                case 'x': {
-                                    uint16_t n = va_arg(args, uint32_t);
+                        int gap_const;
 
-                                    for (uint32_t j = 0; j < sizeof(uint16_t) * 2; ++j) {
-                                        // n = rotate_left(n)
-                                        uint16_t d = ((n = (n << 4) | (n >> 12)) & 0x0f) + '0';
+                        switch (str[i++]) {
+                            case 'x': gap_const = 'a' - '9' - 1; break;
+                            case 'X': gap_const = 'A' - '9' - 1; break;
+                            default: gap_const = -1; break;
+                        }
 
-                                        if (d > '9')
-                                            d += 'a' - '9' - 1;
-                                        
-                                        putc(d, stream);
-                                    }
-                                    break;
-                                }
-                                default:
-                                    return -1;
-                            }
+                        if (gap_const == -1) {
+                            err = -1;
                             break;
                         }
 
-                        case '8': {
-                            switch (s[++i]) {
-                                case 'x': {
-                                    uint32_t n = va_arg(args, uint32_t);
+                        digits *= 2;
 
-                                    for (uint32_t j = 0; j < sizeof(uint32_t) * 2; ++j) {
-                                        // n = rotate_left(n)
-                                        uint32_t d = ((n = (n << 4) | (n >> 28)) & 0x0f) + '0';
+                        for (int j = 0; j < digits; ++j) {
+                            value = (value << 4) | (value >> 4 * digits - 4);
+                            int digit = (value & 15) + '0';
 
-                                        if (d > '9')
-                                            d += 'a' - '9' - 1;
-                                        
-                                        putc(d, stream);
-                                    }
-                                    break;
-                                }
-                                default:
-                                    return -1;
-                            }
-                            break;
+                            if (digit > '9')
+                                digit += gap_const;
+
+                            err = internal_putc(digit, stream);
+
+                            if (err)
+                                break;
                         }
-                        default:
-                            return -1;
+
+                        break;
                     }
-                    break;
+
+                    default:
+                        err = -1;
+                        break;
                 }
-                default:
-                    return -1;
+                break;
             }
-        } else error = putc(c, stream);
+
+            default:
+                err = internal_putc(c, stream);
+                break;
+        }
     }
+
+    return err;
+}
+
+/**
+ * vfprintf
+*/
+
+int vfprintf(FILE *stream, char const *str, va_list args) {
+    if (stream)
+        __mutex_lock(&stream->__lock);
+
+    int error = __vfprintf(stream, str, args);
+
+    if (stream)
+        __mutex_unlock(&stream->__lock);
 
     return error;
 }
@@ -308,44 +358,51 @@ int32_t vfprintf(FILE *stream, char const *s, va_list args) {
  * vprintf
 */
 
-int32_t vprintf(char const *s, va_list args) {
+int vprintf(char const *s, va_list args) {
     return vfprintf(stdout, s, args);
+}
+
+int __fprintf(FILE *stream, char const *s, ...) {
+    va_list args;
+    va_start(args, s);
+
+    int error = __vfprintf(stream, s, args);
+
+    va_end(args);
+    return error;
 }
 
 /**
  * fprintf
 */
 
-int32_t fprintf(FILE *stream, char const *s, ...) {
+int fprintf(FILE *stream, char const *s, ...) {
+    if (stream)
+        __mutex_lock(&stream->__lock);
+
     va_list args;
     va_start(args, s);
 
-    int error = vfprintf(stream, s, args);
+    int error = __vfprintf(stream, s, args);
 
     va_end(args);
 
+    if (stream)
+        __mutex_unlock(&stream->__lock);
     return error;
 }
 
 /**
  * printf
- * 
- * FIXME: printf mutex can cause dead-lock at
- *  certain circumstances
 */
 
-int32_t printf(char const *s, ...) {
-    static bool printf_mutex = false;
-    __mutex_lock(&printf_mutex);
-    
+int printf(char const *s, ...) {
     va_list args;
     va_start(args, s);
 
     int error = vprintf(s, args);
 
     va_end(args);
-
-    __mutex_unlock(&printf_mutex);
     return error;
 }
 
@@ -353,7 +410,7 @@ int32_t printf(char const *s, ...) {
  * puts
 */
 
-int32_t puts(char const *s) {
+int puts(char const *s) {
     return printf("%s\n\r", s);
 }
 
@@ -362,16 +419,13 @@ int32_t puts(char const *s) {
 */
 
 void printk(char const *s, ...) {
-    static bool printk_mutex = false;
-    __mutex_lock(&printk_mutex);
-
     va_list args;
     va_start(args, s);
 
     uint32_t padding;
     uint64_t ticks = __current_tick_count();
 
-    fprintf(&_stdout, "\033[32m[");
+    __fprintf(NULL, "\033[32m[");
 
     // we can handle up to about 32 years
     if (ticks <= (uint64_t)999999999999) {
@@ -381,71 +435,21 @@ void printk(char const *s, ...) {
         padding = 8 - log10(s);
         
         for (uint32_t i = 0; i < padding; ++i)
-            putc(' ', &_stdout);
+            internal_putc(' ', NULL);
         
-            fprintf(&_stdout, "%u.", s); 
+            __fprintf(NULL, "%u.", s); 
 
         padding = 2 - log10(ms);
         
         for (uint32_t i = 0; i < padding; ++i)
-            putc('0', &_stdout);
+            internal_putc('0', NULL);
         
-            fprintf(&_stdout, "%u", ms);
+            __fprintf(NULL, "%u", ms);
         
     } else
-        fprintf(&_stdout, "---------.---");
+        __fprintf(NULL, "---------.---");
 
-    fprintf(&_stdout, "]\033[37m ");
-    vfprintf(&_stdout, s, args);
+    __fprintf(NULL, "]\033[37m ");
+    __vfprintf(NULL, s, args);
     va_end(args);
-
-    __mutex_unlock(&printk_mutex);
-}
-
-/**
- * fopen
-*/
-
-FILE *fopen(char const *path, char const *mode) {
-
-}
-
-/**
- * fseek
-*/
-
-int32_t fseek(FILE *file, uint32_t offset, uint8_t mode) {
-
-}
-
-/**
- * fread
-*/
-
-int32_t fread(FILE *file, char *buffer, uint32_t count) {
-
-}
-
-/**
- * fwrite
-*/
-
-int32_t fwrite(FILE *file, char const *buffer, uint32_t count) {
-
-}
-
-/**
- * fclose
-*/
-
-int32_t fclose(FILE *file) {
-    
-}
-
-/**
- * opendir
-*/
-
-DIR *opendir(char const *path, char const *mode) {
-
 }

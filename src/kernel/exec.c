@@ -17,5 +17,5 @@ int32_t exec(char const *path, char const **args) {
 
     // TODO: check pe last error
 
-    return __create_thread(name, entry, THREAD_RING_0, THREAD_PRIORITY_LOW);
+    return __create_thread(name, entry, THREAD_RING_0, THREAD_PRIORITY_LOW, NULL);
 }

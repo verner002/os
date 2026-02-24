@@ -8,10 +8,21 @@
 
 #include "types.h"
 #include "bool.h"
+#include "kernel/kdev.h"
+#include "kernel/spinlock.h"
 
-struct __superblock {
-    uint32_t s_block_sz; // bytes per block
-    uint64_t s_block_cnt; // total number of blocks
-    bool s_lock;
-    bool s_readonly;
+#define FS_READ_ONLY 0x80000000
+
+struct fs_type {
+    
+};
+
+struct super_block {
+    kdev_t dev;
+    uint32_t block_size;
+    uint32_t flags; // flags
+    spinlock_t lock; // TODO: replace with rwlock_t
+    struct fs_type *type;
+    struct inode *mount_point;
+    void *fs_data; // fs specific data
 };

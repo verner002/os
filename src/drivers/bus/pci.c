@@ -49,12 +49,12 @@ static struct __subclass const unclassified[] = {
 static struct __subclass const mass_storage_controller[] = {
     { 1, "IDE controller", &__init_ide },
     { 2, "Floppy disk controller", NULL },
-    { 5, "ATA controller", &__init_ide },
-    { 6, "SATA controller", &__init_ide }
+    { 5, "ATA controller", NULL /*&__init_ide*/ },
+    { 6, "SATA controller", NULL /*&__init_ide*/ }
 };
 
 static struct __subclass const network_controller[] = {
-    { 0, "Ethernet controller", &__init_e1000 }
+    { 0, "Ethernet controller", NULL /*&__init_e1000*/ }
 };
 
 static struct __subclass const display_controller[] = {
@@ -126,35 +126,12 @@ uint32_t __pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
     return __ind(PCI_CONFIG_DATA);
 }
 
-extern uint32_t buses_cnt;
-extern struct __bus *buses[16];
-
-/**
- * each driver has its own implementation of kobj
-*/
-
-//static void release_pci_bus
-
-static struct __kobj_type pci_driver_type = {
-    .k_attribs = NULL,
-    .release = NULL,
-    .k_ops = {
-        .read = NULL,
-        .write = NULL
-    }
-};
-
 /**
  * __pci_init
 */
 
 int32_t __pci_init(void) {
-    struct __driver *driver = __register_driver("pci", 143, &pci_driver_type);
-
-    if (!driver)
-        return -1;
-
-    struct __bus *bus = __register_bus("pci", driver);
+    struct __bus *bus = __register_bus("pci", NULL);
 
     if (!bus) {
         printk("pci: error: failed to register bus\n");

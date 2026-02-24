@@ -9,4 +9,4 @@
 #include "types.h"
 #include "kernel/kdev.h"
 
-int32_t __mount(__kdev_t dev, char const *mpoint);
+int mount(kdev_t dev, char const *mountpoint);

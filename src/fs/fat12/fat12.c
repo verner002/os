@@ -8,7 +8,11 @@
  * Includes
 */
 
+#include "macros.h"
 #include "fs/fat12/fat12.h"
+#include "hal/driver.h"
+#include "fs/fat12/super.h"
+#include "fs/file.h"
 
 #define __is_8dot3_char(x) (((x) >= '0' && (x) <= '9') || ((x) >= 'A' && (x) <= 'Z') || (x) == ' ' || (x) == '!' || (x) == '#' || (x) == '$' || (x) == '%' || (x) == '&' || (x) == '\'' || (x) == '(' || (x) == ')' || (x) == '-' || (x) == '@' || (x) == '^' || (x) == '_' || (x) == '`' || (x) == '{' || (x) == '}' || (x) == '~')
 
@@ -24,7 +28,7 @@ static FAT12_RECORD *root_dir = NULL;
  * __fat12_read_fat
 */
 
-int32_t __fat12_read_fat(void) {
+int __fat12_read_fat(__kdev_t kdev) {
     if (!fat) {
         fat = (uint8_t *)kmalloc(9*512);
 
@@ -32,27 +36,60 @@ int32_t __fat12_read_fat(void) {
             return -1;
     }
 
-    return __fdc_read_sectors(1, 9, (uint32_t)fat);
+    struct super_block super;
+
+    int result = get_super(kdev, &super);
+
+    if (result)
+        return result;
+
+    struct fat12_info *info = (struct fat12_info *)super.fs_data;
+
+    struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
+
+    if (!driver)
+        return -1; // device driver not present
+
+    //return __fdc_read_sectors(1, 9, (uint32_t)fat);
+    return driver->read(MINOR(kdev), info->reserved_sectors, info->sectors_per_fat, (char *)fat);
 }
 
 /**
  * __fat12_read_root_dir
 */
 
-int32_t __fat12_read_root_dir(void) {
+int __fat12_read_root_dir(__kdev_t kdev) {
+    struct super_block super = {
+        .lock = false
+    };
+
+    int result = get_super(kdev, &super);
+
+    if (result)
+        return result;
+
+    struct fat12_info *info = (struct fat12_info *)super.fs_data;
+
     if (!root_dir) {
-        root_dir = (FAT12_RECORD *)kmalloc(224*32);
+        root_dir = (FAT12_RECORD *)kmalloc(info->number_of_entries * 32);
 
         if (!root_dir)
             return -1;
     }
 
-    int32_t error = 0;
+    if (!update_root_dir)
+        return 0;
 
-    if (update_root_dir) {
-        error = __fdc_read_sectors(9 * 2 + 1, (224 * 32) / 512, (uint32_t)root_dir);
+    struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
+
+    if (!driver)
+        return -1; // device driver not present
+
+    int error = driver->read(MINOR(kdev), info->sectors_per_fat * info->number_of_fats + info->reserved_sectors, (info->number_of_entries * 32) / super.block_size, (char *)root_dir);
+    //error = __fdc_read_sectors(9 * 2 + 1, (224 * 32) / 512, (uint32_t)root_dir);
+
+    if (!error)
         update_root_dir = false;
-    }
 
     return error;
 }
@@ -61,9 +98,9 @@ int32_t __fat12_read_root_dir(void) {
  * __fat12_file_exists
 */
 
-bool __fat12_file_exists(char const *filename) {
+bool __fat12_file_exists(__kdev_t kdev, char const *filename) {
     if (!root_dir)
-        if (__fat12_read_root_dir())
+        if (__fat12_read_root_dir(kdev))
             return false;
 
     for (uint32_t i = 0; i < 224; ++i) {
@@ -80,7 +117,15 @@ bool __fat12_file_exists(char const *filename) {
  * __fat12_load_file
 */
 
-int32_t __fat12_load_file(char const *filename, uint32_t buffer) {
+int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer) {
+    struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
+
+    if (!driver)
+        return -1; // device driver not present
+
+    uint8_t minor = MINOR(kdev);
+    int (* read)(uint8_t minor, uint32_t offset, uint32_t count, char *buffer) = driver->read;
+
     for (uint32_t i = 0; i < 224; ++i) {
         FAT12_RECORD *record = &root_dir[i];
 
@@ -90,7 +135,8 @@ int32_t __fat12_load_file(char const *filename, uint32_t buffer) {
 
             do {
                 uint32_t lba = ((cluster - 2) * 1) + 1 + (2 * 9) + (224 * 32 / 512);
-                last_opcode = __fdc_read_sectors(lba, 1, buffer);
+                last_opcode = read(minor, lba, 1, (uint8_t *)buffer);
+                //last_opcode = __fdc_read_sectors(lba, 1, buffer);
                 uint32_t next_cluster = *(uint16_t *)(fat + cluster + cluster / 2);
 
                 if (cluster & 1) next_cluster >>= 4;
@@ -336,8 +382,11 @@ uint16_t *__lfn_to_filename(VFAT_LFN_ENTRY *entry, uint32_t *ucs2_filename_lengt
  * __fat12_list_rootdir
 */
 
-int32_t __fat12_list_rootdir(void) {
-    __fat12_read_root_dir();
+int32_t __fat12_list_rootdir(__kdev_t kdev) {
+    int result = __fat12_read_root_dir(kdev);
+
+    if (result)
+        return result;
 
     for (uint32_t i = 0; i < 224; ++i) {
         FAT12_RECORD *record = &((FAT12_RECORD *)root_dir)[i];
@@ -406,7 +455,7 @@ int32_t __fat12_list_rootdir(void) {
             continue;
         }
 
-        char const *months[] = {
+        static char const *months[] = {
             "Jan",
             "Feb",
             "Mar",
@@ -445,6 +494,115 @@ int32_t __fat12_list_rootdir(void) {
             putchar('0');
 
         printf("%u %s\n", minutes, fname);
+        kfree(fname);
+    }
+
+    return 0;
+}
+
+/**
+ * __fat12_list_root
+*/
+
+int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev) {
+    int result = __fat12_read_root_dir(kdev);
+
+    if (result)
+        return result;
+
+    // TODO: read number_of_entries from super block
+    for (uint32_t i = 0; i < 224; ++i) {
+        FAT12_RECORD *record = &((FAT12_RECORD *)root_dir)[i];
+        uint8_t *filename = record->filename;
+
+        uint8_t ch = *filename;
+
+        if (ch == 0x00)
+            break; // last record
+        else if (ch == 0xe5)
+            continue; // deleted record
+
+        char *fname = NULL;
+
+        if (
+            record->attributes & FAT12_ATTRIBUTE_VOLUME &&
+            record->attributes & FAT12_ATTRIBUTE_SYSTEM &&
+            record->attributes & FAT12_ATTRIBUTE_HIDDEN &&
+            record->attributes & FAT12_ATTRIBUTE_READONLY
+        ) {
+            VFAT_LFN_ENTRY *lfn = (VFAT_LFN_ENTRY *)record;
+
+            if (lfn->ordinal & VFAT_DELETED_LFN_ENTRY) {
+                printk("vfat: info: found deleted lfn entry\n");
+                // skip entry (all entries based on ordinal?)
+            }
+
+            uint32_t ucs2_filename_length;
+            uint32_t entries_count;
+            uint16_t *ucs2_filename = __lfn_to_filename(lfn, &ucs2_filename_length, &entries_count);
+
+            if (!ucs2_filename)
+                continue; // record corrupted
+
+            uint32_t fname_index = 0;
+            fname = (char *)kmalloc(sizeof(char) * (ucs2_filename_length + 1));
+
+            if (fname) {
+                uint16_t *ptr = ucs2_filename;
+                uint16_t ch;
+
+                while ((ch = *ptr++))
+                    fname[fname_index++] = ch & 0xff00 ? '?' : ch;
+
+                fname[fname_index] = '\0';
+            }
+
+            //printk("entry with name length %u byte(s)\n", chars_total);
+            kfree(ucs2_filename);
+
+            i += entries_count;
+
+            if (i >= 224) {
+                printk("fat12: warning: possibly corrupted data\n");
+                continue;
+            }
+
+            record = &((FAT12_RECORD *)root_dir)[i];
+        }
+
+        if (!fname)
+            fname = __8dot3_to_filename(record);
+
+        if (!fname) {
+            printk("fat12: error: failed to retrieve file name\n");
+            continue;
+        }
+
+        static char const *months[] = {
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec"
+        };
+
+        uint16_t date = record->last_write_date;
+        uint16_t time = record->last_write_time;
+
+        uint32_t minutes = (time >> 5) & 0x3f;
+        uint32_t hours = (time >> 11) & 0x1f;
+
+        uint32_t day = date & 0x1f;
+        uint32_t month = (date >> 5) & 0x0f;
+
+        create_file(mountpoint, fname, 0, 0, (record->attributes & FAT12_ATTRIBUTE_SUBDIR) ? 0x80000000 : 0x00000000);
         kfree(fname);
     }
 

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "kernel/kobj.h"
 #include "hal/driver.h"
 
 struct __bus_type {
@@ -15,7 +14,6 @@ struct __bus_type {
 
 struct __bus {
     char const *b_name;
-    struct __kobj *b_kobj;
     struct __bus_type *b_type;
     struct __driver *b_driver;
 };

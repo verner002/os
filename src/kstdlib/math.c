@@ -54,6 +54,13 @@ uint32_t log10(uint32_t n) {
     return log;
 }
 
+int digits(int n) {
+    if (!n)
+        return 1;
+    
+    return log10(n) + 1;
+}
+
 /**
  * __udivdi3
  * 

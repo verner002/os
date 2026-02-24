@@ -12,7 +12,8 @@
 #include "drivers/block/82077aa.h"
 #include "mm/e820.h"
 #include "kstdlib/string.h"
-#include "hal/vfs.h"
+#include "fs/dentry.h"
+#include "kernel/kdev.h"
 
 #define FAT12_ATTRIBUTE_READONLY 0x01
 #define FAT12_ATTRIBUTE_HIDDEN 0x02
@@ -77,9 +78,10 @@ struct __attribute__((__packed__)) __vfat_lfn_entry {
  * Declarations
 */
 
-int32_t __fat12_read_fat(void);
-int32_t __fat12_read_root_dir(void);
-bool __fat12_file_exists(char const *filename);
-int32_t __fat12_load_file(char const *filename, uint32_t buffer);
-int32_t __fat12_list_rootdir(void);
+int32_t __fat12_read_fat(__kdev_t kdev);
+int32_t __fat12_read_root_dir(__kdev_t kdev);
+bool __fat12_file_exists(__kdev_t kdev, char const *filename);
+int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer);
+int32_t __fat12_list_rootdir(__kdev_t kdev);
 //int32_t __fat12_list_dir(VFS_DIR_NODE *node);
+int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev);

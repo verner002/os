@@ -10,7 +10,7 @@
 #include "mm/heap.h"
 #include "kstdlib/string.h"
 
-struct __kdev *kdev_top;
+//struct __kdev *kdev_top;
 
 uint16_t __dev_name_to_kdev(char const *dev_name) {
     static char *dev_names[] = {
@@ -38,7 +38,7 @@ uint16_t __dev_name_to_kdev(char const *dev_name) {
     return NO_DEV;
 }
 
-int32_t __add_kdev(__kdev_t k_kdev, struct __superblock *super) {
+/*int32_t __add_kdev(__kdev_t k_kdev, struct super_block *super) {
     struct __kdev *kdev = (struct __kdev *)kmalloc(sizeof(struct __kdev));
 
     if (!kdev)
@@ -70,4 +70,4 @@ int32_t __add_kdev(__kdev_t k_kdev, struct __superblock *super) {
 
     tail->k_next = kdev;
     return 0;
-}
+}*/

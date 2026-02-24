@@ -101,19 +101,6 @@ static uint8_t __ide_buffer[2048];
 static uint8_t __atapi_buffer[12] = { 0xa8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 static volatile bool __irq_invoked;
 
-void __dev_type_release(struct __dev *dev) {
-    struct __kobj *kobj = dev->d_kobj;
-
-    if (kobj) {
-        //dev->d_kobj->k_type->k_release(dev->d_kobj);
-    } else {
-        __kdev_t kdev = dev->d_kdev;
-        printk("ide: warning: device %u:%u is missing kobj reference\n", MAJOR(kdev), MINOR(kdev));
-    }
-
-    kfree(dev->d_name);
-}
-
 void __ide_write(uint8_t channel, uint8_t reg, uint8_t data) {
     if (reg > 0x07 && reg < 0x0C)
         __ide_write(channel, IDE_CONTROL_REG, 0x80 | channels[channel].r_ints_dis);
@@ -285,7 +272,7 @@ void __ide_identify_drives(void) {
             } else
                 sectors = *((uint32_t *)(__ide_buffer + IDE_IDENTIFY_MAX_LBA));
 
-            // drive could report 0 sectors (empty qemu image)
+            // FIXME: drive could report 0 sectors (empty qemu image)
             drives[drvs_cnt].d_last_sector = sectors ? sectors - 1 : 0;
 
             __ide_strncpy(drives[drvs_cnt].d_model, __ide_buffer + IDE_IDENTIFY_MODEL, 40);
@@ -313,6 +300,13 @@ void __ide_identify_drives(void) {
             printf(" - Firmware   : %s\n", drives[drvs_cnt].d_firmware);
             printf(" - Mode       : %s\n", (char *[]){ "CHS (Unsupported)", "LBA28", "LBA48" }[mode]);
             printf(" - DMA        : %s\n", drives[drvs_cnt].d_dma ? "supported" : "unsupported");
+
+            printf("Registering device... ");
+
+            if (register_blk_device(MAJMIN(HARDDISK_MAJOR, drv))) {
+                printf("Failed\n");
+                continue;
+            }
 
             /*struct __dev *dev = (struct __dev *)kmalloc(sizeof(struct __dev));
 
@@ -351,7 +345,7 @@ int32_t __ide_poll(uint8_t channel, bool check_state) {
     if (status & IDE_STATUS_ERR)
         return -1; // error (read error register)
     else if (status & IDE_STATUS_DF)
-        return -2; // device faault
+        return -2; // device fault
     else if (!(status & IDE_STATUS_DRQ))
         return -3; // data request not ready
 
@@ -362,13 +356,13 @@ int32_t __ide_poll(uint8_t channel, bool check_state) {
  * __ide_read_block
 */
 
-int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *buffer) {
-    if (!count)
-        return -1; // count must be positive
+int32_t __ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
+    if (minor > 3)
+        return -1; // invalid drive number
+    
+    struct __ide_drive *drv = &drives[minor];
 
-    struct __ide_drive *drv = &drives[drive];
-
-    if (lba + count - 1 > drv->d_last_sector)
+    if ((uint64_t)lba + count - 1 > (uint64_t)drv->d_last_sector)
         return -2; // out of disk space
 
     uint8_t mode = drv->d_mode;
@@ -378,7 +372,7 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
 
     uint16_t c = 0;
     uint8_t h;
-    uint8_t s = 0;
+    uint8_t s = 1;
     uint8_t lbas[6];
 
     switch (mode) {
@@ -401,6 +395,9 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
             lbas[5] = 0;
             h = (lba & 0x0f000000) >> 24;
             break;
+
+        default:
+            return -1;
     }
 
     uint8_t channel = drv->d_channel;
@@ -426,7 +423,14 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
     uint16_t *offset = (uint16_t *)buffer;
     uint16_t port = channels[channel].r_io_base;
 
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < 256; ++i) {
+        if (__ide_poll(channel, true))
+            return -4;
+
+        ((short *)buffer)[i] = __inw(port);
+    }
+
+    /*for (uint32_t i = 0; i < count; ++i) {
         if (__ide_poll(channel, true))
             return -4;
 
@@ -434,11 +438,11 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
             "rep insw"
             :
             : "c" (256), "d" (port), "D" (offset)
-            :
+            : "memory", "cc"
         );
 
         offset += 256;
-    }
+    }*/
 
     return 0;
 }
@@ -448,7 +452,14 @@ int32_t __ide_read_blocks(uint8_t drive, uint32_t lba, uint8_t count, uint8_t *b
 */
 
 int32_t __init_ide(struct __bus *b, struct __pci_header *h) {
+    static bool initialized = false;
+
     printf("        Initializing...\n");
+
+    if (initialized) {
+        printf("         - Already initialized!\n");
+        return 0;
+    }
 
     struct __pci_h_device *d = (struct __pci_h_device *)h;
 
@@ -503,7 +514,17 @@ int32_t __init_ide(struct __bus *b, struct __pci_header *h) {
     __ide_write(IDE_CHANNEL_0, IDE_CONTROL_REG, 0x02);
     __ide_write(IDE_CHANNEL_1, IDE_CONTROL_REG, 0x02);
 
+    printf("        Registering driver... ");
+    
+    if (register_blk_driver(HARDDISK_MAJOR, &__ide_read_blocks)) {
+        printf("Failed\n");
+        return -1;
+    }
+
     // identify drives
     __ide_identify_drives();
+
+    initialized = true;
+    printf("Ok\n");
     return 0;
 }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include "types.h"
+#include "kernel/atomic.h"
 #include "hal/vfs.h"
 
 struct __sysfs_attrib {

@@ -232,7 +232,7 @@ VFS_DIR_NODE *__new_vfs_dir_node(char const *name) {
     return NULL; // not found
 }*/
 
-struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t uid, uint32_t gid, uint32_t flags) {
+/*struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t uid, uint32_t gid, uint32_t flags) {
     if (!parent || !name)
         return NULL;
     
@@ -259,4 +259,4 @@ struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t 
     __dentry_add(file_d, parent);
     
     return file_d;
-}
+}*/

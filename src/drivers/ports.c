@@ -48,9 +48,9 @@ uint16_t __inw(uint16_t r) {
     uint16_t v;
 
     asm volatile (
-        "in ax, dx"
+        "in %0, %1"
         : "=a" (v)
-        : "d" (r)
+        : "Nd" (r)
         :
     );
 

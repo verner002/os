@@ -4,67 +4,22 @@
  * @date 19/09/2025
 */
 
+#include "macros.h"
 #include "hal/driver.h"
 #include "kernel/sysfs.h"
 #include "mm/heap.h"
 
 struct __driver *drivers[256];
 
-static struct __kobj *local_group; // local group (driver)
-static uint32_t drivers_cnt = 0;
-
-static void __group_release(struct __kobj *group) {
-    // TODO: kill all drivers
-    group->k_type->release(group);
-}
-
-int32_t __init_drivers(void) {
-    struct __kobj *group = (struct __kobj *)kmalloc(sizeof(struct __kobj));
-
-    if (!group)
-        return -1;
-
-    struct __kobj_type *group_type = (struct __kobj_type *)kmalloc(sizeof(struct __kobj_type));
-
-    if (!group_type) {
-        kfree(group);
-        return -1;
-    }
-
-    struct __dentry *group_dentry = (struct __dentry *)kmalloc(sizeof(struct __dentry));
-
-    if (!group_dentry) {
-        kfree(group_type);
-        kfree(group);
-        return -1;
-    }
-
-    __dentry_init(group_dentry);
-    group_dentry->name = "driver";
-    __dentry_add(group_dentry, sysfs->k_dentry);
-
-    group_type->k_attribs = NULL; // no files in /sys
-    group_type->release = &__group_release;
-    group_type->k_ops = (struct __sysfs_ops){
-        .read = NULL,
-        .write = NULL
-    };
-
-    __kobj_init(group, group_type);
-    __kobj_rename(group, "driver");
-    group->k_dentry = group_dentry;
-    //__kobj_add(group, sysfs);
-
-    local_group = group;
-
+int drivers_init(void) {
     // no driver loaded
-    for (uint32_t i = 0; i < 256; ++i)
+    for (uint32_t i = 0; i < sizeofarray(drivers); ++i)
         drivers[i] = NULL;
 
     return 0;
 }
 
-struct __driver *__register_driver(char const *name, uint8_t major, struct __kobj_type *ktype) {
+/*struct __driver *__register_driver(char const *name, uint8_t major, struct __kobj_type *ktype) {
     struct __driver *driver = (struct __driver *)kmalloc(sizeof(struct __driver));
 
     if (!driver)
@@ -99,9 +54,25 @@ struct __driver *__register_driver(char const *name, uint8_t major, struct __kob
     driver->release = NULL;
     drivers[major] = driver;
     return driver;
+}*/
+
+int register_blk_driver(uint8_t major, int (*read)(uint8_t minor, uint32_t offset, uint32_t count, char *buffer)) {
+    struct __block_dev_driver *driver = (struct __block_dev_driver *)kmalloc(sizeof(struct __block_dev_driver));
+
+    if (!driver)
+        return -1;
+
+    driver->h.type = NULL;
+    driver->h.release = NULL;
+    driver->read = read;
+    driver->write = NULL;
+    driver->ioctl = NULL;
+
+    drivers[major] = (struct __driver *)driver;
+    return 0;
 }
 
-struct __driver *__driver_lookup(uint8_t major) {
+struct __driver *driver_lookup(uint8_t major) {
     return drivers[major];
 }
 

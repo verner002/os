@@ -8,16 +8,24 @@
 #include "hal/dev.h"
 #include "mm/heap.h"
 #include "kernel/task.h"
-#include "hal/vfs.h"
+#include "fs/file.h"
+#include "fs/fat12/super.h"
 
 atomic_t __dev_id;
 
 // kobj for /dev
-static struct __dentry *dev;
+static struct dentry *dev;
 
 // devs linked-list
 static uint32_t devices_cnt;
 static struct __dev *devices[32];
+
+// RFC: use linked-lists?
+static spinlock_t lock = {
+    .locked = false
+};
+static int devs_count;
+static struct device *devs[256];
 
 /**
  * initializes devs linked-list and
@@ -25,12 +33,17 @@ static struct __dev *devices[32];
 */
 
 int32_t __dev_init(void) {
-    dev = __file_add(__get_dentry(), "dev", 0, 0, 0x80000000 | 0755);
+    dev = create_file(current_dentry(), "dev", 0, 0, 0x80000000);
 
     if (!dev)
         return -1;
 
     devices_cnt = 0;
+
+    spin_lock(&lock);
+    devs_count = 0;
+    spin_unlock(&lock);
+    // TODO: init array(?)
     return 0;
 }
 
@@ -62,9 +75,9 @@ int32_t __dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct 
     device->d_parent = parent;
     device->d_type = type;
 
-    struct __dentry *device_file = __file_add(dev, name, 0, 0, 0755);
+    struct dentry *dev_file = create_file(dev, name, 0, 0, 0755);
 
-    if (!device_file) {
+    if (!dev_file) {
         kfree(device);
         return -1;
     }
@@ -151,3 +164,53 @@ int32_t __dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct 
     atomic_inc(__dev_id);
     return __dev;
 }*/
+
+int register_blk_device(kdev_t kdev) {
+    struct blk_device *device = (struct blk_device *)kmalloc(sizeof(struct blk_device));
+
+    if (!device)
+        return -1; // failed to allocate memory for blk device
+
+    // TODO: detect fs
+    struct super_block *super = (struct super_block *)kmalloc(sizeof(struct super_block));
+
+    if (!super) {
+        kfree(device);
+        return -2; // failed to allocate memory for super block
+    }
+
+    int result = get_super(kdev, super);
+
+    if (result)
+        return result; // failed to read super
+
+    device->h.dev = kdev;
+    device->h.super = super;
+    device->h.device_data = NULL;
+
+    spin_lock(&lock);
+    devs[devs_count++] = (struct device *)device;
+    spin_unlock(&lock);
+    return 0;
+}
+
+int get_devs(struct device ***list, int *count) {
+    spin_lock(&lock);
+    struct device **devices = (struct device **)kmalloc(sizeof(struct device *) * devs_count);
+
+    if (!devices) {
+        *count = 0; // not necessary but...
+        spin_unlock(&lock);
+        return -1; // failed to allocate memory for devices list
+    }
+
+    // copy the list
+    for (int i = 0; i < devs_count; ++i)
+        devices[i] = devs[i];
+
+    // pass list to user
+    *list = devices;
+    *count = devs_count;
+    spin_unlock(&lock);
+    return 0;
+}

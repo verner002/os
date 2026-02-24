@@ -75,5 +75,3 @@ VFS_FILE_NODE *__new_vfs_file_node(char const *name);
 VFS_DIR_NODE *__new_vfs_dir_node(char const *name);
 int32_t __update_vfs_node(VFS_NODE *node, uint8_t flags);
 VFS_NODE *__find_vfs_node(VFS_DIR_NODE *root, char const *name);*/
-
-struct __dentry *__file_add(struct __dentry *parent, char const *name, uint32_t uid, uint32_t gid, uint32_t flags);

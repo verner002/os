@@ -10,11 +10,13 @@
 
 global __read_eip
 global __flush_tss
+global thread_exit
 global __schedule
 global __exec_kernelmode
 global __exec_usermode
 global __yield
 
+extern __exit
 extern __update_tick_counter
 extern __sched_lock
 extern thread_current
@@ -38,6 +40,19 @@ __flush_tss:
 __read_eip:
     pop eax
     jmp eax
+
+;
+; thread_exit
+;
+; The main function returns exit code in EAX.
+;
+
+thread_exit:
+    push eax
+    call __exit
+    ; function __exit should not return
+    add esp, 4
+    jmp $
 
 ;
 ; __yield
@@ -108,7 +123,6 @@ __yield:
 ;
 
 __schedule:
-    ;cli
     pushad
     call __update_tick_counter
 
@@ -140,6 +154,13 @@ __schedule:
     call __dispatch
 
     mov edx, dword [thread_current]
+
+    ; thread_current is allocated in
+    ; kernel address space so we can
+    ; switch the task address space
+    ;mov eax, dword [edx+16]
+    ;mov cr3, eax
+
     mov esp, dword [edx]
 
     push dword [edx+8]

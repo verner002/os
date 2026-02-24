@@ -7,10 +7,9 @@
 #pragma once
 
 #include "types.h"
-#include "kernel/kobj.h"
+#include "fs/dentry.h"
 
-extern struct __kobj *sysfs;
+extern struct dentry *sysfs;
 
-int32_t __sysfs_init(struct __dentry *mpoint);
-void __sysfs_group_init(struct __kobj *kobj, char const *name);
-void __sysfs_group_add(struct __kobj *kobj);
+int sysfs_init(struct dentry *root);
+int sysfs_register_group(char const *name);

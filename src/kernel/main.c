@@ -5,7 +5,7 @@
  * @note j+k=<3
 */
 
-#define CONFIG_FDC
+//#define CONFIG_FDC
 #define COMMAND_LINE 0x00080200
 
 #ifndef VERSION
@@ -31,7 +31,6 @@
 #include "drivers/block/82077aa.h"
 
 #include "hal/driver.h"
-#include "hal/vfs.h"
 
 //#include "kernel/syms.h"
 #include "mm/e820.h"
@@ -44,6 +43,8 @@
 #include "kstdlib/stdio.h"
 #include "kstdlib/stdlib.h"
 #include "mm/heap.h"
+
+#include "fs/file.h"
 
 #include "kernel/sysfs.h"
 #include "hal/bus.h"
@@ -61,20 +62,7 @@
 
 #include "kernel/tty.h"
 
-/**
- * panic
-*/
-
-void panic(void) {
-    printk("\033[31mKERNEL PANIC\n");
-
-    for (;;) {
-        asm volatile (
-            "cli\n\t"
-            "hlt"
-        );
-    }
-}
+#include "kernel/panic.h"
 
 __attribute__((interrupt)) static void __spurious_irq_isr(struct __interrupt_frame *frame) {
     
@@ -152,6 +140,12 @@ __attribute__((interrupt)) static void __page_fault(struct __interrupt_frame *fr
         :
         :
     );
+
+    if (thread_current && __get_pid() != 0) {
+        __enable_interrupts();
+        printf("Segmentation fault\n");
+        __exit(-1);
+    }
 
     printk("page-fault when accessing address %p\n", vas);
     panic();
@@ -237,7 +231,10 @@ __attribute__((interrupt)) static void __ps2_irq1_handler(struct __interrupt_fra
                             //__vbe_redraw();
                         }
 
-                        /*if (*/putc(c, stdin);/*)*/
+                        if (stdin)
+                            putc(c, stdin);
+
+                        /*if (putc(c, stdin);)*/
                             //printk("ps2: stdin full\n"); // TODO: realloc buffer
 
                         // FIXME: this can cause dead-lock!!!
@@ -302,7 +299,7 @@ void __init_handlers(void) {
 __kdev_t root_dev = NO_DEV;
 char *envs[16];
 
-struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
+struct dentry *dentry_lookup(struct dentry *node, char const *path) {
     static bool init = true;
 
     if (!path)
@@ -317,13 +314,13 @@ struct __dentry *__dentry_lookup(struct __dentry *node, char const *path) {
         return node;
     }
 
-    struct __dentry *child = node->d_child; // children list head
+    struct dentry *child = node->inode->child; // children list head
     
     while (child) {
         if (!strcmp(child->name, name))
-            return __dentry_lookup(child, name);
+            return dentry_lookup(child, name);
         
-        child = child->d_next;
+        child = child->next;
     }
 
     init = true;
@@ -351,6 +348,22 @@ void __softirq_daemon(void) {
     }
 
     deffered_job = false;
+}
+
+bool pci_exited = false;
+int pci_exit_code;
+
+void pci_exit_handler(int exit_code) {
+    pci_exit_code = exit_code;
+    pci_exited = true;
+}
+
+bool fdc_exited = false;
+int fdc_exit_code;
+
+void fdc_exit_handler(int exit_code) {
+    fdc_exit_code = exit_code;
+    fdc_exited = true;
 }
 
 /**
@@ -489,7 +502,7 @@ void main(void) {
 
     // allocate page-aligned memory
     // for kernel heap
-    uint32_t const heap_size = 16*1024;
+    uint32_t const heap_size = 128*1024;
 
     void *heap = e820_alloc(heap_size, true, 768*1024*1024);
 
@@ -525,26 +538,39 @@ void main(void) {
     // we'll be able to set different
     // fs dentries for each process once
     // the multitasking is enabled
-    struct __dentry root = {
-        .d_child = NULL,
-        .d_inode = NULL,
-        .d_next = NULL,
-        .d_parent = NULL,
-        .d_prev = NULL,
-        .d_refs = 1,
-        .name = "", // empty string
-        .io_ops = {
-            .create = NULL,
-            .lookup = &__dentry_lookup
-        }
+
+    struct inode root_inode = {
+        .uid = 0,
+        .gid = 0,
+        .mode = 0x80000000 | 0755,
+        .child = NULL,
+        .refs = 1,
+        .i_ops = NULL,
+        .size = 0,
+        .super_block = NULL,
+        .fs_data = NULL
     };
 
-    if (__sysfs_init(&root)) {
+    struct dentry_ops root_ops = {
+        .lookup = &dentry_lookup
+    };
+
+    struct dentry root_dentry = {
+        .parent = NULL,
+        .name = "", // change to "/"
+        .previous = NULL,
+        .next = NULL,
+        .d_ops  = &root_ops,
+        .refs = 1,
+        .inode = &root_inode
+    };
+
+    if (sysfs_init(&root_dentry)) {
         printk("kernel: error: failed to initialize sysfs\n");
         panic();
     }
 
-    if (__init_drivers()) { // register "driver" group
+    if (drivers_init()) { // register "driver" group
         printk("kernel: error: failed to initialize drivers\n");
         panic();
     }
@@ -613,13 +639,18 @@ void main(void) {
 
     // initialize first task (kernel) with
     // default root dentry
-    if (__sched_init(&root))
+
+    if (__sched_init(&root_dentry)) {
+        printk("failed to start scheduler\n");
         panic();
+    }
 
     __tty_init();
 
-    if (__dev_init())
+    if (__dev_init()) {
+        printk("failed to start devman\n");
         panic();
+    }
 
     // takes care of deffered jobs
     int32_t softirq_pid = 0;//__create_thread("softirq-daemon", (int32_t (*)(int argc, char **argv))&__softirq_daemon, THREAD_RING_0, THREAD_PRIORITY_HIGH);
@@ -630,7 +661,7 @@ void main(void) {
     }
 
 #ifdef CONFIG_FDC
-    int32_t fdc_init_pid = __create_thread("fdc-init", (int32_t (*)(int argc, char **argv))&__init_fdc, THREAD_RING_0, THREAD_PRIORITY_HIGH);
+    int32_t fdc_init_pid = __create_thread("fdc-init", (int32_t (*)(int argc, char **argv))&__init_fdc, THREAD_RING_0, THREAD_PRIORITY_HIGH, &fdc_exit_handler);
 
     if (fdc_init_pid < 0) {
         printk("failed to start fdc daemon\n");
@@ -645,9 +676,6 @@ void main(void) {
     // this is actually the sexiest thing in this
     // kernel right now ... absolutely love it
     do {
-        if (__get_state(fdc_init_pid, &state))
-            break;
-        
         if (tks % 20 == 0) {
             printf("\r[");
 
@@ -672,17 +700,12 @@ void main(void) {
 
         __delay_ms(1);
         ++tks;
-    } while (state != 3);
-
-    int32_t exitcode;
-
-    if (__get_exitcode(fdc_init_pid, &exitcode))
-        panic();
+    } while (!fdc_exited);
 
     // TODO: clear line (with spaces)
     printf("\r[");
 
-    if (exitcode)
+    if (fdc_exit_code)
         printf("\033[91mFAILED");
     else
         printf("\033[92m  OK  ");
@@ -691,12 +714,40 @@ void main(void) {
 #endif
     
     // initialize pci bus and devices
-    __pci_init();
+    int pci_daemon_pid = __create_thread("pci-daemon", (int (*)(int argc, char **argv))&__pci_init, THREAD_RING_0, THREAD_PRIORITY_HIGH, &pci_exit_handler);
+
+    if (pci_daemon_pid < 0) {
+        printk("failed to start pci daemon\n");
+        panic();
+    }
+
+    // wait for pci daemon to initialize pci bus
+    while (!pci_exited);
+
+    int result = 0;//mount(MAJMIN(HARDDISK_MAJOR, 0), "/mnt");
+
+    if (result) {
+        printk("failed to mount device MAJMIN=(%u:%u) to /mnt\n", HARDDISK_MAJOR, 0);
+        panic();
+    }
+
+    // FIXME: messages can come out of order!
+    //  since buffers are read in a loop by tty
+    //  daemon (printing is asynchronous)
+    // SOLUTION: it would be better to use global
+    //  queue for stdout (not file, QUEUE!)
+
+    if (pci_exit_code)
+        printf("PCI initialization failed\n");
+
+    struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, 0x800001ff);
+    struct dentry *home = create_file(&root_dentry, "root", 0, 0, 0x80000000 | 0750);
+    home->inode->size = 4096;
 
     /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
     for(;;);*/
 
-    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_HIGH);
+    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_HIGH, NULL);
 
     if (terminal_pid < 0) {
         printk("failed to start terminal\n");
@@ -712,8 +763,10 @@ void main(void) {
     //__mount(root_dev, "/dev/fd0");
 
     // idle loop
-    for (;;)
+    for (;;) {
         asm volatile ("hlt");
+        __yield();
+    }
 
     /*for (uint32_t i = 0; i < symbols_count; ++i) {
         SYMBOL *symbol = &symbol_table[i];

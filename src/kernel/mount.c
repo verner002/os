@@ -8,16 +8,35 @@
 #include "hal/dev.h"
 #include "kernel/task.h"
 
+#include "fs/fat12/fat12.h"
+
 /**
- * __mount
+ * mount
 */
 
-int32_t __mount(__kdev_t dev, char const *mpoint) {
-    struct __dentry *mnt = __file_add(__get_dentry(), "mnt", 0, 0, 0x80000000 | 0755);
+int mount(kdev_t kdev, char const *mountpoint) {
+    char *temp = (char *)kmalloc(sizeof(mountpoint) + sizeof(char));
 
-    // and this will be done here
-    __file_add(__get_dentry()->io_ops.lookup(__get_dentry(), "/mnt"), "fd0", 0, 0, 0x80000000 | 0755);
-    
+    if (!temp)
+        return -1;
+
+    strcpy(temp, mountpoint);
+
+    struct dentry *root = current_dentry();
+
+    struct dentry *mountdir = root->d_ops->lookup(root, temp);
+
+    kfree(temp);
+
+    if (!mountdir)
+        return -1; // mountdir not found
+
+    // detect fs from superblock and then
+    // decide which fs driver to use
+    int result = __fat12_list_root(mountdir, kdev);
+
+    return result;
+
     // "/mnt/test/fd0", "./test/fd0", "test/fd0", "test/fd0/"
     // '.' (dot) represent current directory relative
     // to the given part of the path or (if used as
@@ -26,29 +45,11 @@ int32_t __mount(__kdev_t dev, char const *mpoint) {
     // directory)
     //
     // RFC: do we want to perform a mount operation
-    //  to the existing __dentry? could be useful for
+    //  to the existing dentry? could be useful for
     //  example when trying to mount a temp disk image
     //  from an external device (and using the known
     //  one if that is not possible)
     //   - i'll keep this open and use the easier
     //     approach (not allow that)
-
-    // firstly let's find the node we want to
-    // perform the mount operation to
-    char *temp = (char *)kmalloc(strlen(mpoint) + sizeof(char));
-    
-    //if (!temp) error
-    
-    strcpy(temp, mpoint);
-
-    struct __dentry *thread_mount = __get_dentry();
-    struct __dentry *mount_dir = thread_mount->io_ops.lookup(thread_mount, temp);
-    kfree(temp);
-
-    if (!mount_dir) {
-        printk("mount point \'%s\' not found\n", mpoint);
-        return -1;
-    }
-
     return 0;
 }

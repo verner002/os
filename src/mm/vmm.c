@@ -77,6 +77,8 @@ int32_t __init_vmm(void) {
 */
 
 int32_t __map_page(uint32_t virtual_memory, uint32_t physical_memory, uint8_t flags) {
+    // FIXME: mapping is done in default address space
+    //  use cr3 register to obtain correct page directory
     if (!page_directory || (page_directory & 31) || !physical_memory) {
         printk("page-map: invalid arguments: %p, %p\n", page_directory, physical_memory);
         return -1;

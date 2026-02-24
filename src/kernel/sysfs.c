@@ -7,70 +7,34 @@
 #include "kernel/sysfs.h"
 #include "mm/heap.h"
 #include "kstdlib/stdio.h"
-#include "hal/vfs.h"
+#include "fs/inode.h"
 
-struct __kobj *sysfs;
-static uint32_t groups_cnt = 0;
-// TODO: implement kernel objects set
-static struct __kobj  *groups[16];
+struct dentry *sysfs;
 
-int32_t __sysfs_init(struct __dentry *mpoint) {
-    sysfs = (struct __kobj *)kmalloc(sizeof(struct __kobj));
-    
-    if (!sysfs) {
-        printk("failed to allocate memory for sysfs\n");
+int sysfs_init(struct dentry *root) {
+    struct inode *inode = get_inode(0, 0, 0x80000000 | 0555);
+
+    if (!inode)
         return -1;
-    }
 
-    struct __dentry *sys = (struct __dentry *)kmalloc(sizeof(struct __dentry));
+    sysfs = get_dentry(root, "sys", inode);
 
-    __dentry_init(sys);
-    sys->name = "sys";
-    __dentry_add(sys, mpoint);
-
-    if (!sys) {
-        kfree(sysfs);
-        printk("failed to create dentry \"sys\"\n");
-        return -1;
-    }
-
-    struct __inode *sys_mdata = (struct __inode *)kmalloc(sizeof(struct __inode));
-
-    if (!sys_mdata) {
-        kfree(sys);
-        kfree(sysfs);
-        printk("failed to kmalloc memory for sysfs inode\n");
-        return -1;
-    }
-
-    __inode_init(sys_mdata, sys);
-
-    sys->d_inode = sys_mdata; // assign metadata
-
-    *sysfs = (struct __kobj){
-        .k_name = NULL,
-        .k_sname = { "sysfs\0\0\0\0" },
-        .k_refs = 1,
-        .k_type = NULL,
-        .k_parent = NULL,
-        .k_previous = NULL,
-        .k_next = NULL,
-        .k_dentry = sys
-    };
+    if (!sysfs)
+        return -2;
 
     return 0;
 }
 
-/**
- * initializes the kobj so it is a part of
- * sysfs (mapped in vfs in /sys)
-*/
+int sysfs_register_group(char const *name) {
+    struct inode *inode = get_inode(0, 0, 0x80000000);
 
-void __sysfs_group_init(struct __kobj *kobj, char const *name) {
-    atomic_inc(sysfs->k_refs);
-    kobj->k_parent = sysfs;
-}
+    if (!inode)
+        return -1;
 
-void __sysfs_group_add(struct __kobj *kobj) {
+    struct dentry *group = get_dentry(sysfs, name, inode);
 
+    if (!group)
+        return -2;
+
+    return 0;
 }

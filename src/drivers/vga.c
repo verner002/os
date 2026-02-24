@@ -55,6 +55,10 @@ void __clear(void) {
 
 /**
  * __putc
+ * 
+ * TODO: allow user to allocate memory for state
+ *  variables (as in strtok) - with such implementation
+ *  we don't need mutex for thread-safety
 */
 
 int32_t __putc(uint8_t c) {
