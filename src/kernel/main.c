@@ -575,6 +575,11 @@ void main(void) {
         panic();
     }
 
+    struct dentry *mnt = create_file(&root_dentry, "mnt", 0, 0, 0x80000000 | 0755);
+    struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, 0x800001ff);
+    struct dentry *home = create_file(&root_dentry, "root", 0, 0, 0x80000000 | 0750);
+    home->inode->size = 4096;
+
     /*if (__init_buses()) // register "bus" group
         panic();*/
 
@@ -724,13 +729,6 @@ void main(void) {
     // wait for pci daemon to initialize pci bus
     while (!pci_exited);
 
-    int result = 0;//mount(MAJMIN(HARDDISK_MAJOR, 0), "/mnt");
-
-    if (result) {
-        printk("failed to mount device MAJMIN=(%u:%u) to /mnt\n", HARDDISK_MAJOR, 0);
-        panic();
-    }
-
     // FIXME: messages can come out of order!
     //  since buffers are read in a loop by tty
     //  daemon (printing is asynchronous)
@@ -739,10 +737,6 @@ void main(void) {
 
     if (pci_exit_code)
         printf("PCI initialization failed\n");
-
-    struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, 0x800001ff);
-    struct dentry *home = create_file(&root_dentry, "root", 0, 0, 0x80000000 | 0750);
-    home->inode->size = 4096;
 
     /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
     for(;;);*/

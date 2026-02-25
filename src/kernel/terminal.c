@@ -12,6 +12,7 @@
 #include "fs/file.h"
 
 #include "hal/dev.h"
+#include "kernel/mount.h"
 
 extern void panic(void);
 extern bool deffered_job;
@@ -60,13 +61,16 @@ static void __path(struct dentry *node) {
 */
 
 static void __tree(struct dentry *node) {
+    if (!strcmp(node->name, ".") || !strcmp(node->name, ".."))
+        return;
+
     struct dentry *child = node->inode->child;
 
     while (child) {
         __path(child);
         putchar('\n');
 
-        if (child->inode->child && strcmp(child->name, ".") && strcmp(child->name, ".."))
+        if (child->inode->child)
             __tree(child);
 
         child = child->next;
@@ -364,6 +368,20 @@ void __terminal_task(void) {
 
             if (!create_file(home, name, 0, 0, 0))
                 printf("touch: failed to create regular file\n");
+        } else if (!strcmp(cmd, "mount")) {
+            char *majs = strtok_r(NULL, " ", &strtok_buffer);
+            char *mins = strtok_r(NULL, " ", &strtok_buffer);
+            char *mountpoint = strtok_r(NULL, " ", &strtok_buffer);
+
+            int maj = atoi(majs);
+            int min = atoi(mins);
+
+            int result = mount(MAJMIN(maj, min), mountpoint);
+
+            if (result) {
+                printk("Failed to mount device %u:%u to %s\n", maj, min, mountpoint);
+                continue;
+            }
         } else if (!strcmp(cmd, "ping")) {
             char *target = strtok_r(NULL, " ", &strtok_buffer);
 
