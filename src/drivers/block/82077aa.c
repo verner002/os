@@ -7,6 +7,7 @@
 #include "macros.h"
 #include "drivers/block/82077aa.h"
 #include "hal/dev.h"
+#include "fs/file.h"
 
 static struct {
     //uint8_t driveSelect; -- 0 for now
@@ -443,7 +444,12 @@ int32_t __fdc_read_sector(uint8_t cylinder, uint8_t head, uint8_t sector, uint32
  * __fdc_read_sectors
 */
 
+extern void *fdc_buffer;
+
 int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
+    void *user_buffer = (void *)buffer;
+    buffer = (uint32_t)fdc_buffer;
+
     if ((buffer + count * 512 - 1) > 0xfffff) {
         printk("\033[33mfdc:\033[37m Buffer must resize within the first MiB.\n");
         return -1;
@@ -477,6 +483,8 @@ int32_t __fdc_read_sectors(uint32_t lba, uint32_t count, uint32_t buffer) {
     }
 
     __mutex_unlock(&motor_mutex);
+
+    memcpy(user_buffer, fdc_buffer, 512*count);
     return last_opcode;
 }
 
@@ -581,13 +589,23 @@ int32_t __init_fdc(void) {
     if (pid < 0)
         return -1;
 
-    // creates device file in /dev -> /dev/fd0
-    if (__dev_add(MAJMIN(FLOPPY_MAJOR, 0), "fd0", NULL, NULL, NULL))
+    if (register_blk_driver(FLOPPY_MAJOR, &fdc_read_sectors)) {
+        printk("failed to register fdc-driver\n");
         return -1;
+    }
+
+    // creates device file in /dev -> /dev/fd0
+    if (register_blk_device(MAJMIN(FLOPPY_MAJOR, 0))) {
+        printk("failed to register fd0\n");
+        for(;;);
+        return -1;
+    }
+
+    /*if (__dev_add(MAJMIN(FLOPPY_MAJOR, 0), "fd0", NULL, NULL, NULL))
+        return -1;*/
 
     /*if (!__register_driver("fdc", FLOPPY_MAJOR, &fdc_driver_type))
         __exit(-1);*/
 
-    register_blk_driver(FLOPPY_MAJOR, &fdc_read_sectors);
     return 0;
 }

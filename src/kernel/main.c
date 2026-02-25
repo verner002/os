@@ -339,6 +339,7 @@ void fdc_exit_handler(int exit_code) {
 }
 
 struct dentry root_dentry;
+void *fdc_buffer;
 
 /**
  * main
@@ -401,6 +402,17 @@ int main(void) {
     //
     // RFC: do we always want to perform this? what if there
     //  is less than 768 MiB in the system?
+#ifdef CONFIG_FDC
+    fdc_buffer = e820_alloc(512*4, true, 1*1024*1024);
+
+    if (!fdc_buffer) {
+        printk("failed to allocate memory for fdc buffer\n");
+        panic();
+    }
+
+    __map_page((uint32_t)fdc_buffer, (uint32_t)fdc_buffer, PAGE_READ_WRITE | PAGE_CACHE_DISABLED | PAGE_WRITE_THROUGH);
+#endif
+
     PAGE_TABLE_ENTRY *page_table_entries = (PAGE_TABLE_ENTRY *)e820_alloc(1*1024*1024, true, 4*1024*1024);
 
     if (!page_table_entries) {
@@ -696,11 +708,8 @@ int main(void) {
                 putchar(' ');
 
             printf("] Initializing... ");
-
-            if (add == 1)
-                ++spaces;
-            else if (add == -1)
-                --spaces;
+        
+            spaces += add;
 
             if (spaces <= 0 || spaces >= 3)
                 add *= -1;
