@@ -75,7 +75,7 @@ int32_t __dev_add(__kdev_t kdev, char const *name, struct __dev *parent, struct 
     device->d_parent = parent;
     device->d_type = type;
 
-    struct dentry *dev_file = create_file(dev, name, 0, 0, 0755);
+    struct dentry *dev_file = create_file(dev, name, 0, 0, 0x40000000 | 0755);
 
     if (!dev_file) {
         kfree(device);
@@ -187,6 +187,9 @@ int register_blk_device(kdev_t kdev) {
     device->h.dev = kdev;
     device->h.super = super;
     device->h.device_data = NULL;
+
+    struct dentry *dev_file = create_file(dev, kdev2name(kdev), 0, 0, 0x40000000 | 0755);
+    dev_file->inode->data = (void *)device;
 
     spin_lock(&lock);
     devs[devs_count++] = (struct device *)device;

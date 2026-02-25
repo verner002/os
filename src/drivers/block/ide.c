@@ -357,22 +357,26 @@ int32_t __ide_poll(uint8_t channel, bool check_state) {
 */
 
 int32_t __ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
+    // count must be a positive number
+    if (!count)
+        return -1;
+
     if (minor > 3)
-        return -1; // invalid drive number
+        return -2; // invalid drive number
     
     struct __ide_drive *drv = &drives[minor];
 
     if ((uint64_t)lba + count - 1 > (uint64_t)drv->d_last_sector)
-        return -2; // out of disk space
+        return -3; // out of disk space
 
     uint8_t mode = drv->d_mode;
 
     if (!mode)
-        return -3; // chs mode not supported
+        return -4; // chs mode not supported
 
     uint16_t c = 0;
     uint8_t h;
-    uint8_t s = 1;
+    uint8_t s = count;
     uint8_t lbas[6];
 
     switch (mode) {
@@ -423,16 +427,16 @@ int32_t __ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buf
     uint16_t *offset = (uint16_t *)buffer;
     uint16_t port = channels[channel].r_io_base;
 
-    for (uint32_t i = 0; i < 256; ++i) {
+    /*for (uint32_t i = 0; i < 256; ++i) {
         if (__ide_poll(channel, true))
             return -4;
 
         ((short *)buffer)[i] = __inw(port);
-    }
+    }*/
 
-    /*for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < count; ++i) {
         if (__ide_poll(channel, true))
-            return -4;
+            return -5;
 
         asm volatile (
             "rep insw"
@@ -442,7 +446,7 @@ int32_t __ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buf
         );
 
         offset += 256;
-    }*/
+    }
 
     return 0;
 }

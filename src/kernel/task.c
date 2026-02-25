@@ -41,6 +41,9 @@ struct __thread_control_block {
     FILE t_stdin;
     FILE t_stdout;
     FILE t_stderr;
+    int argc;
+    char **argv;
+    int (*main)(int argc, char **argv);
     void (*on_exit)(int exit_code);
 };
 
@@ -77,8 +80,10 @@ static atomic_t __thread_next_pid = 0;
 */
 
 int32_t __get_pid(void) {
-    if (unlikely(!thread_current))
+    if (unlikely(!thread_current)) {
+        printk("get_pid\n");
         panic(); // we don't know what to do
+    }
 
     return thread_current->t_pid;
 }
@@ -88,8 +93,10 @@ int32_t __get_pid(void) {
 */
 
 struct dentry *current_dentry(void) {
-    if (unlikely(!thread_current || !thread_current->t_fs))
+    if (unlikely(!thread_current || !thread_current->t_fs)) {
+        printk("current_dentry\n");
         panic();
+    }
 
     return thread_current->t_fs->t_dentry;
 }
@@ -110,6 +117,7 @@ int32_t __get_state(int32_t pid, uint32_t *state) {
     if (unlikely(!thread)) {
         // not necessary but for clearness
         __mutex_unlock(&__sched_lock);
+        printk("__get_state\n");
         panic();
     }
 
@@ -142,6 +150,7 @@ int32_t __get_exitcode(int32_t pid, int32_t *exitcode) {
 
     if (unlikely(!thread)) {
         __mutex_unlock(&__sched_lock);
+        printk("__get_exitcode\n");
         panic();
     }
 
@@ -193,7 +202,8 @@ static void __thread_setup(void) {
 
 static void __thread_exit(void) {
     // common exit function for all threads
-    __exit(thread_current->t_exit_code);
+    //__exit(thread_current->t_exit_code);
+    __exit(thread_current->main(thread_current->argc, thread_current->argv));
 }
 
 /**
@@ -359,6 +369,9 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     thread->t_parent_pid = thread_current->t_pid;
     thread->t_name = name;
     thread->t_fs = thread_current->t_fs;
+    thread->argc = 0;
+    thread->argv = NULL;
+    thread->main = main;
 
     thread->t_stdin = (FILE){
         .__base = stdin_base,
@@ -387,8 +400,8 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     stack += 1024;
     kstack += 1024;
 
-    *--stack = (uint32_t)&thread_exit; // thread exit
-    *--stack = (uint32_t)main; // eip
+    *--stack = (uint32_t)&__thread_exit; // thread exit
+    //*--stack = (uint32_t)main; // eip
 
     // set up thread stack
     if (!spawn_ring_0_thread) {
@@ -418,6 +431,175 @@ int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv
     *--stack = 0x00000000;
 
     if (spawn_ring_0_thread) {
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+        *--stack = 0x00000010;
+    } else {
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+        *--stack = 0x00000023;
+    }
+
+    thread->t_esp = (uint32_t)stack;
+
+    // set up kernel stack
+    thread->t_kernel_esp = (uint32_t)kstack;
+
+    thread->t_ticks = 10;
+    thread->t_ticks_current = 0;
+    thread->t_nextt = NULL;
+    
+    // ----- CRITICAL -----
+    __mutex_lock(&__sched_lock);
+    // tell current tail that we're joining
+    thread_ltail->t_nextt = thread;
+    // and also taking its place
+    thread_ltail = thread;
+    __mutex_unlock(&__sched_lock);
+    // ----- CRITICAL -----
+    return thread->t_pid;
+}
+
+/**
+ * create_thread
+*/
+
+int create_thread(char const *name, int32_t (* main)(int argc, char **argv), int argc, char **argv, void (*on_exit_handler)(int exit_code)) {
+    if (unlikely(!thread_lhead || !thread_current || !thread_ltail))
+        return -1;
+
+    struct __thread_control_block *thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
+
+    if (!thread)
+        return -1;
+
+    uint32_t *stack = (uint32_t *)pgalloc(PAGE_MAP);
+
+    if (!stack) {
+        kfree(thread);
+        return -1;
+    }
+
+    uint32_t *kstack = (uint32_t *)pgalloc(PAGE_MAP);
+
+    if (!kstack) {
+        pgfree(stack);
+        kfree(thread);
+        return -1;
+    }
+
+    uint32_t const stdin_size = 512;
+
+    char *stdin_base = (char *)kmalloc(stdin_size * sizeof(char));
+
+    if (!stdin_base) {
+        pgfree((void *)kstack);
+        pgfree((void *)stack);
+        kfree(thread);
+        return -1;
+    }
+
+    void *pg_dir = pgalloc(PAGE_MAP);
+
+    if (!pg_dir) {
+        kfree(stdin_base);
+        pgfree((void *)kstack);
+        pgfree((void *)stack);
+        kfree(thread);
+        return -1;
+    }
+
+    thread->t_stdout.__lock = false;
+
+    if (__alloc_buffer(&thread->t_stdout, "stdout", 4096)) {
+        kfree(pg_dir);
+        kfree(stdin_base);
+        pgfree((void *)kstack);
+        pgfree((void *)stack);
+        kfree(thread);
+        return -1;
+    }
+
+    // clear stack
+    memset(stack, 0, 4096);
+    memset(kstack, 0, 4096);
+
+    // copy kernel area mapping
+    memcpy(pg_dir, (void *)(thread_lhead->t_page_dir & 0xfffff000), 1024);
+
+    thread->t_pid = atomic_fetch_add(&__thread_next_pid, 1);
+    thread->t_priority = 0;
+    thread->t_state = THREAD_STATE_IDLE;
+    thread->t_flags = thread_current->t_flags;
+    thread->t_page_dir = (uint32_t)pg_dir | (uint32_t)(thread_lhead->t_page_dir & 0xfff);
+    thread->t_exit_code = -1;
+    thread->t_parent_pid = thread_current->t_pid;
+    thread->t_name = name;
+    thread->t_fs = thread_current->t_fs;
+    thread->argc = argc;
+    thread->argv = argv;
+    thread->main = main;
+
+    thread->t_stdin = (FILE){
+        .__base = stdin_base,
+        .__ptr = stdin_base,
+        .__index = 0,
+        .__count = 0,
+        .__flags = 0,
+        .__size = stdin_size,
+        .__fname = "stdin",
+        .__lock = false
+    };
+
+    thread->on_exit = on_exit_handler;
+
+    // all the data goes to terminal
+    if (!strcmp(name, "terminal"))
+        stdin = &thread->t_stdin;
+
+    //thread->t_stderr = NULL;
+
+    // set stack bottom for pgfree
+    thread->t_stack = (uint32_t)stack;
+    thread->t_kernel_stack = (uint32_t)kstack;
+
+    // += (KERNEL_)STACK_SIZE / sizeof(uint32_t)
+    stack += 1024;
+    kstack += 1024;
+
+    *--stack = (uint32_t)&__thread_exit; // thread exit
+    //*--stack = (uint32_t)main; // eip
+
+    // set up thread stack
+    if (!(thread_current->t_flags & THREAD_RING_0)) {
+        uint32_t temp = (uint32_t)stack;
+        *--stack = 0x00000023;
+        *--stack = temp;
+    }
+
+    *--stack = 0x00000202; // eflags
+
+    if (thread_current->t_flags & THREAD_RING_0)
+        *--stack = 0x00000008; // cs
+    else
+        *--stack = 0x0000001b; // cs
+    
+    *--stack = (uint32_t)&__thread_setup; // thread setup
+    
+    uint32_t temp = (uint32_t)stack;
+
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = temp;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+    *--stack = 0x00000000;
+
+    if (thread_current->t_flags & THREAD_RING_0) {
         *--stack = 0x00000010;
         *--stack = 0x00000010;
         *--stack = 0x00000010;

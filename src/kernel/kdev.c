@@ -12,23 +12,23 @@
 
 //struct __kdev *kdev_top;
 
+static char const *dev_names[] = {
+    "fd0",
+    "hda",
+    "hdb",
+    "hdc",
+    "hdd"
+};
+
+static uint16_t dev_nums[] = {
+    0x0200,
+    0x0300,
+    0x0301,
+    0x0302,
+    0x0303
+};
+
 uint16_t __dev_name_to_kdev(char const *dev_name) {
-    static char *dev_names[] = {
-        "fd0",
-        "hda",
-        "hdb",
-        "hdc",
-        "hdd"
-    };
-
-    static uint16_t dev_nums[] = {
-        0x0200,
-        0x0300,
-        0x0301,
-        0x0302,
-        0x0303
-    };
-
     uint32_t devs_count = sizeof(dev_names) / sizeof(char *);
 
     for (uint32_t i = 0; i < devs_count; ++i)
@@ -36,6 +36,16 @@ uint16_t __dev_name_to_kdev(char const *dev_name) {
             return dev_nums[i];
 
     return NO_DEV;
+}
+
+char const *kdev2name(kdev_t kdev) {
+    uint32_t devs_count = sizeof(dev_names) / sizeof(char *);
+
+    for (uint32_t i = 0; i < devs_count; ++i)
+        if (kdev == dev_nums[i])
+            return dev_names[i];
+
+    return NULL;
 }
 
 /*int32_t __add_kdev(__kdev_t k_kdev, struct super_block *super) {

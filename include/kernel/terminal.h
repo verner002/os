@@ -10,4 +10,4 @@
 
 extern int32_t wake_task;
 
-void __terminal_task(void);
+int __terminal_task(int argc, char **argvs);

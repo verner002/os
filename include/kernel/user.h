@@ -8,3 +8,7 @@
 
 typedef int uid_t;
 typedef int gid_t;
+
+int user_add(char const *login, char const *pwd);
+int user_init(void);
+int user_login(char const *login, char const *pwd);

@@ -39,8 +39,7 @@ struct dentry *create_file(struct dentry *parent, char const *name, uid_t uid, g
     }
 
     if (mode & 0x80000000) {
-        // there is a bug somewhere...
-        /*char *dot_fname = (char *)kmalloc(2 * sizeof(char));
+        char *dot_fname = (char *)kmalloc(2 * sizeof(char));
 
         strcpy(dot_fname, ".");
 
@@ -50,7 +49,7 @@ struct dentry *create_file(struct dentry *parent, char const *name, uid_t uid, g
 
         strcpy(dotdot_fname, "..");
 
-        struct dentry *dotdot = get_dentry(dentry, dotdot_fname, parent->inode);*/
+        struct dentry *dotdot = get_dentry(dentry, dotdot_fname, parent->inode);
     }
 
     return dentry;

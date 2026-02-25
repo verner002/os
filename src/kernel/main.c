@@ -299,34 +299,6 @@ void __init_handlers(void) {
 __kdev_t root_dev = NO_DEV;
 char *envs[16];
 
-struct dentry *dentry_lookup(struct dentry *node, char const *path) {
-    static bool init = true;
-
-    if (!path)
-        return NULL;
-    
-    char *name = strtok(init ? path : NULL, "/");
-    init = false;
-
-    // we've reached the end of the path
-    if (!name) {
-        init = true;
-        return node;
-    }
-
-    struct dentry *child = node->inode->child; // children list head
-    
-    while (child) {
-        if (!strcmp(child->name, name))
-            return dentry_lookup(child, name);
-        
-        child = child->next;
-    }
-
-    init = true;
-    return NULL;
-}
-
 // use atomic operations
 bool net_rx_pending = false;
 
@@ -366,11 +338,13 @@ void fdc_exit_handler(int exit_code) {
     fdc_exited = true;
 }
 
+struct dentry root_dentry;
+
 /**
  * main
 */
 
-void main(void) {
+int main(void) {
     // TODO: create system information block structure
     uint32_t e820_entries_count = *(uint32_t *)0x90003;
     E820_ENTRY *e820_entries = (E820_ENTRY *)0x94000;
@@ -429,8 +403,10 @@ void main(void) {
     //  is less than 768 MiB in the system?
     PAGE_TABLE_ENTRY *page_table_entries = (PAGE_TABLE_ENTRY *)e820_alloc(1*1024*1024, true, 4*1024*1024);
 
-    if (!page_table_entries)
+    if (!page_table_entries) {
+        printf("failed to allocate memory for page tables\n");
         panic();
+    }
 
     for (uint32_t i = 4*1024*1024/4096; i < 768*1024*1024/4096; ++i) {
         page_table_entries[i] = (PAGE_TABLE_ENTRY){
@@ -502,7 +478,7 @@ void main(void) {
 
     // allocate page-aligned memory
     // for kernel heap
-    uint32_t const heap_size = 128*1024;
+    uint32_t const heap_size = 64*1024;
 
     void *heap = e820_alloc(heap_size, true, 768*1024*1024);
 
@@ -548,22 +524,46 @@ void main(void) {
         .i_ops = NULL,
         .size = 0,
         .super_block = NULL,
-        .fs_data = NULL
+        .data = NULL
     };
 
     struct dentry_ops root_ops = {
         .lookup = &dentry_lookup
     };
 
-    struct dentry root_dentry = {
+    root_dentry = (struct dentry){
         .parent = NULL,
-        .name = "", // change to "/"
+        .name = "/",
         .previous = NULL,
         .next = NULL,
         .d_ops  = &root_ops,
         .refs = 1,
         .inode = &root_inode
     };
+
+    struct dentry dot = {
+        .parent = &root_dentry,
+        .name = ".",
+        .previous = NULL,
+        .next = NULL,
+        .d_ops = &root_ops,
+        .refs = 1,
+        .inode = &root_inode
+    };
+
+    struct dentry dotdot = {
+        .parent = &root_dentry,
+        .name = "..",
+        .previous = NULL,
+        .next = NULL,
+        .d_ops = &root_ops,
+        .refs = 1,
+        .inode = &root_inode
+    };
+
+    root_dentry.inode->child = &dot;
+    dot.next = &dotdot;
+    dotdot.previous = &dot;
 
     if (sysfs_init(&root_dentry)) {
         printk("kernel: error: failed to initialize sysfs\n");
@@ -574,6 +574,9 @@ void main(void) {
         printk("kernel: error: failed to initialize drivers\n");
         panic();
     }
+
+    if (user_init())
+        panic();
 
     struct dentry *mnt = create_file(&root_dentry, "mnt", 0, 0, 0x80000000 | 0755);
     struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, 0x800001ff);
@@ -741,7 +744,16 @@ void main(void) {
     /*printk("%p", __lookup(&root, "/sys/driver/pci", 3));
     for(;;);*/
 
-    int32_t terminal_pid = __create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, THREAD_RING_0, THREAD_PRIORITY_HIGH, NULL);
+    int result = 0; //mount(root_dev, "/mnt");
+
+    if (result) {
+        printk("failed to mount dev %u:%u to /mnt\n", MAJOR(root_dev), MINOR(root_dev));
+        panic();
+    }
+
+    // pass hostname to terminal
+    char *argv[] = { "null" };
+    int32_t terminal_pid = create_thread("terminal", (int32_t (*)(int argc, char **argv))&__terminal_task, 1, argv, NULL);
 
     if (terminal_pid < 0) {
         printk("failed to start terminal\n");

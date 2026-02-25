@@ -24,3 +24,4 @@ struct dentry {
 };
 
 struct dentry *get_dentry(struct dentry *parent, char const *name, struct inode *inode);
+struct dentry *dentry_lookup(struct dentry *node, char const *path);

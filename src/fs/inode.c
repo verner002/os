@@ -21,5 +21,6 @@ struct inode *get_inode(uid_t uid, gid_t gid, mode_t mode) {
     inode->size = 0;
     inode->i_ops = NULL;
     inode->refs = 1;
+    inode->child = NULL;
     return inode;
 }

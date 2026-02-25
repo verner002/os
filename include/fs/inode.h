@@ -24,12 +24,12 @@ struct inode {
 
     struct dentry *child;
 
-    uint64_t size; // size in bytes
+    uint32_t size; // size in bytes
     
     struct super_block *super_block;
     struct inode_ops *i_ops;
 
-    void *fs_data;
+    void *data;
 };
 
 /*struct file_ops {

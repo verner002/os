@@ -2,6 +2,9 @@
  * @file terminal.c
  * @author verner002
  * @date 11/11/2025
+ * 
+ * TODO: this code is used just for testing features
+ *  not an official terminal
 */
 
 #include "kernel/terminal.h"
@@ -53,7 +56,11 @@ static void __path(struct dentry *node) {
     }
 
     __path(node->parent);
-    printf("/%s", node->name);
+
+    if (node->parent && node->parent->parent)
+        putchar('/');
+
+    printf("%s", node->name);
 }
 
 /**
@@ -83,16 +90,76 @@ int32_t wake_task = -1; // TODO: use list for "tasks to wake"
  * __terminal_task
 */
 
-void __terminal_task(void) {
+char const *input() {
+    unsigned int size = 16; // base size
+    unsigned int index = 0;
+    char *buffer = (char *)kmalloc(sizeof(char) * size);
+
+    if (!buffer)
+        return NULL;
+
+    char chr;
+
+    while (((chr = getchar()) != EOF) && chr != '\n') {
+        if (index + 1 >= size) {
+            size *= 2; //size = size * 1.5f + 0.5f; // growth factor
+            buffer = (char *)krealloc(buffer, size);
+
+            if (!buffer)
+                return NULL;
+        }
+        
+        buffer[index++] = chr;
+    }
+
+    buffer[index] = '\0';
+
+    int length = strlen(buffer) + sizeof(char);
+    char *string = (char *)kmalloc(length);
+
+    if (!string) {
+        kfree(buffer);
+        return NULL;
+    }
+    
+    strcpy(string, buffer);
+    kfree(buffer);
+    return string;
+}
+
+extern struct dentry root_dentry;
+
+int __terminal_task(int argc, char **argv) {
     //while (!stdin);
 
     wake_task = __get_pid();
     printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
 
+    char *login;
+    char *password;
+    int result;
+
+    do {
+        do {
+            printf("login: ");
+            login = input();
+        } while (!login || !*login);
+
+        do {
+            printf("password: ");
+            password = input();
+        } while (!password || !*password);
+
+        result = user_login(login, password);
+
+        if (result)
+            printf("Invalid login or password\n");
+    } while (result);
+
     char *pwd = "/";
 
     while (1) {
-        printf("[root@null %s]$ ", pwd);
+        printf("[root@%s %s]$ ", argv[0], pwd);
         unsigned int size = 16; // base size
         unsigned int index = 0;
         char *input_buffer = (char *)kmalloc(sizeof(char) * size);
@@ -147,79 +214,124 @@ void __terminal_task(void) {
 
             uint32_t mode = 0;
 
-            struct dentry *child = current_dentry()->inode->child;
+            struct dentry *child = current_dentry();
 
-            while (s = strtok_r(NULL, " ", &strtok_buffer)) {
+            bool error = false;
+
+            while (!error && (s = strtok_r(NULL, " ", &strtok_buffer))) {
                 if (!strcmp(s, "-l"))
                     mode = 1;
-                else if (s) {
-                    child = current_dentry();
+                else if (s) {    
+                    char *path = s;
+                    
+                    if (*s == '/') {
+                        ++s;
+                        child = &root_dentry;
+                    } else
+                        child = current_dentry();
+                    
+                    errno = 0;
                     child = child->d_ops->lookup(child, s);
 
-                    if (!child) {
-                        printf("ls: cannot access '%s': No such file or directory\n", s);
-                        kfree(input_buffer);
-                        continue;
+                    if (errno == ENOENT) {
+                        // no entry found
+                        printf("ls: cannot access '%s': No such file or directory\n", path);
+                        error = true;
+                    } else if (errno == ENOTDIR || (!(child->inode->mode & 0x80000000) && s[strlen(s) - 1] == '/')) {
+                        // entry is not a directory or
+                        // there is a slash at the end
+                        // of a file name
+                        printf("ls: cannot access '%s': Not a directory\n", path);
+                        error = true;
                     }
-
-                    child = child->inode->child;
                 }
             }
 
-            if (child) {
-                int max_size = 0;
+            if (error) {
+                kfree(input_buffer);
+                continue;
+            }
 
-                struct dentry *temp = child;
+            if (child->inode->mode & 0x80000000) {
+                child = child->inode->child;
 
-                while (temp) {
-                    if (temp->inode->size > max_size)
-                        max_size = temp->inode->size;
+                if (child) {
+                    uint32_t max_size = 0;
 
-                    temp = temp->next;
-                }
+                    struct dentry *temp = child;
 
-                while (child) {
-                    mode_t fmode = child->inode->mode;
+                    while (temp) {
+                        if (((temp->inode->mode & 0x40000000) || (temp->inode->mode & 0x20000000)) && 6 > max_size)
+                            max_size = 9999999;
+                        else if (temp->inode->size > max_size)
+                            max_size = temp->inode->size;
 
-                    if (mode == 1) {
-                        putchar(fmode & 0x80000000 ? 'd' : '-');
-                        putchar(fmode & 0400 ? 'r' : '-');
-                        putchar(fmode & 0200 ? 'w' : '-');
-                        putchar(fmode & 0100 ? 'x' : '-');
-                        putchar(fmode & 0040 ? 'r' : '-');
-                        putchar(fmode & 0020 ? 'w' : '-');
-                        putchar(fmode & 0010 ? 'x' : '-');
-                        putchar(fmode & 0004 ? 'r' : '-');
-                        putchar(fmode & 0002 ? 'w' : '-');
-                        putchar(fmode & 0001 ? 'x' : '-');
-                        printf(" %s %s %*i ", "root", "root", digits(max_size), child->inode->size);
+                        temp = temp->next;
                     }
 
-                    if ((fmode & 0777) == 0777)
-                        printf("\033[30;42m");
+                    while (child) {
+                        mode_t fmode = child->inode->mode;
 
-                    if (fmode & 0x80000000)
-                        printf("\033[94m");
-                    else if (fmode & 0x40000000)
-                        printf("\033[93m");
+                        if (mode == 1) {
+                            if (fmode & 0x80000000)
+                                putchar('d');
+                            else if (fmode & 0x40000000)
+                                putchar('b');
+                            else if (fmode & 0x20000000)
+                                putchar('c');
+                            else
+                                putchar('-');
 
-                    printf("%s\033[37;40m", child->name);
+                            putchar(fmode & 0400 ? 'r' : '-');
+                            putchar(fmode & 0200 ? 'w' : '-');
+                            putchar(fmode & 0100 ? 'x' : '-');
+                            putchar(fmode & 0040 ? 'r' : '-');
+                            putchar(fmode & 0020 ? 'w' : '-');
+                            putchar(fmode & 0010 ? 'x' : '-');
+                            putchar(fmode & 0004 ? 'r' : '-');
+                            putchar(fmode & 0002 ? 'w' : '-');
+                            putchar(fmode & 0001 ? 'x' : '-');
 
-                    switch (mode) {
-                        case 0:
-                            printf("  ");
-                            break;
+                            printf(" %s ", "root");
 
-                        case 1:
-                            putchar('\n');
-                            break;
+                            if ((fmode & 0x40000000) || (fmode & 0x20000000)) {
+                                struct blk_device *blkinfo = (struct blk_device *)child->inode->data;
+
+                                printf("%s %*i %*i", "disk", 3, MAJOR(blkinfo->h.dev), 3, MINOR(blkinfo->h.dev));
+                            } else
+                                printf("%s %*i", "root", digits(max_size), child->inode->size);
+
+                            putchar(' ');
+                        }
+
+                        if ((fmode & 0777) == 0777)
+                            printf("\033[30;42m");
+
+                        if (fmode & 0x80000000)
+                            printf("\033[94m");
+                        else if (fmode & 0x40000000)
+                            printf("\033[93m");
+
+                        printf("%s\033[37;40m", child->name);
+
+                        switch (mode) {
+                            case 0:
+                                printf("  ");
+                                break;
+
+                            case 1:
+                                putchar('\n');
+                                break;
+                        }
+
+                        child = child->next;
                     }
-
-                    child = child->next;
+                    
+                    if (!mode)
+                        putchar('\n');
                 }
-                
-                if (!mode)
-                    putchar('\n');
+            } else {
+                printf("%s\n", child->name);
             }
         } else if (!strcmp(cmd, "hexdump")) {
             char *address = strtok_r(NULL, " ", &strtok_buffer);
@@ -363,23 +475,41 @@ void __terminal_task(void) {
 
             if (!home) {
                 printf("/root not found\n");
+                kfree(input_buffer);
                 continue;
             }
 
             if (!create_file(home, name, 0, 0, 0))
                 printf("touch: failed to create regular file\n");
         } else if (!strcmp(cmd, "mount")) {
-            char *majs = strtok_r(NULL, " ", &strtok_buffer);
-            char *mins = strtok_r(NULL, " ", &strtok_buffer);
+            char *device_path = strtok_r(NULL, " ", &strtok_buffer);
+            char *orig_devpath = device_path;
+
+            struct dentry *cwd;
+
+            if (*device_path == '/') {
+                ++device_path;
+                cwd = &root_dentry;
+            } else
+                cwd = current_dentry();
+
+            struct dentry *device_file = cwd->d_ops->lookup(cwd, device_path);
+
+            if (errno == ENOENT || errno == ENOTDIR || !(device_file->inode->mode & 0x40000000) || ((device_file->inode->mode & 0x40000000) && device_path[strlen(device_path) - 1] == '/')) {
+                printf("mount: cannot lookup blkdev '%s'\n", orig_devpath);
+                kfree(input_buffer);
+                continue;
+            }
+
+            struct blk_device *blkdev = (struct blk_device *)device_file->inode->data;
+
             char *mountpoint = strtok_r(NULL, " ", &strtok_buffer);
 
-            int maj = atoi(majs);
-            int min = atoi(mins);
-
-            int result = mount(MAJMIN(maj, min), mountpoint);
+            int result = mount(blkdev->h.dev, mountpoint);
 
             if (result) {
-                printk("Failed to mount device %u:%u to %s\n", maj, min, mountpoint);
+                printk("mount: failed to mount blkdev %u:%u to %s\n", MAJOR(blkdev->h.dev), MINOR(blkdev->h.dev), mountpoint);
+                kfree(input_buffer);
                 continue;
             }
         } else if (!strcmp(cmd, "ping")) {

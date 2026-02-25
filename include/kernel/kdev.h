@@ -28,4 +28,5 @@ typedef uint16_t __kdev_t;
 };*/
 
 uint16_t __dev_name_to_kdev(char const *dev_name);
+char const *kdev2name(kdev_t kdev);
 //int32_t __add_kdev(__kdev_t k_kdev, struct super_block *super);

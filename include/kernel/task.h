@@ -39,3 +39,4 @@ void __yield(void);
 void __wake_on(bool *alarm);
 __attribute__((noreturn)) int32_t __exit(int32_t code);
 void __list_threads(void);
+int create_thread(char const *name, int32_t (* main)(int argc, char **argv), int argc, char **argv, void (*on_exit_handler)(int exit_code));

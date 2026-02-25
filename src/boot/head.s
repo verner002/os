@@ -104,5 +104,5 @@ halt:
 
 data:
 .smap_entries   dd 0
-.command_line db "root=/dev/fd0"
+.command_line db "root=/dev/hda"
 .command_line_end db 0x00

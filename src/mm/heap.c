@@ -13,6 +13,9 @@ typedef struct __chunk CHUNK;
 struct __chunk {
     // uint32_t magic = 0x0badbabe
     bool free;
+    uint8_t reserved1;
+    uint8_t reserved2;
+    uint8_t reserved3;
     uint32_t size;
     CHUNK
         *previous_chunk,

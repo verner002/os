@@ -17,7 +17,7 @@
 static uint32_t buffer_count = 0;
 static FILE *buffers[16];
 
-static int nonblocking_getc(FILE *stream) {
+/*static int nonblocking_getc(FILE *stream) {
     if (__test_set(&stream->__lock))
         return -1;
 
@@ -26,11 +26,11 @@ static int nonblocking_getc(FILE *stream) {
         return -1;
     }
 
-    /*if (!stream->__count) {
+    /if (!stream->__count) {
         // no data available
         errno = EAGAIN; // EWOULDBLOCK
         return -1;
-    }*/
+    }/
 
     --stream->__count;
 
@@ -38,7 +38,7 @@ static int nonblocking_getc(FILE *stream) {
     stream->__ptr = (stream->__ptr - stream->__base + 1) % stream->__size + stream->__base;
     __mutex_unlock(&stream->__lock);
     return c;
-}
+}*/
 
 int32_t __alloc_buffer(FILE *file, char const *name, uint32_t size) {
     if (!file)
@@ -81,7 +81,7 @@ int32_t __tty0(int argc, char **argv) {
             if (__test_set(&stream->__lock))
                 continue;
 
-            int c;
+            //int c;
 
             while (stream->__count) {
                 --stream->__count;

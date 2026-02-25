@@ -15,10 +15,12 @@
 */
 
 int mount(kdev_t kdev, char const *mountpoint) {
-    char *temp = (char *)kmalloc(sizeof(mountpoint) + sizeof(char));
+    char *temp = (char *)kmalloc(strlen(mountpoint) + sizeof(char));
 
-    if (!temp)
+    if (!temp) {
+        printf("failed to allocate memory for mountpoint string\n");
         return -1;
+    }
 
     strcpy(temp, mountpoint);
 
@@ -28,8 +30,10 @@ int mount(kdev_t kdev, char const *mountpoint) {
 
     kfree(temp);
 
-    if (!mountdir)
+    if (!mountdir) {
+        printf("%s not found\n", mountpoint);
         return -1; // mountdir not found
+    }
 
     // detect fs from superblock and then
     // decide which fs driver to use

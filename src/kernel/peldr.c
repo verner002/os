@@ -217,7 +217,7 @@ void *__parse_image(uint8_t *image) {
             memcpy((void *)virtual_address, (void *)section->raw_data_ptr, section->raw_data_size);
         else
             memset((void *)virtual_address, 0, virtual_size);
-
-        return (void *)image_base;
     }
+
+    return (void *)image_base;
 }

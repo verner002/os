@@ -16,6 +16,8 @@
  * TODO: use cache (flags)?
 */
 
+#include "kstdlib/stdio.h"
+
 int get_super(kdev_t kdev, struct super_block *super) {
     if (!super)
         return -1;
@@ -24,7 +26,7 @@ int get_super(kdev_t kdev, struct super_block *super) {
     // associated blk driver's functions to
     // read the super block
     struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
-    
+
     if (!driver)
         return -1; // no driver loaded
 
