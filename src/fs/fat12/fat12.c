@@ -28,34 +28,32 @@ static FAT12_RECORD *root_dir = NULL;
  * __fat12_read_fat
 */
 
-int __fat12_read_fat(__kdev_t kdev) {
+int __fat12_read_fat(kdev_t kdev) {
     struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
 
     if (!driver)
         return -1; // device driver not present
 
-    struct super_block super;
+    struct blk_device *device = (struct blk_device *)lookup_device(kdev);
 
-    int result = get_super(kdev, &super);
+    if (!device)
+        return -2;
 
-    if (result)
-        return result;
+    struct super_block *super = device->h.super;
 
-    struct fat12_info *info = (struct fat12_info *)super.fs_data;
+    struct fat12_info *info = (struct fat12_info *)super->fs_data;
 
     if (!fat) {
-        fat = (uint8_t *)kmalloc(info->sectors_per_fat * super.block_size);
+        fat = (uint8_t *)kmalloc(info->sectors_per_fat * super->block_size);
 
         if (!fat) {
-            kfree(super.fs_data);
+            kfree(super->fs_data);
             return -1;
         }
     }
 
     //return __fdc_read_sectors(1, 9, (uint32_t)fat);
-    result = driver->read(MINOR(kdev), info->reserved_sectors, info->sectors_per_fat, (char *)fat);
-
-    kfree(super.fs_data);
+    int result = driver->read(MINOR(kdev), info->reserved_sectors, info->sectors_per_fat, (char *)fat);
     return result;
 }
 
@@ -63,7 +61,7 @@ int __fat12_read_fat(__kdev_t kdev) {
  * __fat12_read_root_dir
 */
 
-int __fat12_read_root_dir(__kdev_t kdev) {
+int __fat12_read_root_dir(kdev_t kdev) {
     if (!update_root_dir)
         return 0;
 
@@ -72,33 +70,28 @@ int __fat12_read_root_dir(__kdev_t kdev) {
     if (!driver)
         return -1; // device driver not present
 
-    struct super_block super = {
-        .lock = false
-    };
+    struct blk_device *device = (struct blk_device *)lookup_device(kdev);
 
-    int result = get_super(kdev, &super);
+    if (!device)
+        return -2;
 
-    if (result)
-        return result;
+    struct super_block *super = device->h.super;
 
-    struct fat12_info *info = (struct fat12_info *)super.fs_data;
+    struct fat12_info *info = (struct fat12_info *)super->fs_data;
 
     if (!root_dir) {
         root_dir = (FAT12_RECORD *)kmalloc(info->number_of_entries * 32);
 
-        if (!root_dir) {
-            kfree(super.fs_data);
-            return -1;
-        }
+        if (!root_dir)
+            return -3;
     }
 
-    int error = driver->read(MINOR(kdev), info->sectors_per_fat * info->number_of_fats + info->reserved_sectors, (info->number_of_entries * 32) / super.block_size, (char *)root_dir);
+    int error = driver->read(MINOR(kdev), info->sectors_per_fat * info->number_of_fats + info->reserved_sectors, (info->number_of_entries * 32) / super->block_size, (char *)root_dir);
     //error = __fdc_read_sectors(9 * 2 + 1, (224 * 32) / 512, (uint32_t)root_dir);
 
     if (!error) // we don't need to update rootdir
         update_root_dir = false;
 
-    kfree(super.fs_data);
     return error;
 }
 
@@ -106,23 +99,19 @@ int __fat12_read_root_dir(__kdev_t kdev) {
  * __fat12_file_exists
 */
 
-bool __fat12_file_exists(__kdev_t kdev, char const *filename) {
+bool __fat12_file_exists(kdev_t kdev, char const *filename) {
     if (!root_dir)
         if (__fat12_read_root_dir(kdev))
             return false;
 
-    struct super_block super = {
-        .lock = false
-    };
+    struct blk_device *device = (struct blk_device *)lookup_device(kdev);
 
-    int result = get_super(kdev, &super);
-
-    if (result)
+    if (!device)
         return false;
 
-    int entries = ((struct fat12_info *)super.fs_data)->number_of_entries;
-    kfree(super.fs_data);
+    struct super_block *super = device->h.super;
 
+    int entries = ((struct fat12_info *)super->fs_data)->number_of_entries;
 
     for (uint32_t i = 0; i < entries; ++i) {
         FAT12_RECORD *record = &root_dir[i];
@@ -138,22 +127,20 @@ bool __fat12_file_exists(__kdev_t kdev, char const *filename) {
  * __fat12_load_file
 */
 
-int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer) {
+int32_t __fat12_load_file(kdev_t kdev, char const *filename, uint32_t buffer) {
     struct __block_dev_driver *driver = (struct __block_dev_driver *)driver_lookup(MAJOR(kdev));
 
     if (!driver)
         return -1; // device driver not present
 
-    struct super_block super = {
-        .lock = false
-    };
+    struct blk_device *device = (struct blk_device *)lookup_device(kdev);
 
-    int result = get_super(kdev, &super);
+    if (!device)
+        return -2;
 
-    if (result)
-        return result;
+    struct super_block *super = device->h.super;
 
-    struct fat12_info *info = (struct fat12_info *)super.fs_data;
+    struct fat12_info *info = (struct fat12_info *)super->fs_data;
 
     uint8_t minor = MINOR(kdev);
     int (* read)(uint8_t minor, uint32_t offset, uint32_t count, char *buffer) = driver->read;
@@ -166,7 +153,7 @@ int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer) 
             uint32_t last_opcode;
 
             do {
-                uint32_t lba = ((cluster - 2) * 1) + info->reserved_sectors + (info->number_of_fats * info->sectors_per_fat) + (info->number_of_entries * 32 / super.block_size);
+                uint32_t lba = ((cluster - 2) * 1) + info->reserved_sectors + (info->number_of_fats * info->sectors_per_fat) + (info->number_of_entries * 32 / super->block_size);
                 last_opcode = read(minor, lba, 1, (uint8_t *)buffer);
                 //last_opcode = __fdc_read_sectors(lba, 1, buffer);
                 uint32_t next_cluster = *(uint16_t *)(fat + cluster + cluster / 2);
@@ -175,14 +162,14 @@ int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer) 
 
                 next_cluster &= 0x00000fff;
                 cluster = next_cluster;
-                buffer += super.block_size;
+                buffer += super->block_size;
             } while (!last_opcode && cluster < 0x00000ff8);
 
             return last_opcode;
         }
     }
 
-    return -1;
+    return -3;
 }
 
 /**
@@ -414,7 +401,7 @@ uint16_t *__lfn_to_filename(VFAT_LFN_ENTRY *entry, uint32_t *ucs2_filename_lengt
  * __fat12_list_rootdir
 */
 
-int32_t __fat12_list_rootdir(__kdev_t kdev) {
+int32_t __fat12_list_rootdir(kdev_t kdev) {
     int result = __fat12_read_root_dir(kdev);
 
     if (result)
@@ -536,7 +523,7 @@ int32_t __fat12_list_rootdir(__kdev_t kdev) {
  * __fat12_list_root
 */
 
-int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev) {
+int __fat12_list_root(struct dentry *mountpoint, kdev_t kdev) {
     int result = __fat12_read_root_dir(kdev);
 
     if (result)
@@ -610,7 +597,7 @@ int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev) {
             continue;
         }
 
-        static char const *months[] = {
+        /*static char const *months[] = {
             "Jan",
             "Feb",
             "Mar",
@@ -632,9 +619,9 @@ int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev) {
         uint32_t hours = (time >> 11) & 0x1f;
 
         uint32_t day = date & 0x1f;
-        uint32_t month = (date >> 5) & 0x0f;
+        uint32_t month = (date >> 5) & 0x0f;*/
 
-        struct dentry *file = create_file(mountpoint, fname, 0, 0, ((record->attributes & FAT12_ATTRIBUTE_SUBDIR) ? 0x80000000 : 0x00000000) | 0755);
+        struct dentry *file = create_file(mountpoint, fname, 0, 0, ((record->attributes & FAT12_ATTRIBUTE_SUBDIR) ? S_IFDIR : S_IFREG) | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
         file->inode->size = record->file_size;
         kfree(fname);
     }

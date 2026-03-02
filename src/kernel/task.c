@@ -210,7 +210,7 @@ static void __thread_exit(void) {
  * __sched_init
 */
 
-int32_t __sched_init(struct dentry *root_dentry) {
+int32_t __sched_init(struct dentry *root) {
     struct __thread_control_block *kernel_thread = (struct __thread_control_block *)kmalloc(sizeof(struct __thread_control_block));
     
     if (!kernel_thread)
@@ -242,7 +242,7 @@ int32_t __sched_init(struct dentry *root_dentry) {
         return -1;
     }
 
-    init_fs->t_dentry = root_dentry;
+    init_fs->t_dentry = root;
 
     kernel_thread->t_name = "kernel";
     kernel_thread->t_parent_pid = -1;

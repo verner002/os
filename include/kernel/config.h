@@ -6,4 +6,4 @@
 
 #include "types.h"
 
-int32_t __parse_config(char const *config);
+int parse_config(char const *config);

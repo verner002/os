@@ -160,7 +160,7 @@ void *__parse_image(uint8_t *image) {
         SECTION *section = &section_table[i];
 
         // TODO: implement support for gcc long names
-        uint8_t *first_char = section->name;
+        char first_char = *section->name;
 
         if (first_char != 0 && first_char != '.') {
             pe_error = PE_ERROR_UNSUPPORTED_LONG_NAME;
@@ -174,11 +174,11 @@ void *__parse_image(uint8_t *image) {
 
         // TODO: use hash table
         if (
-            !strncmp(section_name, "comment", 7) ||
-            !strncmp(section_name, "edata\0\0", 7) ||
-            !strncmp(section_name, "idata\0\0", 7) ||
-            !strncmp(section_name, "rsrc\0\0\0", 7) ||
-            !strncmp(section_name, "tls\0\0\0\0", 7)
+            !strncmp((char const *)section_name, "comment", 7) ||
+            !strncmp((char const *)section_name, "edata\0\0", 7) ||
+            !strncmp((char const *)section_name, "idata\0\0", 7) ||
+            !strncmp((char const *)section_name, "rsrc\0\0\0", 7) ||
+            !strncmp((char const *)section_name, "tls\0\0\0\0", 7)
         )
             continue;
 

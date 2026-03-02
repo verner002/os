@@ -8,4 +8,4 @@
 
 #include "drivers/bus/pci.h"
 
-int32_t __ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer);
+int32_t ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer);

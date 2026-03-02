@@ -78,10 +78,10 @@ struct __attribute__((__packed__)) __vfat_lfn_entry {
  * Declarations
 */
 
-int32_t __fat12_read_fat(__kdev_t kdev);
-int32_t __fat12_read_root_dir(__kdev_t kdev);
-bool __fat12_file_exists(__kdev_t kdev, char const *filename);
-int32_t __fat12_load_file(__kdev_t kdev, char const *filename, uint32_t buffer);
-int32_t __fat12_list_rootdir(__kdev_t kdev);
+int32_t __fat12_read_fat(kdev_t kdev);
+int32_t __fat12_read_root_dir(kdev_t kdev);
+bool __fat12_file_exists(kdev_t kdev, char const *filename);
+int32_t __fat12_load_file(kdev_t kdev, char const *filename, uint32_t buffer);
+int32_t __fat12_list_rootdir(kdev_t kdev);
 //int32_t __fat12_list_dir(VFS_DIR_NODE *node);
-int __fat12_list_root(struct dentry *mountpoint, __kdev_t kdev);
+int __fat12_list_root(struct dentry *mountpoint, kdev_t kdev);

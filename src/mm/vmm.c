@@ -391,7 +391,7 @@ void *__alloc(uint32_t size) {
 */
 
 void *map_page(void *addr, uint32_t length, uint8_t flags) {
-    if (addr + length <= 768*1024*1024)
+    if (((uint32_t)addr + length) <= 768*1024*1024)
         return addr; // low memory is directly mapped
 
     // search, swap pages, search again, on fail sleep

@@ -30,7 +30,7 @@ extern THREAD *thread_current;
 
 __attribute__((interrupt)) void __schedule(void *frame);
 int32_t __create_thread(char const *name, int32_t (* main)(int argc, char **argv), uint32_t flags, uint32_t priority, void (*on_exit_handler)(int exit_code));
-int32_t __sched_init(struct dentry *root_dentry);
+int32_t __sched_init(struct dentry *root);
 int32_t __get_pid(void);
 struct dentry *current_dentry(void);
 int32_t __get_state(int32_t pid, uint32_t *state);

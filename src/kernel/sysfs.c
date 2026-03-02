@@ -12,7 +12,7 @@
 struct dentry *sysfs;
 
 int sysfs_init(struct dentry *root) {
-    struct inode *inode = get_inode(0, 0, 0x80000000 | 0555);
+    struct inode *inode = get_inode(0, 0, S_IFDIR | S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 
     if (!inode)
         return -1;
@@ -26,7 +26,7 @@ int sysfs_init(struct dentry *root) {
 }
 
 int sysfs_register_group(char const *name) {
-    struct inode *inode = get_inode(0, 0, 0x80000000);
+    struct inode *inode = get_inode(0, 0, S_IFDIR | S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
 
     if (!inode)
         return -1;

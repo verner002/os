@@ -151,6 +151,9 @@ int putchar(int c) {
 int __fprintf(FILE *stream, char const *s, ...);
 
 int __vfprintf(FILE *stream, char const *str, va_list args) {
+    if (!str)
+        return 0;
+    
     int err = 0;
     char c;
     int i = 0;
@@ -176,7 +179,16 @@ int __vfprintf(FILE *stream, char const *str, va_list args) {
                         break;
 
                     case 's': // string
-                        err = __fprintf(stream, va_arg(args, char const *));
+                        int length;
+
+                        if (lp) {
+                            length = va_arg(args, int);
+                            char *string = va_arg(args, char const *);
+
+                            for (int i = 0; i < length; ++i)
+                                internal_putc(*string ? *string++ : ' ', stream);
+                        } else
+                            err = __fprintf(stream, va_arg(args, char const *));
                         break;
 
                     case 'i': { // integer
@@ -307,7 +319,7 @@ int __vfprintf(FILE *stream, char const *str, va_list args) {
                         digits *= 2;
 
                         for (int j = 0; j < digits; ++j) {
-                            value = (value << 4) | (value >> 4 * digits - 4);
+                            value = (value << 4) | (value >> (4 * digits - 4));
                             int digit = (value & 15) + '0';
 
                             if (digit > '9')

@@ -6,7 +6,7 @@
 
 #include "macros.h"
 #include "drivers/block/82077aa.h"
-#include "hal/dev.h"
+#include "hal/device.h"
 #include "fs/file.h"
 
 static struct {
@@ -508,7 +508,7 @@ char const*__get_drive_type_string(DRIVE drive) {
     return names[(uint32_t)drive.type];
 }
 
-static int32_t __fdc_daemon(int argc, char **argv) {
+static __attribute__((noreturn)) int32_t __fdc_daemon(int argc, char **argv) {
     for (;;) {
         while (!fdc.motorOn);
 
@@ -530,22 +530,26 @@ static int32_t __fdc_daemon(int argc, char **argv) {
  * __ioctl
 */
 
-int32_t __ioctl(uint32_t cmd, uint8_t minor, void *data) {
+/*int32_t __ioctl(uint32_t cmd, uint8_t minor, void *data) {
     switch (cmd) {
         case 0:
             break;
 
         case 1:
-            
             break;
     }
-}
+
+    return -1;
+}*/
 
 /**
  * __init_fdc
 */
 
 int fdc_read_sectors(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
+    if (minor != 0)
+        return -1; // drive not found
+
     return __fdc_read_sectors(lba, count, (uint32_t)buffer);
 }
 
@@ -600,12 +604,6 @@ int32_t __init_fdc(void) {
         for(;;);
         return -1;
     }
-
-    /*if (__dev_add(MAJMIN(FLOPPY_MAJOR, 0), "fd0", NULL, NULL, NULL))
-        return -1;*/
-
-    /*if (!__register_driver("fdc", FLOPPY_MAJOR, &fdc_driver_type))
-        __exit(-1);*/
 
     return 0;
 }

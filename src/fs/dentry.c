@@ -52,7 +52,7 @@ static struct dentry *internal_dentry_lookup(struct dentry *node, char **strtok_
     if (!token)
         return node;
 
-    if (!(node->inode->mode & 0x80000000)) {
+    if (!(node->inode->mode & S_IFDIR)) {
         errno = ENOTDIR;
         return NULL;
     }

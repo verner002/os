@@ -9,4 +9,5 @@
 #include "types.h"
 #include "kernel/kdev.h"
 
-int mount(kdev_t dev, char const *mountpoint);
+int mount(char const *device, char const *mountpoint);
+char *lookup_mountpoint(kdev_t kdev);

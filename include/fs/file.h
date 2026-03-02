@@ -24,4 +24,6 @@
  *  32 | directory 
 */
 
+struct dentry *lookup_file(char const *path);
 struct dentry *create_file(struct dentry *parent, char const *name, uid_t uid, gid_t gid, mode_t mode);
+int stat(char const *path);

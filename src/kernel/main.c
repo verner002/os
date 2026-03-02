@@ -51,7 +51,7 @@
 #include "drivers/bus/pci.h"
 #include "drivers/block/ide.h"
 #include "kernel/kdev.h"
-#include "hal/dev.h"
+#include "hal/device.h"
 #include "kernel/config.h"
 
 #include "kernel/tty.h"
@@ -296,7 +296,7 @@ void __init_handlers(void) {
     __idt_set_handler(0x0e, 0x0008, IDT_ENTRY_PRESENT | IDT_32BIT_INTERRUPT_ENTRY, &__page_fault);
 }
 
-__kdev_t root_dev = NO_DEV;
+kdev_t root_dev = NO_DEV;
 char *envs[16];
 
 // use atomic operations
@@ -403,6 +403,10 @@ int main(void) {
     // RFC: do we always want to perform this? what if there
     //  is less than 768 MiB in the system?
 #ifdef CONFIG_FDC
+    // TODO: tell fdc-driver that there is a buffer in first
+    //  mib with limited size and that it has to perform
+    //  chunked read (read up to n sectors, copy them to user
+    //  buffer and again until all the sectors are read)
     fdc_buffer = e820_alloc(512*4, true, 1*1024*1024);
 
     if (!fdc_buffer) {
@@ -471,14 +475,14 @@ int main(void) {
     // TODO: map up to 768 MiB of memory to 0xc0000000 line
     // this allow use to always access some physical memory
     // without need to perform mapping (dependend od memory
-    // allocation itself), remaininf 256 MiB will be used
+    // allocation itself), remaining 256 MiB will be used
     // as dynamically mapped memory in case we run out of
     // statically mapped memory
     //
     // NOTE: let the kernel start at address 0? but we use executable
     // format for kernel image, that could be a problem
 
-    if (__parse_config((char const *)COMMAND_LINE))
+    if (parse_config((char const *)COMMAND_LINE))
         printk("kernel: warning: failed to parse command line\n");
 
     if (root_dev == NO_DEV) {
@@ -530,13 +534,13 @@ int main(void) {
     struct inode root_inode = {
         .uid = 0,
         .gid = 0,
-        .mode = 0x80000000 | 0755,
+        .mode = S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH,
         .child = NULL,
         .refs = 1,
         .i_ops = NULL,
         .size = 0,
         .super_block = NULL,
-        .data = NULL
+        .i_blkdev = NULL
     };
 
     struct dentry_ops root_ops = {
@@ -590,10 +594,12 @@ int main(void) {
     if (user_init())
         panic();
 
-    struct dentry *mnt = create_file(&root_dentry, "mnt", 0, 0, 0x80000000 | 0755);
-    struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, 0x800001ff);
-    struct dentry *home = create_file(&root_dentry, "root", 0, 0, 0x80000000 | 0750);
+    struct dentry *mnt = create_file(&root_dentry, "mnt", 0, 0, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    
+    struct dentry *home = create_file(&root_dentry, "root", 0, 0, S_IFDIR | S_IRWXU | S_IRGRP | S_IXGRP);
     home->inode->size = 4096;
+
+    struct dentry *tmp = create_file(&root_dentry, "tmp", 0, 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
 
     /*if (__init_buses()) // register "bus" group
         panic();*/

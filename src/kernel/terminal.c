@@ -14,7 +14,7 @@
 
 #include "fs/file.h"
 
-#include "hal/dev.h"
+#include "hal/device.h"
 #include "kernel/mount.h"
 
 extern void panic(void);
@@ -135,8 +135,8 @@ int __terminal_task(int argc, char **argv) {
     wake_task = __get_pid();
     printk("\033[33mterminal:\033[37m terminal daemon running, PID=%u\n", __get_pid());
 
-    char *login;
-    char *password;
+    char const *login;
+    char const *password;
     int result;
 
     do {
@@ -237,7 +237,7 @@ int __terminal_task(int argc, char **argv) {
                         // no entry found
                         printf("ls: cannot access '%s': No such file or directory\n", path);
                         error = true;
-                    } else if (errno == ENOTDIR || (!(child->inode->mode & 0x80000000) && s[strlen(s) - 1] == '/')) {
+                    } else if (errno == ENOTDIR || (!(child->inode->mode & S_IFDIR) && s[strlen(s) - 1] == '/')) {
                         // entry is not a directory or
                         // there is a slash at the end
                         // of a file name
@@ -252,7 +252,7 @@ int __terminal_task(int argc, char **argv) {
                 continue;
             }
 
-            if (child->inode->mode & 0x80000000) {
+            if (child->inode->mode & S_IFDIR) {
                 child = child->inode->child;
 
                 if (child) {
@@ -261,7 +261,7 @@ int __terminal_task(int argc, char **argv) {
                     struct dentry *temp = child;
 
                     while (temp) {
-                        if (((temp->inode->mode & 0x40000000) || (temp->inode->mode & 0x20000000)) && 6 > max_size)
+                        if (((temp->inode->mode & S_IFCHR) || (temp->inode->mode & S_IFBLK)) && 6 > max_size)
                             max_size = 9999999;
                         else if (temp->inode->size > max_size)
                             max_size = temp->inode->size;
@@ -273,31 +273,29 @@ int __terminal_task(int argc, char **argv) {
                         mode_t fmode = child->inode->mode;
 
                         if (mode == 1) {
-                            if (fmode & 0x80000000)
+                            if (fmode & S_IFDIR)
                                 putchar('d');
-                            else if (fmode & 0x40000000)
-                                putchar('b');
-                            else if (fmode & 0x20000000)
+                            else if (fmode & S_IFCHR)
                                 putchar('c');
+                            else if (fmode & S_IFBLK)
+                                putchar('b');
                             else
                                 putchar('-');
 
-                            putchar(fmode & 0400 ? 'r' : '-');
-                            putchar(fmode & 0200 ? 'w' : '-');
-                            putchar(fmode & 0100 ? 'x' : '-');
-                            putchar(fmode & 0040 ? 'r' : '-');
-                            putchar(fmode & 0020 ? 'w' : '-');
-                            putchar(fmode & 0010 ? 'x' : '-');
-                            putchar(fmode & 0004 ? 'r' : '-');
-                            putchar(fmode & 0002 ? 'w' : '-');
-                            putchar(fmode & 0001 ? 'x' : '-');
+                            putchar(fmode & S_IRUSR ? 'r' : '-');
+                            putchar(fmode & S_IWUSR ? 'w' : '-');
+                            putchar(fmode & S_IXUSR ? 'x' : '-');
+                            putchar(fmode & S_IRGRP ? 'r' : '-');
+                            putchar(fmode & S_IWGRP ? 'w' : '-');
+                            putchar(fmode & S_IXGRP ? 'x' : '-');
+                            putchar(fmode & S_IROTH ? 'r' : '-');
+                            putchar(fmode & S_IWOTH ? 'w' : '-');
+                            putchar(fmode & S_IXOTH ? 'x' : '-');
 
                             printf(" %s ", "root");
 
-                            if ((fmode & 0x40000000) || (fmode & 0x20000000)) {
-                                struct blk_device *blkinfo = (struct blk_device *)child->inode->data;
-
-                                printf("%s %*i %*i", "disk", 3, MAJOR(blkinfo->h.dev), 3, MINOR(blkinfo->h.dev));
+                            if ((fmode & S_IFCHR) || (fmode & S_IFBLK)) {
+                                printf("%s %*i %*i", "disk", 3, MAJOR(child->inode->kdev), 3, MINOR(child->inode->kdev));
                             } else
                                 printf("%s %*i", "root", digits(max_size), child->inode->size);
 
@@ -307,9 +305,9 @@ int __terminal_task(int argc, char **argv) {
                         if ((fmode & 0777) == 0777)
                             printf("\033[30;42m");
 
-                        if (fmode & 0x80000000)
+                        if (fmode & S_IFDIR)
                             printf("\033[94m");
-                        else if (fmode & 0x40000000)
+                        else if ((fmode & S_IFCHR) || (fmode & S_IFBLK))
                             printf("\033[93m");
 
                         printf("%s\033[37;40m", child->name);
@@ -396,7 +394,7 @@ int __terminal_task(int argc, char **argv) {
                 char buffer[16];
 
                 for (uint32_t i = 0; i < (max % 16); ++i) {
-                    uint32_t index = (max & 0xfffffff0) + i;
+                    //uint32_t index = (max & 0xfffffff0) + i;
                     uint8_t data = ((uint8_t *)addr)[i];
 
                     buffer[i] = data;
@@ -441,10 +439,25 @@ int __terminal_task(int argc, char **argv) {
                 continue;
             }
 
+            printf("NAME MAJ:MIN MOUNTPOINTS\n");
+
+            int max_name = 4;
+            int max_majmin = 7;
+
+            for (int i = 0; i < count; ++i) {
+                struct device *device = list[i];
+                
+                if (strlen(device->type->name) > max_name)
+                    max_name = strlen(device->type->name);
+                
+                if ((log10(MAJOR(device->dev)) + log10(MINOR(device->dev)) + 3) > max_majmin)
+                    max_majmin = log10(MAJOR(device->dev)) + log10(MINOR(device->dev)) + 3;
+            }
+
             for (int i = 0; i < count; ++i) {
                 struct device *device = list[i];
                 kdev_t majmin = device->dev;
-                printf("dev: id=%i, major=%u, minor=%u\n", i, MAJOR(majmin), MINOR(majmin));
+                printf("%*s %*i:%i %s\n", max_name, device->type->name, max_majmin - log10(MINOR(device->dev)) - 2, MAJOR(device->dev), MINOR(device->dev), lookup_mountpoint(majmin));
             }
 
             //printk("NAME     DRIVER    TYPE      MOUNTPOINT\n");
@@ -483,35 +496,9 @@ int __terminal_task(int argc, char **argv) {
                 printf("touch: failed to create regular file\n");
         } else if (!strcmp(cmd, "mount")) {
             char *device_path = strtok_r(NULL, " ", &strtok_buffer);
-            char *orig_devpath = device_path;
-
-            struct dentry *cwd;
-
-            if (*device_path == '/') {
-                ++device_path;
-                cwd = &root_dentry;
-            } else
-                cwd = current_dentry();
-
-            struct dentry *device_file = cwd->d_ops->lookup(cwd, device_path);
-
-            if (errno == ENOENT || errno == ENOTDIR || !(device_file->inode->mode & 0x40000000) || ((device_file->inode->mode & 0x40000000) && device_path[strlen(device_path) - 1] == '/')) {
-                printf("mount: cannot lookup blkdev '%s'\n", orig_devpath);
-                kfree(input_buffer);
-                continue;
-            }
-
-            struct blk_device *blkdev = (struct blk_device *)device_file->inode->data;
-
             char *mountpoint = strtok_r(NULL, " ", &strtok_buffer);
 
-            int result = mount(blkdev->h.dev, mountpoint);
-
-            if (result) {
-                printk("mount: failed to mount blkdev %u:%u to %s\n", MAJOR(blkdev->h.dev), MINOR(blkdev->h.dev), mountpoint);
-                kfree(input_buffer);
-                continue;
-            }
+            mount(device_path, mountpoint);
         } else if (!strcmp(cmd, "ping")) {
             char *target = strtok_r(NULL, " ", &strtok_buffer);
 

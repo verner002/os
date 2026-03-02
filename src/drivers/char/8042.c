@@ -19,13 +19,6 @@ static PS2_DEVICE
     *ps2_port_a,
     *ps2_port_b;
 
-static PS2_DEVICE bla = (PS2_DEVICE){
-    .bytes = {},
-    .length = 0,
-    .name = "AT Keyboard",
-    .type = PS2_DEVICE_KEYBOARD
-};
-
 static PS2_DEVICE known_devices[] = {
     (PS2_DEVICE){
         .bytes = {},

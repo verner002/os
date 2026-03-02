@@ -226,7 +226,7 @@ int32_t __pci_init(void) {
                     );
                 
                     // enable interrupts and bus mastering
-                    __outd(PCI_CONFIG_DATA, (((uint32_t)init_header->h_status << 16) | init_header->h_command) & ~(1 << 10) | 0x00000004);
+                    __outd(PCI_CONFIG_DATA, ((((uint32_t)init_header->h_status << 16) | init_header->h_command) & ~(1 << 10)) | 0x00000004);
                     
                     dev_init(bus, init_header);
                 }

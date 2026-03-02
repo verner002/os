@@ -55,6 +55,6 @@ int get_super(kdev_t kdev, struct super_block *super) {
  * writes super block to the device
 */
 
-int32_t put_super(__kdev_t dev, struct super_block *super) {
+int32_t put_super(kdev_t dev, struct super_block *super) {
     return -1;
 }

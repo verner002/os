@@ -9,17 +9,17 @@
 #include "kernel/kdev.h"
 #include "kstdlib/stdio.h"
 
-extern __kdev_t root_dev;
+extern kdev_t root_dev;
 extern char *envs[16];
 
 /**
- * __parse_config
+ * parse_config
  * 
  * TODO: implement some kind of `__eat_line' function
  *  for error reporting
 */
 
-int32_t __parse_config(char const *config) {
+int parse_config(char const *config) {
     uint32_t line = 1;
     uint32_t column = 1;
     char *ptr = config;
@@ -57,7 +57,12 @@ int32_t __parse_config(char const *config) {
                         printk("overwritting root dev\n");
                     else
                         printk("configuring root\n");*/
-                } else {
+                } /*else if (!strncmp(origin, "echo", 4)) {
+                    column += ptr - origin;
+
+                    while (*ptr != '\n' && *ptr != '\0')
+                        putchar(*ptr++);
+                } */else {
                     column += ptr - origin;
 
                     while (*ptr != '\n' && *ptr != '\0')
@@ -80,7 +85,7 @@ int32_t __parse_config(char const *config) {
                 char *dev_name = ptr;
 
                 // dev name (lower-case chars and digits)
-                while (*ptr >= 'a' && *ptr <= 'z' || *ptr >= '0' && *ptr <= '9')
+                while ((*ptr >= 'a' && *ptr <= 'z') || (*ptr >= '0' && *ptr <= '9'))
                     ++ptr;
 
                 if (ptr == dev_name) {
@@ -111,7 +116,7 @@ int32_t __parse_config(char const *config) {
                 } else
                     column += ptr - origin;
 
-                root_dev = __dev_name_to_kdev(dev_name);
+                root_dev = name2kdev(dev_name);
                 break;
             }
 

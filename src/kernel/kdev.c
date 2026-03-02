@@ -10,45 +10,60 @@
 #include "mm/heap.h"
 #include "kstdlib/string.h"
 
-//struct __kdev *kdev_top;
+/**
+ * ATTENTION: the list must be sorted by kdev
+*/
 
-static char const *dev_names[] = {
-    "fd0",
-    "hda",
-    "hdb",
-    "hdc",
-    "hdd"
+static struct kdev_name {
+    kdev_t kdev;
+    char const *name;
+} kdev_names[] = {
+    { .kdev = MAJMIN(FLOPPY_MAJOR, 0), .name = "fd0" },
+    { .kdev = MAJMIN(HARDDISK_MAJOR, 0), .name = "hda" },
+    { .kdev = MAJMIN(HARDDISK_MAJOR, 1), .name = "hdb" },
+    { .kdev = MAJMIN(HARDDISK_MAJOR, 2), .name = "hdc" },
+    { .kdev = MAJMIN(HARDDISK_MAJOR, 3), .name = "hdd" }
 };
 
-static uint16_t dev_nums[] = {
-    0x0200,
-    0x0300,
-    0x0301,
-    0x0302,
-    0x0303
-};
+/**
+ * name2kdev 
+*/
 
-uint16_t __dev_name_to_kdev(char const *dev_name) {
-    uint32_t devs_count = sizeof(dev_names) / sizeof(char *);
+kdev_t name2kdev(char const *name) {
+    for (uint32_t i = 0; i < sizeofarray(kdev_names); ++i) {
+        struct kdev_name *kdev_name = &kdev_names[i];
 
-    for (uint32_t i = 0; i < devs_count; ++i)
-        if (!strcmp(dev_names[i], dev_name))
-            return dev_nums[i];
+        if (!strcmp(name, kdev_name->name))
+            return kdev_name->kdev;
+    }
 
     return NO_DEV;
 }
 
-char const *kdev2name(kdev_t kdev) {
-    uint32_t devs_count = sizeof(dev_names) / sizeof(char *);
+/**
+ * kdev2name
+*/
 
-    for (uint32_t i = 0; i < devs_count; ++i)
-        if (kdev == dev_nums[i])
-            return dev_names[i];
+char const *kdev2name(kdev_t kdev) {
+    int left = 0;
+    int right = sizeofarray(kdev_names) - 1;
+
+    while (left <= right) {
+        int middle = (left + right) / 2;
+        struct kdev_name *kdev_name = &kdev_names[middle];
+
+        if (kdev < kdev_name->kdev)
+            right = middle - 1;
+        else if (kdev > kdev_name->kdev)
+            left = middle + 1;
+        else
+            return kdev_name->name;
+    }
 
     return NULL;
 }
 
-/*int32_t __add_kdev(__kdev_t k_kdev, struct super_block *super) {
+/*int32_t __add_kdev(kdev_t k_kdev, struct super_block *super) {
     struct __kdev *kdev = (struct __kdev *)kmalloc(sizeof(struct __kdev));
 
     if (!kdev)
