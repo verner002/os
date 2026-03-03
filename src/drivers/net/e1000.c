@@ -548,10 +548,10 @@ void __e1000_set_ip(uint32_t ip) {
 }
 
 /**
- * __init_e1000
+ * e1000_init
 */
 
-int32_t __init_e1000(struct __bus *b, struct __pci_header *h) {
+int e1000_init(struct __bus *b, struct __pci_header *h) {
     printf("        Initializing...\n");
 
     if (init) {

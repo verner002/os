@@ -11,6 +11,10 @@
 #include "drivers/ports.h"
 #include "kernel/kdev.h"
 #include "hal/device.h"
+#include "drivers/bus/pci.h"
+
+#define IDE_MAX_CHANNELS 2
+#define IDE_MAX_DRIVES_PER_CHANNEL 2
 
 #define IDE_CHANNEL_0 0x00
 #define IDE_CHANNEL_1 0x01
@@ -76,6 +80,11 @@
 
 #define IDE_LBA48_ADDRESSING (1 << 26)
 
+#define IDE_DMA_SUPPORTED 0x0100
+#define IDE_PIO_SUPPORTED 0x0200
+
+#define IDE_MODE_PIO_48 0x0400
+
 struct __ide_channel_regs {
     uint16_t io_base;
     uint16_t ctrl_base;
@@ -109,7 +118,7 @@ static volatile bool irq_invoked;
 */
 
 void ide_write(uint8_t channel, uint8_t reg, uint8_t data) {
-    if (reg > 0x07 && reg < 0x0C)
+    if (reg > 0x07 && reg < 0x0c)
         ide_write(channel, IDE_CONTROL_REG, 0x80 | channels[channel].ints_dis);
     
     if (reg < 0x08)
@@ -132,7 +141,7 @@ void ide_write(uint8_t channel, uint8_t reg, uint8_t data) {
 uint8_t ide_read(uint8_t channel, uint8_t reg) {
     uint8_t data = 0;
 
-    if (reg > 0x07 && reg < 0x0C)
+    if (reg > 0x07 && reg < 0x0c)
         ide_write(channel, IDE_CONTROL_REG, 0x80 | channels[channel].ints_dis);
 
     else if (reg < 0x08)
@@ -177,8 +186,8 @@ void ide_strncpy(char *dest, char const *src, int len) {
 void ide_identify_drives(void) {
     printf("Identifying drives...\n");
 
-    for (uint8_t ch = 0; ch < 2; ++ch) {
-        for (uint8_t drv = 0; drv < 2; ++drv) {
+    for (uint8_t ch = 0; ch < IDE_MAX_CHANNELS; ++ch) {
+        for (uint8_t drv = 0; drv < IDE_MAX_DRIVES_PER_CHANNEL; ++drv) {
             drives[drvs_cnt].type = 0;
 
             ide_write(ch, IDE_HDDEVSEL_REG, 0xa0 | (drv << 4));
@@ -292,16 +301,16 @@ void ide_identify_drives(void) {
 
             uint8_t mode;
 
-            if (drives[drvs_cnt].capabilities & 0x0200) {
-                if (drives[drvs_cnt].command_sets & 0x0400)
-                    mode = 2;
+            if (drives[drvs_cnt].capabilities & IDE_PIO_SUPPORTED) {
+                if (drives[drvs_cnt].command_sets & IDE_MODE_PIO_48)
+                    mode = 2; // pio48
                 else
-                    mode = 1;
+                    mode = 1; // pio28
             } else
-                mode = 0;
+                mode = 0; // chs
 
             drives[drvs_cnt].mode = mode;
-            drives[drvs_cnt].dma = drives[drvs_cnt].capabilities & 0x0100;
+            drives[drvs_cnt].dma = drives[drvs_cnt].capabilities & IDE_DMA_SUPPORTED;
 
             printf("Found %s %s %s\n", (char *[]){ "primary", "secondary" }[ch], (char *[]){ "master", "slave" }[drv], (char *[]){ "Unknown", "PATA", "SATA", "PATAPI", "SATAPI" }[type]);
             printf(" - Model      : %s\n", drives[drvs_cnt].model);
@@ -318,7 +327,8 @@ void ide_identify_drives(void) {
                 printf("Failed\n");
                 continue;
             }
-            
+
+            printf("Ok\n");
             ++drvs_cnt;
         }
     }
@@ -355,17 +365,17 @@ int32_t ide_poll(uint8_t channel, bool check_state) {
  * ide_read_blocks
 */
 
-int32_t ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
+int ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffer) {
     // count must be a positive number
     if (!count)
-        return -1;
+        return -1; // invalid parameter
 
     if (minor > 3)
         return -2; // invalid drive number
     
     struct ide_drive *drv = &drives[minor];
 
-    if ((uint64_t)lba + count - 1 > (uint64_t)drv->last_sector)
+    if (((uint64_t)lba + count - 1) > (uint64_t)drv->last_sector)
         return -3; // out of disk space
 
     uint8_t mode = drv->mode;
@@ -444,10 +454,10 @@ int32_t ide_read_blocks(uint8_t minor, uint32_t lba, uint32_t count, char *buffe
 }
 
 /**
- * __init_ide
+ * ide_init
 */
 
-int32_t __init_ide(struct __bus *b, struct __pci_header *h) {
+int ide_init(struct __pci_header *h) {
     static bool initialized = false;
 
     printf("        Initializing...\n");

@@ -85,7 +85,7 @@ int parse_config(char const *config) {
                 char *dev_name = ptr;
 
                 // dev name (lower-case chars and digits)
-                while ((*ptr >= 'a' && *ptr <= 'z') || (*ptr >= '0' && *ptr <= '9'))
+                while ((*ptr >= 'a' && *ptr <= 'z') || (*ptr >= '0' && *ptr <= '9') || *ptr == '-' || *ptr == '_')
                     ++ptr;
 
                 if (ptr == dev_name) {

@@ -16,8 +16,8 @@
 #define PCI_HEADER_TYPE 0x7f
 #define PCI_HEADER_TYPE_GENERAL_DEVICE 0x00
 
-extern int32_t __init_ide(struct __bus *b, struct __pci_header *h);
-extern int32_t __init_e1000(struct __bus *b, struct __pci_header *h);
+extern int ide_init(struct __pci_header *h);
+extern int e1000_init(struct __pci_header *h);
 
 struct __class {
     uint8_t c_id;
@@ -29,7 +29,7 @@ struct __class {
 struct __subclass {
     uint8_t s_id;
     char *s_name;
-    int32_t (* s_init)(struct __bus *b, struct __pci_header *h);
+    int32_t (* s_init)(struct __pci_header *h);
 };
 
 /*struct __pci_device {
@@ -47,14 +47,14 @@ static struct __subclass const unclassified[] = {
 };
 
 static struct __subclass const mass_storage_controller[] = {
-    { 1, "IDE controller", &__init_ide },
+    { 1, "IDE controller", &ide_init },
     { 2, "Floppy disk controller", NULL },
-    { 5, "ATA controller", NULL /*&__init_ide*/ },
-    { 6, "SATA controller", NULL /*&__init_ide*/ }
+    { 5, "ATA controller", NULL /*&ide_init*/ },
+    { 6, "SATA controller", NULL /*&ide_init*/ }
 };
 
 static struct __subclass const network_controller[] = {
-    { 0, "Ethernet controller", NULL /*&__init_e1000*/ }
+    { 0, "Ethernet controller", NULL, &e1000_init }
 };
 
 static struct __subclass const display_controller[] = {
@@ -131,13 +131,6 @@ uint32_t __pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offse
 */
 
 int32_t __pci_init(void) {
-    struct __bus *bus = __register_bus("pci", NULL);
-
-    if (!bus) {
-        printk("pci: error: failed to register bus\n");
-        return -1;
-    }
-
     for (uint16_t bus_i = 0; bus_i < 256; ++bus_i) {
         for (uint8_t dev_i = 0; dev_i < 32; ++dev_i) {
             // TODO: initialize struct __dev here (class for device
@@ -158,7 +151,7 @@ int32_t __pci_init(void) {
                     continue;
 
                 char *dev_name;
-                int32_t (* dev_init)(struct __bus *b, struct __pci_header *h) = NULL;
+                int32_t (* dev_init)(struct __pci_header *h) = NULL;
 
                 struct __class *dev_class = NULL;
 
@@ -228,7 +221,7 @@ int32_t __pci_init(void) {
                     // enable interrupts and bus mastering
                     __outd(PCI_CONFIG_DATA, ((((uint32_t)init_header->h_status << 16) | init_header->h_command) & ~(1 << 10)) | 0x00000004);
                     
-                    dev_init(bus, init_header);
+                    dev_init(init_header);
                 }
 
                 if (!(dev_header.h_header_type & PCI_MULTIFUNCTION))

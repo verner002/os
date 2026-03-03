@@ -139,6 +139,8 @@ int __terminal_task(int argc, char **argv) {
     char const *password;
     int result;
 
+    printf("\033[93mHINT:\033[37m root root\n");
+
     do {
         do {
             printf("login: ");
@@ -439,8 +441,6 @@ int __terminal_task(int argc, char **argv) {
                 continue;
             }
 
-            printf("NAME MAJ:MIN MOUNTPOINTS\n");
-
             int max_name = 4;
             int max_majmin = 7;
 
@@ -453,6 +453,8 @@ int __terminal_task(int argc, char **argv) {
                 if ((log10(MAJOR(device->dev)) + log10(MINOR(device->dev)) + 3) > max_majmin)
                     max_majmin = log10(MAJOR(device->dev)) + log10(MINOR(device->dev)) + 3;
             }
+
+            printf("%*s %*s MOUNTPOINTS\n", max_name, "NAME", max_majmin, "MAJ:MIN");
 
             for (int i = 0; i < count; ++i) {
                 struct device *device = list[i];
