@@ -16,7 +16,7 @@
  * Declarations
 */
 
-int32_t max(int32_t n, int32_t m);
+int max(int n, int m);
 uint32_t log2b(uint32_t n);
 uint32_t log10(uint32_t i);
 int digits(int n);

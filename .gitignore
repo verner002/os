@@ -5,3 +5,4 @@ bin/
 old/
 fdd.img
 disk.img
+qemu.log

@@ -15,4 +15,5 @@ struct __file {
     char *__fname; // filename
     bool __lock; // mutex
     bool __ready; // ready flag
+    int fid;
 };

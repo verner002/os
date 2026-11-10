@@ -1,53 +1,48 @@
-#
-# @file Makefile
-# @author verner002
-# @date 18/09/2025
-#
+include config.mk
 
-MODULES := $(shell find ./src -mindepth 1 -maxdepth 1 -type d)
-OBJECTS ?= $(shell find ./build -name "*.o" -not -type d)
-MOUNT := $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
+CFLAGS			+= -Iinclude
 
-all: directories modules link image
+SRCS_C			:=
+SRCS_S			:=
 
-directories:
-	mkdir -p ./bin
-	mkdir -p ./build
+MOUNT_POINT		:= $(shell tr -dc A-Za-z0-9 </dev/urandom | head -c 13)
 
-modules:
-	for module in $(MODULES) ; do \
-		$(MAKE) -C $$module ; \
-	done ;
+include boot/boot.mk
+include kernel/kernel.mk
 
-link:
-#	$(CL) $(OBJECTS) --oformat=pei-i386 -m i386pe --image-base 0x80000000 -e entry -o ./bin/kernel -g
-	$(CL) -T./link.ld $(OBJECTS) -m elf_i386 -o ./bin/image
-#	$(CL) -T./lds $(OBJECTS) -m elf_i386 -o ./bin/kernel
-#	cat ./bin/head > ./bin/image
-#	cat ./bin/kernel >> ./bin/image
+OBJS_C			:= $(patsubst %.c,$(BUILD_DIR)/%.o,$(SRCS_C))
+OBJS_S			:= $(patsubst %.s,$(BUILD_DIR)/%.o,$(SRCS_S))
+OBJS			:= $(OBJS_C) $(OBJS_S)
+DEPS			:= $(OBJS_C:.o=.d)
 
-image:
-	$(DD) if=/dev/zero of=./fdd.img bs=512 count=2880
-	$(MKFSFAT) -R 5 ./fdd.img
-	$(DD) if=./bin/boot of=./fdd.img bs=512 count=1 conv=notrunc
-	$(DD) if=./bin/setup of=./fdd.img bs=512 seek=1 count=4 conv=notrunc
-	sudo mkdir /mnt/$(MOUNT)
-	sudo mount ./fdd.img /mnt/$(MOUNT)
-	sudo mkdir /mnt/$(MOUNT)/etc
-	sudo cp ./bin/image /mnt/$(MOUNT)/image
-	ls -l /mnt/$(MOUNT)
-	sudo umount /mnt/$(MOUNT)
-	sudo rm -rf /mnt/$(MOUNT)
+.PHONY: all clean floppy-image
 
-.PHONY: image
+all: $(TARGET) floppy-image
+
+$(TARGET): $(ARCH_OBJS) $(OBJS)
+	@mkdir -p $(dir $@)
+	$(LD) $(LDFLAGS) -o $@ $(OBJS)
+
+$(BUILD_DIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: %.s
+	@mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
+floppy-image:
+	@dd status=none if=/dev/zero of=fdd.img bs=512 count=2880
+	@sudo mkfs.fat -f 2 -F 12 -s 1 -R 5 fdd.img
+	@dd status=none if=build/boot/boot.bin of=fdd.img bs=512 count=1 conv=notrunc
+	@dd status=none if=build/boot/setup.bin of=fdd.img bs=512 seek=1 count=4 conv=notrunc
+	@sudo mkdir -p /mnt/$(MOUNT_POINT)
+	@sudo mount fdd.img /mnt/$(MOUNT_POINT)
+	@sudo cp build/image /mnt/$(MOUNT_POINT)
+	@sudo umount /mnt/$(MOUNT_POINT)
+	@sudo rm -rf /mnt/$(MOUNT_POINT)
 
 clean:
-	$(RM) -r ./build
-	$(RM) -r ./bin
-	$(RM) ./fdd.img
+	rm -rf $(BUILD_DIR)
 
-.PHONY: clean
-
-CL ?= ld
-DD ?= dd status=none
-MKFSFAT ?= sudo mkfs.fat -f 2 -F 12 -s 1
+-include $(DEPS)

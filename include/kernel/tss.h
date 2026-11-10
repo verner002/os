@@ -1,0 +1,56 @@
+/**
+ * @file tss.h
+ * @author verner002
+ * @date 23/04/2026
+*/
+
+#pragma once
+
+#include "kernel/types.h"
+
+struct __attribute__((packed)) tss {
+    uint16_t link_old_tss;
+    uint16_t reserved1;
+    uint32_t esp0;
+    uint16_t ss0;
+    uint16_t reserved2;
+    uint32_t esp1;
+    uint16_t ss1;
+    uint16_t reserved3;
+    uint32_t esp2;
+    uint16_t ss2;
+    uint16_t reserved4;
+    uint32_t reserved5;
+    uint32_t eip;
+    uint32_t eflags;
+    uint32_t eax;
+    uint32_t ecx;
+    uint32_t edx;
+    uint32_t ebx;
+    uint32_t esp;
+    uint32_t ebp;
+    uint32_t esi;
+    uint32_t edi;
+    uint16_t es;
+    uint16_t reserved6;
+    uint16_t cs;
+    uint16_t reserved7;
+    uint16_t ss;
+    uint16_t reserved8;
+    uint16_t ds;
+    uint16_t reserved9;
+    uint16_t fs;
+    uint16_t reserved10;
+    uint16_t gs;
+    uint16_t reserved11;
+    uint16_t ldt;
+    uint16_t reserved12;
+    uint16_t trap           : 1;
+    uint16_t reserved13     : 15;
+    uint16_t io_map_base;
+};
+
+extern volatile struct tss tss;
+
+void flush_tss(void);
+void tss_set_esp0(uint32_t stack);

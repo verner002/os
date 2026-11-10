@@ -4,6 +4,4 @@
  * @date 02/09/2025
 */
 
-#include "types.h"
-
-int parse_config(char const *config);
+int parse_config(char *config);

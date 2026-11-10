@@ -6,9 +6,25 @@
 
 #pragma once
 
-#include "types.h"
+#include <kernel/process.h>
 
-extern bool __tty0_mutex;
+#define IBUFLEN         16
+#define OBUFLEN         16
 
-int32_t __tty_init(void);
-int32_t __tty_put(char const *data);
+#define EOF             -1
+
+struct termio {
+    char *ihead;
+    char *itail;
+    char ibuf[IBUFLEN];
+    struct semaphore isem;
+    char *ohead;
+    char *otail;
+    char obuf[OBUFLEN];
+    struct semaphore osem;
+    int eof;
+    char eofc;
+    void (* kickout)(void);
+};
+
+extern struct termio tty_table[];

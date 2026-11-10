@@ -10,4 +10,4 @@
 #include "kernel/kdev.h"
 
 int mount(char const *device, char const *mountpoint);
-char *lookup_mountpoint(kdev_t kdev);
+char const *lookup_mountpoint(kdev_t kdev);

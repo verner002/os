@@ -6,9 +6,26 @@
 
 #pragma once
 
-#include "types.h"
-
 typedef int atomic_t;
+
+static inline void memory_barrier(void) {
+    asm volatile ("" ::: "memory");
+}
+
+#ifdef CONFIG_I586
+static inline void memory_fence(void) {
+    // must be at least compiler memory barrier
+    asm volatile ("mfence" ::: "memory");
+}
+
+static inline void memory_load_fence(void) {
+    asm volatile ("lfence" ::: "memory");
+}
+
+static inline void memory_store_fence(void) {
+    asm volatile ("sfence" ::: "memory");
+}
+#endif
 
 static inline void atomic_increment(atomic_t *ptr) {
     asm volatile (
@@ -41,7 +58,7 @@ static inline int atomic_fetch_add(atomic_t *ptr, int value) {
 
 static inline int atomic_xchg(atomic_t *ptr, int value) {
     asm volatile (
-        "xchg %0, %1" // no lock prefix needed
+        "lock xchg %0, %1" // no lock prefix needed
         : "+m" (*ptr), "+r" (value)
         : // no input-only
         : "memory"

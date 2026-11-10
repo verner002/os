@@ -1,23 +1,17 @@
 /**
- * Macros
- * 
- * Author: verner002
+ * @file macros.h
+ * @author verner002
+ * @date 19/03/2026
 */
 
 #pragma once
 
-/**
- * Includes
-*/
-
 #include "kstdlib/stdio.h"
-
-/**
- * Macros
-*/
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+
+#define ALIGN_UP(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 
 #define swap_bytes16(x) ((((x) >> 8) & 0xff) | (((x) << 8) & 0xff00))
 

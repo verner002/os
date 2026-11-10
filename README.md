@@ -1,29 +1,34 @@
-# OS
+# Operating System
 Operating system written in x86 Assembly and C for the i486 architecture or later revisions.
 
-# Building The Project
-## Dependencies
+## Compilation
+
+### Configuration
+
+### Build
+
+
+## Building The Project
+### Dependencies
 At least these versions of listed packages are recommended:
 ```
-gcc >= 15.2.1
-ld >= 2.45.1
+gcc >= 16.1.1
+ld >= 2.46.0
 nasm >= 3.01
 make >= 4.4.1
-dd >= 9.9
+dd >= 9.11
 mkfs.fat >= 4.2
 ```
 
-## Build
+### Build
 To build the project (including the bootable floppy image) use:
 ```
 $ make
 ```
 
-# Kernel Image
+## Stage 1
 
-# Stage 1
-
-## Physical Memory Map
+### Physical Memory Map
 This memory map is related to `boot.s` which is the first code to be run after loaded by BIOS. `boot.s` is responsible for loading `setup.s` at `0x00090200` and image at `0x00010000`.
 
 | Start | End | Size| Description |
@@ -41,9 +46,9 @@ This memory map is related to `boot.s` which is the first code to be run after l
 | `0x000c8000` | `0x000effff` | 160 KiB | BIOS Expansion
 | `0x000f0000` | `0x000fffff` | 64 KiB | ROM BIOS
 
-# Stage 2
+## Stage 2
 
-## Physical Memory Map
+### Physical Memory Map
 Now the `setup.s` takes control: Its task is to gather system information and place them into system information block starting at `0x00090000`. After that it tells CPU to enter the protected mode.
 
 | Start | End | Size| Description |
@@ -60,9 +65,9 @@ Now the `setup.s` takes control: Its task is to gather system information and pl
 | `0x000c8000` | `0x000effff` | 160 KiB | BIOS Expansion
 | `0x000f0000` | `0x000fffff` | 64 KiB | ROM BIOS
 
-# Stage 3
+## Stage 3
 
-## Physical Memory Map
+### Physical Memory Map
 
 | Start | End | Size| Description |
 |:-----:|:---:|:----:|-------------|
@@ -85,7 +90,7 @@ Now the `setup.s` takes control: Its task is to gather system information and pl
 | `0x01000000` | `0x01ffffff` | 16 MiB | Usable Memory & Memory Mapped Hardware
 | `0x02000000` | `0xffffffff` | 4064 MiB | Usable Memory & Memory Mapped Hardware (Extra Memory)
 
-## Virtual Memory Map
+### Virtual Memory Map
 
 # Kernel
 
@@ -93,37 +98,23 @@ Now the `setup.s` takes control: Its task is to gather system information and pl
 
 ## Virtual Memory Map
 
-# Portability
-- Even though this is just a hobby operating system I am doing my best to make it portable. (Ok, I'm lying now...)
-
 ## Atomic Types & Operations
-- `atomic_t` and `uatomic_t` are basically (unsigned) integer types:
+- `atomic_t` is basically an integer type:
 ```c
 typedef int atomic_t;
-typedef unsigned int uatomic_t;
 ```
 - What actually differs is a set of operations used to increment or decrement value of an `atomic_t` variable. This is because the compiler can sometimes try to optimize our code which is not always what we want it to do.
 - This means these operations are platform dependent and must be defined for each architecture.
-- For x86 the increment and decrement operations are defined like this:
+- For x86 the increment and decrement operations are defined:
 ```c
-#define __atomic_inc(x) asm volatile (  \
-    "inc dword [%0]"                        \
-    :                                       \
-    : "m" (x)                               \
-    :                                       \
-);
-
-#define __atomic_inc(x) asm volatile (  \
-    "dec dword [%0]"                        \
-    :                                       \
-    : "m" (x)                               \
-    :                                       \
-);
+static inline void atomic_increment(atomic_t *ptr) { ... }
+static inline void atomic_decrement(atomic_t *ptr) { ... }
+static inline int atomic_fetch_add(atomic_t *ptr, int value) { ... }
+static inline int atomic_xchg(atomic_t *ptr, int value) { ... }
 ```
 
 # Boot Configuration
 - Boot configuration is a way to tell kernel which device it should use a root device, to set environment variables and many other stuff.
-- The pointer to the command line is passed as an argument to the `__entry` function along with other arguments like cursor position, E820 map, etc.
 
 ## Root Configuration
 - The kernel is able to mount whatever drive you want it to as a root file system. The easiest way to do so is to set the `root` property in boot configuration:
@@ -134,65 +125,27 @@ root=/dev/hda
 
 | Name | Path | Description |
 |:-----|:-----|:------------|
-| fd0 | /dev/fd0 | First floppy disk drive |
-| hda | /dev/hda | First hard disk drive |
-| hdb | /dev/hdb | Second hard disk drive |
-| hdc | /dev/hda | Third hard disk drive |
-| hdd | /dev/hda | Fourth hard disk drive |
+| `fd0` | `/dev/fd0` | First floppy disk drive |
+| `hda` | `/dev/hda` | First hard disk drive |
+| `hdb` | `/dev/hdb` | Second hard disk drive |
+| `hdc` | `/dev/hda` | Third hard disk drive |
+| `hdd` | `/dev/hda` | Fourth hard disk drive |
 
 # Environment Variables Configuration
 - Not implemented yet. :\-\(
 
 # Virtual File System
 - Virtual file system (VFS) provides an abstraction for all file systems which could be present on a physical media.
-- File system is represented by a graph structure consisting of `__dentry`s and `__inode`s.
-- A `__dentry` maps the structure (how are all the entries connected), `__inode`, on the other hand, contains metadata describing the associated `__dentry` (what the entry represents).
-- The structutes look like this:
-```c
-struct __dentry {
-    char const *name;               // entry name
-    char sname[10];                 // short name
-    atomic_t refs;                  // reference counter
-    struct __dentry_ops ops;        // entry operations
-    struct __inode *inode;          // metadata node
-    struct __dentry *parent;        // parent entry
-    struct __dentry *previous;      // previous entry
-    struct __dentry *next;          // next entry
-    struct __dentry *child_head;    // head of children linked-list
-};
-
-struct __inode {
-    uint32_t mode;                  // entry mode
-    atomic_t refs;                  // reference counter
-    struct __dentry *dentry;        // entry node
-    uint32_t uid;                   // owner id
-    uint32_t gid;                   // owner group id
-    uint32_t block_n;               // block number
-    uint32_t block_cnt;             // block count
-    uint32_t block_sz;              // block size
-};
-```
+- File system is represented by a graph structure consisting of `dentry`s and `inode`s.
+- A `dentry` maps the structure (how are all the entries connected), `inode`, on the other hand, contains metadata describing the associated `dentry` (what the entry represents).
 
 # Device & Driver Model
-## Kernel Object
-- `__kobj` is similar to the one used in GNU/Linux. On its own the kernel object is useless. To become usefull we need to attach `__kobj_type` to and assign it to a device(/bus/driver/etc.). This way we are able to create a tree-like structure which allows us to operate with each device the same way.
-- The structure is defined like this:
-```c
-struct __kobj {
-    char const *k_name;
-    char k_sname[10];
-    atomic_t k_refs;
-    struct __kobj *k_parent;
-    struct __kobj *k_previous;
-    struct __kobj *k_next;
-    struct __kobj_type *k_type;
-    struct __dentry *k_dentry;
-};
-```
 
-## Kernel Object Type
+# Task Address Space
+- Task address space (TAS for short) is always associated, as it name suggests, with a task. This means that structures describing the TAS don't have to contain a pointer to page directory but only a pointer to a task.
+- When creating a TAS we're actually creating a page directory and an AVL tree (root node) that tells us which areas of virtual memory are used.
 
-## Kernel Object Set
+When creating a new task, kernel allocates (mapped) virtual memory for task's page directory and creates a new AVL tree with kernel area and dynamically mapped area.
 
 ## Useful Links
 ### Design

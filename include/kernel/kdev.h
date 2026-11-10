@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "types.h"
+#include <kernel/types.h>
 
 typedef uint16_t kdev_t;
 

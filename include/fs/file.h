@@ -24,6 +24,18 @@
  *  32 | directory 
 */
 
+/*struct file_ops {
+    int (* open)();
+    int (* read)();
+    int (* lseek)();
+    int (* write)();
+    int (* readdir)();
+    int (* release)();
+};*/
+
 struct dentry *lookup_file(char const *path);
-struct dentry *create_file(struct dentry *parent, char const *name, uid_t uid, gid_t gid, mode_t mode);
-int stat(char const *path);
+struct dentry *create_file(struct dentry *parent, char const *name, uid_t uid, gid_t gid, mode_t mode, struct file_ops *f_ops);
+mode_t stat(char const *path);
+
+#include "kstdlib/file.h"
+FILE *fopen(char const *path, char const *mode);
