@@ -7,6 +7,7 @@
 #define LOWMEM_END              (((768 + 128) << 20) - 1)
 
 #include <stddef.h>
+#include <stdalign.h>
 #include <errno.h>
 
 #include <kernel/system.h>
@@ -31,6 +32,7 @@
 #include <kernel/8254a.h>
 #include <kernel/panic.h>
 #include <kernel/tty.h>
+#include <kernel/slab.h>
 #include <kernel/kmalloc.h>
 #include <kernel/inode.h>
 
@@ -40,6 +42,8 @@ volatile uint32_t ticks;
 
 kdev_t root_dev = NO_DEV;
 char *envs[16];
+
+int errno;
 
 volatile pid_t cproc;
 volatile size_t nproc;
@@ -163,9 +167,6 @@ __attribute__((interrupt)) static void spurious_interrupt_handler(struct interru
     
 }
 
-extern void con_init(void);
-extern void con_write(struct tty_device *tty);
-
 int io_ok(void) {
     return 0;
 }
@@ -178,25 +179,31 @@ struct device {
     char *name;
     int major;
     int minor;
-    int (*open)(struct device *device, char const *name, char const *mode);
-    int (*write)(struct device *device, void *buffer, size_t count);
+    int (*open)(struct device *device, char const *name, int flags);
+    int (*read)(struct device *device, void *buffer, size_t count);
+    int (*write)(struct device *device, void const *buffer, size_t count);
 } devtab[256] = {
     { // device 0
         "null",
         0, 0,
-        (int (*)(struct device *device, char const *name, char const *mode))&io_ok,
-        (int (*)(struct device *device, void *buffer, size_t count))&io_ok
+        (int (*)(struct device *device, char const *name, int flags))&io_ok,
+        (int (*)(struct device *device, void *buffer, size_t count))&io_ok,
+        (int (*)(struct device *device, void const *buffer, size_t count))&io_err
     },
     { // device 1
         "tty0",
         4, 0,
-        (int (*)(struct device *device, char const *name, char const *mode))&io_ok,
-        (int (*)(struct device *device, void *buffer, size_t count))&io_err
+        (int (*)(struct device *device, char const *name, int flags))&io_ok,
+        (int (*)(struct device *device, void *buffer, size_t count))&io_err,
+        
     }
 };
 
 int sys_open(struct regs *r) {
-    return -ENOSYS;
+    char const *path = (char const *)r->ebx;
+    unsigned short flags = (unsigned short)r->ecx;
+
+    
 }
 
 int sys_read(struct regs *r) {
@@ -213,7 +220,7 @@ int sys_write(struct regs *r) {
     if (fd >= NFDESC || !(f = proctab[cproc].fdescs[fd]))
         return -ENOENT;
 
-    struct inode *i = f->dentry->inode;
+    struct inode *i = f->inode;
     return i->fops->write(i, f, buffer, count);
 }
 
@@ -407,6 +414,10 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
 
     pfa_init(&mmap);
 
+    kmem_cache_init();
+    inode_init();
+    dcache_init();
+
     void *heap_start = (void *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
 
     kheap_init(heap_start, 4096);
@@ -506,8 +517,16 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
         .inode = stdout
     };
 
+    /*// dcache test
+    struct dentry *test = alloc_dentry(&dstdout, "test");
+    dput(test);
+    struct dentry *test2 = alloc_dentry(&dstdout, "test");
+
+    if (test == test2)
+        printk("it works!\n");*/
+
     struct file fstdout = {
-        .dentry = &dstdout
+        .inode = stdout
     };
 
     proctab[0].fdescs[0] = &fstdout;

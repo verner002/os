@@ -26,10 +26,13 @@ struct dentry {
     struct dentry_ops *ops;
     struct list siblings;
     struct list *children;
+    struct dentry *hash_next;
+    struct list_head l_unused;
 };
 
+void dcache_init(void);
 struct dentry *alloc_dentry(struct dentry *parent, char const *name);
 struct dentry *dget(struct dentry *dentry);
 void dput(struct dentry *dentry);
 struct dentry *d_lookup(struct dentry *dentry, char const *name);
-void instantiate(struct dentry *dentry, struct inode *inode);
+void d_instantiate(struct dentry *dentry, struct inode *inode);

@@ -18,4 +18,4 @@
 #define ENOSYS      38      // function not implemented
 #define EWOULDBLOCK EAGAIN  // operation would block
 
-//extern int errno;
+extern int errno;

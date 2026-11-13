@@ -4,16 +4,86 @@
  * @date 14/10/2026
 */
 
+#include <stdalign.h>
 #include <string.h>
 
 #include <kernel/dcache.h>
-#include <kernel/kmalloc.h>
+#include <kernel/slab.h>
 
-// 128 dentries (lru strategy)
-#define DCACHE_SIZE         128
+// 1024 dentries (lru strategy)
+#define DCACHE_BITS         10
+#define DCACHE_SIZE         (1 << DCACHE_BITS)
+#define DCACHE_LRU_LIMIT    1024
+
+struct dentry *dcache_table[DCACHE_SIZE];
+
+static uint32_t dcache_hash(struct dentry *parent, char const *name) {
+    // fowler-noll-vo-1a hash function
+    uint32_t hash = 2166136261u;
+    uint32_t ptr = (uint32_t)parent;
+
+    for (size_t i = 0; i < sizeof(ptr); ++i) {
+        hash ^= ptr & 0xff;
+        hash *= 16777619u;
+        ptr >>= 8;
+    }
+
+    while (*name) {
+        hash ^= *name++;
+        hash *= 16777619u;
+    }
+
+    return hash;
+}
+
+static void dcache_insert(struct dentry *dentry) {
+    uint32_t hash = dcache_hash(dentry->parent, dentry->name);
+    uint32_t i = hash & (DCACHE_BITS - 1);
+    
+    dentry->hash_next = dcache_table[i];
+    dcache_table[i] = dentry;
+}
+
+static struct dentry *dcache_lookup(struct dentry *parent, char const *name) {
+    uint32_t hash = dcache_hash(parent, name);
+    uint32_t i = hash & (DCACHE_BITS - 1);
+
+    struct dentry *current = dcache_table[i];
+
+    while (current) {
+        if (current->parent == parent && !strcmp(current->name, name))
+            return current;
+
+        current = current->hash_next;
+    }
+
+    // cache miss
+    return NULL;
+}
+
+struct kmem_cache *dentry_cache;
+
+static size_t nr_dentries_unused;
+static struct list_head dentry_unused;
+
+void dcache_init(void) {
+    dentry_cache = kmem_cache_create("dentry_cache", sizeof(struct dentry), alignof(struct dentry), NULL);
+    nr_dentries_unused = 0;
+    list_init(&dentry_unused);
+}
 
 struct dentry *alloc_dentry(struct dentry *parent, char const *name) {
-    struct dentry *dentry = (struct dentry *)kzalloc(sizeof(struct dentry));
+    struct dentry *dentry = dcache_lookup(parent, name);
+    
+    if (dentry) {
+        // cache hit!
+        dget(dentry);
+        list_link(dentry->l_unused.prev, dentry->l_unused.next);
+        list_init(&dentry->l_unused);
+        return dentry;
+    }
+
+    dentry = (struct dentry *)kmem_cache_alloc(dentry_cache, KM_NOSLEEP);
 
     if (!dentry)
         return NULL;
@@ -24,12 +94,14 @@ struct dentry *alloc_dentry(struct dentry *parent, char const *name) {
     dentry->inode = NULL;
     dentry->ops = NULL;
     dentry->children = NULL;
+    list_init(&dentry->l_unused);
 
     if (parent) {
         dentry->siblings.next = parent->children;
         parent->children = &dentry->siblings;
     }
 
+    dcache_insert(dentry);
     return dentry;
 }
 
@@ -51,7 +123,16 @@ struct dentry *dget(struct dentry *dentry) {
 }
 
 void dput(struct dentry *dentry) {
+    if (--(dentry->refs) > 0)
+        return;
 
+    if (nr_dentries_unused >= DCACHE_LRU_LIMIT) {
+        struct list_head *oldest = dentry_unused.prev;
+        list_link(oldest->prev, oldest->next);
+        kmem_cache_free(dentry_cache, dentry);
+    }
+
+    list_head_add(&dentry_unused, &dentry->l_unused);
 }
 
 struct dentry *d_lookup(struct dentry *dentry, char const *name) {
@@ -65,7 +146,7 @@ struct dentry *d_lookup(struct dentry *dentry, char const *name) {
     return NULL;
 }
 
-void instantiate(struct dentry *dentry, struct inode *inode) {
+void d_instantiate(struct dentry *dentry, struct inode *inode) {
     // ownership is transfered to dentry
     dentry->inode = inode;
 }

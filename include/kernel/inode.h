@@ -40,6 +40,9 @@
 #define S_ISCHR(mode)   (((mode) & S_IFMT) == S_IFCHR)
 #define S_ISBLK(mode)   (((mode) & S_IFMT) == S_IFBLK)
 
+#define FMODE_READ      1
+#define FMODE_WRITE     2
+
 typedef unsigned long ino_t;
 
 // ttttsssuuugggooo
@@ -107,8 +110,13 @@ struct inode {
 };
 
 struct file {
-    struct dentry *dentry;
+    unsigned short mode; // FMODE_READ, FMODE_WRITE, etc.
+    unsigned short flags; // O_CREAT, O_APPEND, etc.
+    struct inode *inode;
+    unsigned long count;
+    unsigned long offset;
     //struct file_ops *fops; // same ptr as dentry->inode->fops
 };
 
+void inode_init(void);
 struct inode *iget(uid_t uid, gid_t gid, mode_t mode);

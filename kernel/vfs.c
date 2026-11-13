@@ -20,7 +20,7 @@ static struct dentry *root;
 void vfs_init(void) {
     struct inode *inode = iget(0, 0, S_IFDIR | 0755);
     root = alloc_dentry(NULL, "/");
-    instantiate(root, inode);
+    d_instantiate(root, inode);
     root->parent = root;
 }
 

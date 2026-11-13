@@ -10,8 +10,7 @@
 #include <kernel/io.h>
 #include <kernel/idt.h>
 #include <kernel/irqs.h>
-#include <kernel/process.h>
-#include <kernel/printk.h>
+#include <kernel/tty.h>
 
 #define COM1            0x3f8   // com1 port number
 #define COM2            0x2f8   // com2 port number
@@ -92,7 +91,7 @@
 // supported rates
 #define B9600           (CLOCK / 9600u)
 
-void tty_kickout(void) {
+void uart_kickout(void) {
     uint8_t ls = inb(COM1 + LSR);
 
     if (!(ls & TX_EMPTY))
@@ -100,6 +99,8 @@ void tty_kickout(void) {
 
     outb(COM1 + IER, inb(COM1 + IER) | TX_IRQ);
 }
+
+#include <kernel/printk.h>
 
 __attribute__((interrupt)) static void com1_handler(struct interrupt_frame *) {    
     acknowledge_irq(4);
@@ -113,13 +114,14 @@ __attribute__((interrupt)) static void com1_handler(struct interrupt_frame *) {
     // who caused the interrupt?
     iir &= 6;
     
-    uint8_t line;
+    uint8_t ls;
     
-    while ((line = inb(COM1 + LSR)) & DATA_RDY) {
+    while ((ls = inb(COM1 + LSR)) & DATA_RDY) {
         printk("%c", inb(COM1 + RBR));
     }
 
-    if (line & TX_EMPTY) {
+    if (ls & TX_EMPTY) {
+        // fill thr
         outb(COM1 + THR, '!');
     }
 }
@@ -129,13 +131,24 @@ int uart_init(void) {
     outb(COM1 + DLR, (uint8_t)(B9600 & 0xff));
     outb(COM1 + DHR, (uint8_t)((B9600 >> 8) & 0xff));
     outb(COM1 + LCR, PARITY_NONE | STOP1 | CHAR8);
+    
+    // disable com1 irqs (shared with com3)
+    outb(COM1 + IER, 0);
+
+    // ----------------------------------------
+    // disable com2-4, we won't use them now
+    // disable com2 irqs (shared with com4)
+    outb(COM2 + LCR, 0);
+    outb(COM2 + IER, 0);
 
     // disable com3 irqs (shared with com1)
-    outb(COM3 + LCR, inb(COM3 + LCR) & ~DLAB_ACCESS);
-    outb(COM3 + IER, 0x00);
+    outb(COM3 + LCR, 0);
+    outb(COM3 + IER, 0);
 
-    // disable all irqs
-    outb(COM1 + IER, 0x00);
+    // disable com2 irqs (shared with com2)
+    outb(COM4 + LCR, 0);
+    outb(COM4 + IER, 0);
+    // ----------------------------------------
 
     // enable fifos
     outb(COM1 + FCR, FIFO_ENABLE);

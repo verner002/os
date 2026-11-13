@@ -24,7 +24,7 @@ struct termio {
     struct semaphore osem;
     int eof;
     char eofc;
-    void (* kickout)(void);
+    void (*kickout)(void);
 };
 
 extern struct termio tty_table[];
