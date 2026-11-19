@@ -35,6 +35,8 @@
 #include <kernel/slab.h>
 #include <kernel/kmalloc.h>
 #include <kernel/inode.h>
+#include <kernel/vfs.h>
+#include <kernel/devfs.h>
 
 extern char __kernel_end[];
 
@@ -46,6 +48,7 @@ char *envs[16];
 int errno;
 
 volatile pid_t cproc;
+struct process *volatile current;
 volatile size_t nproc;
 struct process proctab[NPROC];
 
@@ -70,8 +73,8 @@ __attribute__((interrupt)) static void int2_handler(struct interrupt_frame *fram
 }
 
 __attribute__((interrupt)) static void int3_handler(struct interrupt_frame *frame) {
-    printk("#bp(pid=%i, parent=%i)\n", cproc, proctab[cproc].parent_pid);
-    suspend(cproc);
+    printk("#bp(pid=%i, parent=%i)\n", current->pid, current->parent_pid);
+    suspend(current->pid);
 }
 
 __attribute__((interrupt)) static void int4_handler(struct interrupt_frame *frame) {
@@ -175,7 +178,7 @@ int io_err(void) {
     return -1;
 }
 
-struct device {
+/*struct device {
     char *name;
     int major;
     int minor;
@@ -197,13 +200,42 @@ struct device {
         (int (*)(struct device *device, void *buffer, size_t count))&io_err,
         
     }
-};
+};*/
+
+int find_free_fd(void) {
+    int fd;
+
+    for (fd = 0; fd < NFDESC; ++fd)
+        if (!current->fdescs[fd])
+            break;
+
+    if (fd >= NFDESC) {
+        errno = EMFILE;
+        return -1;
+    }
+
+    return fd;
+}
 
 int sys_open(struct regs *r) {
     char const *path = (char const *)r->ebx;
-    unsigned short flags = (unsigned short)r->ecx;
+    int flags = (int)r->ecx;
+    int mode = (int)r->edx;
 
-    
+    int fd = find_free_fd();
+
+    if (fd < 0)
+        return -1;
+
+    struct file *file = vfs_open(path, flags, mode);
+
+    printk("errno=%i\n", errno);
+
+    if (!file)
+        return -1;
+
+    current->fdescs[fd] = file;
+    return fd;
 }
 
 int sys_read(struct regs *r) {
@@ -217,15 +249,22 @@ int sys_write(struct regs *r) {
 
     struct file *f;
 
-    if (fd >= NFDESC || !(f = proctab[cproc].fdescs[fd]))
+    if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
         return -ENOENT;
 
     struct inode *i = f->inode;
-    return i->fops->write(i, f, buffer, count);
+    return i->fops->write(f, buffer, count);
 }
 
 int sys_close(struct regs *r) {
-    return -ENOSYS;
+    int fd = (int)r->ebx;
+
+    struct file *f;
+
+    if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
+        return -ENOENT;
+    
+    return vfs_close(f);
 }
 
 int (*syscall_table[])(void) = {
@@ -245,11 +284,11 @@ void do_timer(uint32_t cpl) {
     ++ticks;
 
     if (!cpl) {
-        ++proctab[cproc].s_time;
+        ++current->s_time;
         return;
     }
 
-    ++proctab[cproc].u_time;
+    ++current->u_time;
     schedule();
 }
 
@@ -259,12 +298,18 @@ void do_timer(uint32_t cpl) {
 
 extern int tty_write(struct inode *inode, struct file *file, void const *buffer, size_t count);
 
-extern void enter_userland();
+extern void enter_userland(uint32_t stack);
 
 void init(void) {
-    //write(STDOUT, "ahoj!\n", 6);
+    int fd = open("/dev/e9", O_WRONLY, 0);
+    char msg[] = "debug\n";
+    write(fd, msg, sizeof(msg) - 1);
+    close(fd);
 }
 
+extern struct dentry *root_dentry;
+
+extern int e9_init(void);
 extern int uart_init(void);
 
 void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct e820_entry *e820_entries) {
@@ -328,7 +373,7 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
             0, 0, 0,
             -1,
             { NULL, NULL },
-            { 0 }
+            { NULL }
         };
 
     proctab[0] = (struct process){
@@ -342,11 +387,17 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
         0, 0, 0,                        // kernel stack
         -1,                             // parent
         { NULL, NULL },
-        { 0 }
+        { NULL }
     };
+
+    list_init(&(proctab[0].l_wait));
+
+    for (size_t i = 0; i < NFDESC; ++i)
+        proctab[0].fdescs[i] = NULL;
 
     nproc = 1;
     cproc = 0;
+    current = proctab;
 
     // sanitize memory map
     e820_sanitize(e820_nentries, e820_entries);
@@ -387,10 +438,10 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
 
     // TODO: do not perform mapping of last 128 MiB
     for (size_t i = 0; i < npte; ++i)
-        pte[i] = ((4 << 20) + (i * (4 << 10))) | PAGE_CD | PAGE_WT | PAGE_RW | PAGE_P;
+        pte[i] = ((4 << 20) + (i * (4 << 10))) | PAGE_RW | PAGE_P;
 
     for (size_t i = 0; i < npt; ++i)
-        pd[i + 768 + 1] = ((uint32_t)pte + i * (4 << 10)) | PAGE_CD | PAGE_WT | PAGE_RW | PAGE_P;
+        pd[i + 768 + 1] = ((uint32_t)pte + i * (4 << 10)) | PAGE_RW | PAGE_P;
 
     // up to 768 MiB of memory is now identity mapped
     // and directly accessible by kernel (last 128 MiB)
@@ -415,8 +466,21 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     pfa_init(&mmap);
 
     kmem_cache_init();
+    
     inode_init();
+    
     dcache_init();
+    
+    vfs_init();
+
+    int devfs = devfs_init();
+    printk("kernel: devfs: init: %i\n", devfs);
+
+    struct dentry *test = d_lookup(root_dentry, "dev");
+    printk("test=%p\n", test);
+
+    int e9 = e9_init();
+    printk("kernel: e9: init: %i\n", e9);
 
     void *heap_start = (void *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
 
@@ -460,7 +524,7 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     uint32_t *stack_phys = pfa_alloc();
     uint32_t *stack = (uint32_t *)(KERNEL_VIRT_BASE - 4096);
     
-    int map = kmap((void *)(cr3 & ~4095), (void *)stack, (void *)stack_phys, PAGE_CD | PAGE_WT | PAGE_US | PAGE_RW | PAGE_P);
+    int map = kmap((void *)(cr3 & ~4095), (void *)stack, (void *)stack_phys, PAGE_US | PAGE_RW | PAGE_P);
 
     if (map) {
         printk("kmap failed\n");
@@ -468,72 +532,46 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     } else
         printk("kmap ok\n");
 
-    proctab[0].stack_base = (unsigned long)stack;
-    proctab[0].stack_size = 4096;
+    current->stack_base = (unsigned long)stack;
+    current->stack_size = 4096;
 
     stack += 1024;
     *--stack = STACK_CANARY;
-    proctab[0].stack_ptr = (unsigned long)stack;
+    current->stack_ptr = (unsigned long)stack;
 
     asm volatile (
         "mov %0, esp"
-        : "=r" (proctab[0].kstack_ptr)
+        : "=r" (current->kstack_ptr)
         :
         :
-    );
-
-    asm volatile (
-        "mov esp, %0"
-        :
-        : "r" (stack)
-        : "memory"
     );
 
     /*uint32_t *kernel_kstack = (uint32_t *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
 
-    proctab[0].stack_base = (unsigned long)kernel_kstack;
-    proctab[0].stack_size = 4096;
+    current->stack_base = (unsigned long)kernel_kstack;
+    current->stack_size = 4096;
 
     // kernel stack setup
     kernel_kstack += 1024;
     *--kernel_kstack = STACK_CANARY;
-    proctab[0].kstack_ptr = (unsigned long)kernel_kstack;*/
+    current->kstack_ptr = (unsigned long)kernel_kstack;*/
 
-    tss_set_esp0((uint32_t)proctab[0].kstack_ptr);
+    tss_set_esp0((uint32_t)current->kstack_ptr);
 
     // expose syscall handler
     install_user_interrupt_gate(0x80, &int128_handler);
 
-    struct inode *root = iget(0, 0, S_IFDIR | 0755);
-
-    struct file_ops stdout_fops = {
-        .write = &tty_write
-    };
-
-    struct inode *stdout = iget(0, 0, S_IFCHR | 0700);
-    stdout->fops = &stdout_fops;
-
-    struct dentry dstdout = {
-        .inode = stdout
-    };
-
-    /*// dcache test
-    struct dentry *test = alloc_dentry(&dstdout, "test");
+    // dcache test
+    /*struct dentry *test = alloc_dentry(NULL, "test");
     dput(test);
-    struct dentry *test2 = alloc_dentry(&dstdout, "test");
+    struct dentry *test2 = alloc_dentry(NULL, "test");
 
     if (test == test2)
         printk("it works!\n");*/
 
-    struct file fstdout = {
-        .inode = stdout
-    };
-
-    proctab[0].fdescs[0] = &fstdout;
-
     printk("kernel: starting init\n");
 
-    enter_userland();
+    enter_userland((uint32_t)stack);
 
     if (!fork())
         init();

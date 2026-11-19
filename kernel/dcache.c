@@ -88,18 +88,18 @@ struct dentry *alloc_dentry(struct dentry *parent, char const *name) {
     if (!dentry)
         return NULL;
 
+    memset(dentry, 0, sizeof(dentry));
     strncpy(dentry->name, name, sizeof(dentry->name) - 1);
     dentry->parent = parent;
     dentry->refs = 1;
     dentry->inode = NULL;
     dentry->ops = NULL;
-    dentry->children = NULL;
+    list_init(&(dentry->siblings));
+    list_init(&(dentry->children));
     list_init(&dentry->l_unused);
 
-    if (parent) {
-        dentry->siblings.next = parent->children;
-        parent->children = &dentry->siblings;
-    }
+    if (parent)
+        list_add(&(parent->children), &(dentry->siblings));
 
     dcache_insert(dentry);
     return dentry;
@@ -117,7 +117,7 @@ struct dentry *alloc_dentry(struct dentry *parent, char const *name) {
 
 struct dentry *dget(struct dentry *dentry) {
     if (!dentry)
-        atomic_increment(&dentry->refs);
+        ++(dentry->refs);
 
     return dentry;
 }
@@ -129,18 +129,25 @@ void dput(struct dentry *dentry) {
     if (nr_dentries_unused >= DCACHE_LRU_LIMIT) {
         struct list_head *oldest = dentry_unused.prev;
         list_link(oldest->prev, oldest->next);
+        
+        if (dentry->inode)
+            iput(dentry->inode);
+        
         kmem_cache_free(dentry_cache, dentry);
     }
 
-    list_head_add(&dentry_unused, &dentry->l_unused);
+    list_push(&dentry_unused, &dentry->l_unused);
 }
 
 struct dentry *d_lookup(struct dentry *dentry, char const *name) {
-    for (struct list *list = dentry->children; list; list = list->next) {
-        struct dentry *d = containerof(list, struct dentry, children);
+    if (!dentry || !name)
+        return NULL;
+    
+    for (struct list_head *list = dentry->children.next; list != &(dentry->children); list = list->next) {
+        struct dentry *d = containerof(list, struct dentry, siblings);
 
         if (!strcmp(d->name, name))
-            return d;
+            return dget(d);
     }
 
     return NULL;

@@ -10,7 +10,6 @@
 
 #include <kernel/types.h>
 #include <kernel/list.h>
-#include <kernel/atomic.h>
 #include <kernel/dcache.h>
 
 typedef int pid_t;
@@ -48,14 +47,9 @@ struct process {
     unsigned long kstack_ptr;
     size_t kstack_size;
     pid_t parent_pid;
-    struct list wait_list; // semaphore wait list
+    struct list_head l_wait;
+    // TODO: add fdescs bitmap(?)
     struct file *fdescs[NFDESC]; // device numbers
-};
-
-struct semaphore {
-    //spinlock_t lock; -- we're ok with disabling irqs for now
-    atomic_t count; // semaphore value
-    struct list *wait_list; // wait list head
 };
 
 struct regs {
@@ -78,6 +72,7 @@ struct regs {
 extern volatile size_t nproc;
 // currently running process
 extern volatile pid_t cproc;
+extern struct process *volatile current;
 // process table
 extern struct process proctab[];
 
@@ -85,10 +80,10 @@ pid_t sys_fork(struct regs *regs);
 pid_t sys_create(void (*function)(void), unsigned char priority, size_t stack_size);
 pid_t getpid(void);
 void delay_ms(uint32_t ms);
+int ready(pid_t pid);
+int wait(void);
 int suspend(pid_t pid);
 int resume(pid_t pid);
-int wait(struct semaphore *sem);
-int signal(struct semaphore *sem);
 int kill(pid_t pid);
 //void enable_preemtion(void);
 //void disable_preemtion(void);

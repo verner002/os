@@ -4,13 +4,17 @@
  * @date 22/08/2026
 */
 
+#include <string.h>
 #include <errno.h>
 
 #include <kernel/process.h>
-#include <kernel/cpu.h>
-#include <kernel/atomic.h>
 #include <kernel/ctxsw.h>
-#include <kernel/printk.h>
+#include <kernel/cpu.h>
+#include <kernel/tss.h>
+#include <kernel/atomic.h>
+#include <kernel/system.h>
+#include <kernel/pfa.h>
+#include <kernel/paging.h>
 
 #define HEAP_TOP            0
 #define HEAP_PARENT(i)      (((i) - 1) / 2)
@@ -124,12 +128,6 @@ void procexit(void) {
     while (1);
 }
 
-#include <string.h>
-#include <kernel/system.h>
-#include <kernel/pfa.h>
-#include <kernel/tss.h>
-#include <kernel/paging.h>
-
 uint32_t read_eip(void);
 
 static int clone_address_space(uint32_t parent_cr3) {
@@ -188,18 +186,13 @@ static int clone_address_space(uint32_t parent_cr3) {
 extern void syscall_return(void);
 
 pid_t sys_fork(struct regs *regs) {
-    struct process *parent = &proctab[cproc];
+    struct process *parent = current;
     
     pid_t pid = new_pid();
-    struct process *child = &proctab[pid];
+    struct process *child = proctab + pid;
 
     uint32_t child_kstack_base = (uint32_t)(pfa_alloc() + KERNEL_VIRT_BASE); // TODO: alloc_stack
 
-    /**
-     * FIXME:
-     *  pid 1 (init) is now forced to use user stack in with virtual
-     *  address in kernel address space, we should solve this!!!
-     */
     uint32_t child_kstack_top = child_kstack_base + 4096;
 
     struct regs *child_regs = (struct regs *)(child_kstack_top - sizeof(struct regs));
@@ -220,7 +213,7 @@ pid_t sys_fork(struct regs *regs) {
     //*(uint32_t *)child_kstack_base = STACK_CANARY;
 
     // ctxsw switches esp to child->stack_ptr
-    // but we return kernel mode (returning from
+    // but we return in kernel mode (returning from
     // kernel mode), so we have to use kernel
     // stack after context switch
     child->pid = pid;
@@ -236,14 +229,13 @@ pid_t sys_fork(struct regs *regs) {
     child->kstack_ptr = (unsigned long)child_esp;
     child->kstack_size = 4096;
     child->parent_pid = parent->pid;
-    child->wait_list.previous = NULL;
-    child->wait_list.next = NULL;
+    list_init(&(child->l_wait));
 
     for (size_t i = 0; i < NFDESC; ++i)
         child->fdescs[i] = parent->fdescs[i];
 
-    printk("ch->stack_base: %p\nch->stack_ptr: %p\nch->stack_size: %p\n", child->stack_base, child->stack_ptr, child->stack_size);
-    printk("ch->kstack_base: %p\nch->kstack_ptr: %p\nch->kstack_size: %p\n", child->kstack_base, child->kstack_ptr, child->kstack_size);
+    //printk("ch->stack_base: %p\nch->stack_ptr: %p\nch->stack_size: %p\n", child->stack_base, child->stack_ptr, child->stack_size);
+    //printk("ch->kstack_base: %p\nch->kstack_ptr: %p\nch->kstack_size: %p\n", child->kstack_base, child->kstack_ptr, child->kstack_size);
 
     push(pid);
     ++nproc;
@@ -278,7 +270,7 @@ pid_t sys_create(void (*function)(void), unsigned char priority, size_t stack_si
 
     pid_t pid = new_pid();
 
-    struct process *proc = &proctab[pid];
+    struct process *proc = proctab + pid;
 
     proc->pid = pid;
     proc->state = PROC_READY;
@@ -289,8 +281,7 @@ pid_t sys_create(void (*function)(void), unsigned char priority, size_t stack_si
     proc->kstack_base = (unsigned long)ksaddr;
     proc->kstack_size = 4096;
     proc->parent_pid = proctab[cproc].pid;
-    proc->wait_list.previous = NULL;
-    proc->wait_list.next = NULL;
+    list_init(&(proc->l_wait));
 
     // stack setup
     saddr += 1024; // stack_size / sizeof(uint32_t)
@@ -353,16 +344,44 @@ void delay_ms(uint32_t ms) {
     while (ticks < ticks_end);
 }
 
-int suspend(pid_t pid) {
-    unsigned long flags;
-
+int ready(pid_t pid) {
     if (ISBADPID(pid) || !pid)
         return -EINVAL;
 
+    unsigned long flags;
     save_flags(flags);
     cli();
 
-    struct process *proc = &proctab[pid];
+    // TODO: check process state
+    struct process *proc = proctab + pid;
+    proc->state = PROC_READY;
+    push(pid);
+
+    restore_flags(flags);
+    return 0;
+}
+
+int wait(void) {
+    unsigned long flags;
+    save_flags(flags);
+    cli();
+
+    current->state = PROC_WAITING;
+    schedule();
+
+    restore_flags(flags);
+    return 0;
+}
+
+int suspend(pid_t pid) {
+    if (ISBADPID(pid) || !pid)
+        return -EINVAL;
+
+    unsigned long flags;
+    save_flags(flags);
+    cli();
+
+    struct process *proc = proctab + pid;
 
     if (proc->state == PROC_RUNNING) {
         proc->state = PROC_SUSPENDED;
@@ -380,15 +399,14 @@ int suspend(pid_t pid) {
 }
 
 int resume(pid_t pid) {
-    unsigned long flags;
-
     if (ISBADPID(pid))
         return -EINVAL;
 
+    unsigned long flags;
     save_flags(flags);
     cli();
 
-    struct process *proc = &proctab[pid];
+    struct process *proc = proctab + pid;
 
     if (proc->state != PROC_SUSPENDED) {
         restore_flags(flags);
@@ -403,64 +421,6 @@ int resume(pid_t pid) {
     return 0;
 }
 
-int wait(struct semaphore *sem) {
-    if (!sem)
-        return -EINVAL;
-
-    unsigned long flags;
-    save_flags(flags);
-    cli();
-
-    atomic_decrement(&(sem->count));
-
-    if (sem->count < 0) {
-        struct process *proc = &proctab[cproc];
-        proc->state = PROC_WAITING;
-
-        struct list *tail = sem->wait_list;
-
-        if (tail) {
-            while (tail->next)
-                tail = tail->next;
-
-            tail->next = &(proc->wait_list);
-            proc->wait_list.next = NULL;
-        } else
-            sem->wait_list = &(proc->wait_list);
-
-        schedule();
-    }
-
-    restore_flags(flags);
-    return 0;
-}
-
-int signal(struct semaphore *sem) {
-    if (!sem)
-        return -EINVAL;
-
-    unsigned long flags;
-    save_flags(flags);
-    cli();
-
-    if (sem->count < 0) {
-        // TODO: dequeue process id from semaphore wait list
-        struct list *head = sem->wait_list;
-        
-        sem->wait_list = sem->wait_list->next;
-        //head->next = NULL;
-
-        struct process *proc = containerof(head, struct process, wait_list);
-        proc->state = PROC_READY;
-        push(proc->pid);
-    }
-
-    atomic_increment(&(sem->count));
-
-    restore_flags(flags);
-    return 0;
-}
-
 int kill(pid_t pid) {
     unsigned long flags;
 
@@ -470,7 +430,7 @@ int kill(pid_t pid) {
     save_flags(flags);
     cli();
 
-    struct process *proc = &proctab[pid];
+    struct process *proc = proctab + pid;
 
     // TODO:
     //  free heap
@@ -509,7 +469,7 @@ void schedule(void) {
     if (defers > 0)
         return;
 
-    struct process *old_proc = &proctab[cproc];
+    struct process *old_proc = proctab + cproc;
 
     // current process is still running
     if (old_proc->state == PROC_RUNNING) {
@@ -526,8 +486,9 @@ void schedule(void) {
 
     // pop process with higher or equal priority
     cproc = pop();
+    current = proctab + cproc;
 
-    struct process *new_proc = &proctab[cproc];
+    struct process *new_proc = proctab + cproc;
     new_proc->state = PROC_RUNNING;
 
     tss_set_esp0(new_proc->kstack_ptr);

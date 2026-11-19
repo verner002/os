@@ -180,8 +180,8 @@ int pci_init(void) {
                     }
 
                 if (dev_class) {
-                    struct pci_subclass *subclasses = dev_class->c_sclasses;
-                    struct pci_subclass *dev_subclass = NULL;
+                    struct pci_subclass const *subclasses = dev_class->c_sclasses;
+                    struct pci_subclass const *dev_subclass = NULL;
 
                     // use binary search? (array is ordered)
                     for (size_t i = 0; i < dev_class->c_sclasses_cnt; ++i)

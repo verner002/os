@@ -24,8 +24,8 @@ struct dentry {
     atomic_t refs;
     struct inode *inode;
     struct dentry_ops *ops;
-    struct list siblings;
-    struct list *children;
+    struct list_head siblings;
+    struct list_head children;
     struct dentry *hash_next;
     struct list_head l_unused;
 };

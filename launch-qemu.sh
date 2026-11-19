@@ -6,6 +6,7 @@ qemu-system-x86_64 \
     -fda ./fdd.img \
     -drive file=disk.img,format=raw,if=ide,index=0 \
     -d int,cpu_reset -D qemu.log \
+    -debugcon file:/tmp/qemu_e9 \
     -serial tcp:127.0.0.1:4444,server,nowait
     #-device piix3-ide,id=ide \
     #-drive id=disk,file=disk.img,format=raw,if=none \

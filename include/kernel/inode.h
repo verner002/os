@@ -9,6 +9,8 @@
 #include <kernel/atomic.h>
 #include <kernel/kdev.h>
 #include <kernel/dcache.h>
+#include <kernel/process.h>
+#include <kernel/semaphore.h>
 
 #define S_IROTH         (1 << 0)
 #define S_IWOTH         (1 << 1)
@@ -65,12 +67,9 @@ struct inode_ops {
 };
 
 struct file_ops {
-    int (* open)();
-    int (* read)(struct inode *inode, struct file *file, void *buffer, size_t count);
-    int (* lseek)();
-    int (* write)(struct inode *inode, struct file *file, void const *buffer, size_t count);
-    int (* readdir)();
-    int (* release)();
+    ssize_t (* open)(struct inode *inode, struct file *file);
+    ssize_t (* read)(struct file *file, char *buffer, size_t count);
+    ssize_t (* write)(struct file *file, char const *buffer, size_t count);
 };
 
 /**
@@ -89,6 +88,10 @@ struct inode {
     gid_t gid; // group id
     mode_t mode; // type, special/reserved and permission bits
     atomic_t refs; // reference counter
+
+    sem_t rw_lock;
+    sem_t turnstile;
+    int readers;
 
     unsigned long size; // size in bytes
     
@@ -119,4 +122,6 @@ struct file {
 };
 
 void inode_init(void);
-struct inode *iget(uid_t uid, gid_t gid, mode_t mode);
+struct inode *alloc_inode(uid_t uid, gid_t gid, mode_t mode);
+struct inode *iget(struct inode *inode);
+void iput(struct inode *inode);

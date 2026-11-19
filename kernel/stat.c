@@ -13,10 +13,10 @@ int sys_fstat(int fd, struct stat *st) {
     struct file *f;
 
     // short-circuit evaluation
-    if (fd >= NFDESC || !(f = proctab[cproc].fdescs[fd]))
+    if (fd >= NFDESC || !(f = current->fdescs[fd]))
         return -ENOENT;
 
-    struct inode *inode = f->dentry->inode;
+    struct inode *inode = f->inode;
 
     st->s_ino = inode->ino;
     st->s_uid = inode->uid;

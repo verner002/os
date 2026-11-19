@@ -14,7 +14,7 @@
 #include <kernel/io.h>
 #include <kernel/cpu.h>
 #include <kernel/pci.h>
-#include <kernel/process.h>
+#include <kernel/semaphore.h>
 #include <kernel/printk.h>
 
 #define IDE_MAX_CHANNELS                2
@@ -146,10 +146,7 @@ typedef int rid_t;
 
 static rid_t head = NONE_RID, tail = NONE_RID;
 
-static struct semaphore reqs_sem = {
-    .count = NREQ,
-    .wait_list = NULL
-};
+static sem_t reqs_sem;
 
 static struct ide_request {
     int8_t cmd; // command (FREE=-1, READ=0, WRITE=1)
@@ -157,7 +154,7 @@ static struct ide_request {
     uint32_t lba; // starting block
     uint32_t count; // number of blocks
     char *buffer; // pointer to buffer
-    struct semaphore sem; // buffer semaphore
+    sem_t sem; // buffer semaphore
     rid_t previous; // previous request index
     rid_t next; // next request index
 } requests[NREQ];
@@ -596,7 +593,7 @@ __attribute__((interrupt)) static void primary_ata_hd_handler(struct interrupt_f
     (void)inb(channels[drv->channel].busm_base + 2);
 
     // data is ready
-    signal(&(req->sem));
+    sem_signal(&(req->sem));
 
     if (head == tail)
         head = tail = NONE_RID;
@@ -680,6 +677,7 @@ int ide_init(struct pci_header *h) {
     for (size_t i = 0; i < NREQ; ++i)
         requests[i].cmd = IDE_FREE;
 
+    sem_init(&reqs_sem, NREQ);
     return 0;
 }
 
@@ -726,7 +724,7 @@ int ide_read_func(int minor, unsigned long lba, unsigned long count, char *buffe
     // for the while loop but we can
     // keep it
     while (1) {
-        wait(&reqs_sem);
+        sem_wait(&reqs_sem);
 
         for (index = 0; index < NREQ; ++index)
             if (requests[index].cmd == IDE_FREE)
@@ -741,8 +739,7 @@ prepare_req:
     req->lba = lba;
     req->count = count;
     req->buffer = buffer;
-    req->sem.count = 0;
-    req->sem.wait_list = NULL;
+    sem_init(&(req->sem), 0);
     req->next = NONE_RID;
 
     // just insert - no sorting (implement latter)
@@ -758,11 +755,11 @@ prepare_req:
         tail = index;
     }
 
-    wait(&(req->sem));
+    sem_wait(&(req->sem));
     
     // free request slot
     req->cmd = IDE_FREE;
 
-    signal(&reqs_sem);
+    sem_signal(&reqs_sem);
     return 0;
 }

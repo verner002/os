@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <kernel/process.h>
+#include <kernel/semaphore.h>
 
 #define IBUFLEN         16
 #define OBUFLEN         16
@@ -17,11 +17,11 @@ struct termio {
     char *ihead;
     char *itail;
     char ibuf[IBUFLEN];
-    struct semaphore isem;
+    sem_t isem;
     char *ohead;
     char *otail;
     char obuf[OBUFLEN];
-    struct semaphore osem;
+    sem_t osem;
     int eof;
     char eofc;
     void (*kickout)(void);

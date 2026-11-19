@@ -27,19 +27,19 @@ static inline int list_empty(struct list_head *head) {
     return head->next == head;
 }
 
-static inline void list_add(struct list_head *item, struct list_head *prev, struct list_head *next) {
+static inline void list_insert(struct list_head *item, struct list_head *prev, struct list_head *next) {
     prev->next = item;
     item->prev = prev;
     item->next = next;
     next->prev = item;
 }
 
-static inline void list_head_add(struct list_head *head, struct list_head *item) {
-    list_add(item, head, head->next);
+static inline void list_push(struct list_head *head, struct list_head *item) {
+    list_insert(item, head, head->next);
 }
 
-static inline void list_tail_add(struct list_head *head, struct list_head *item) {
-    list_add(item, head->prev, head);
+static inline void list_add(struct list_head *head, struct list_head *item) {
+    list_insert(item, head->prev, head);
 }
 
 static inline void list_link(struct list_head *prev, struct list_head *next) {
@@ -47,9 +47,13 @@ static inline void list_link(struct list_head *prev, struct list_head *next) {
     next->prev = prev;
 }
 
-static inline void list_move(struct list_head *head, struct list_head *item) {
-    list_link(item->prev, item->next);
-    list_head_add(head, item);
+static inline struct list_head *list_pop(struct list_head *head) {
+    list_link(head->prev, head->next);
+    list_init(head);
+    return head;
 }
 
-//static inline void list_remove_last()
+static inline void list_move(struct list_head *head, struct list_head *item) {
+    list_link(item->prev, item->next);
+    list_push(head, item);
+}

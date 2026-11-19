@@ -11,6 +11,7 @@
 #include <errno.h>
 
 #include <kernel/tty.h>
+#include <kernel/inode.h>
 
 //#define TTY_MAJOR       4
 
@@ -18,10 +19,20 @@ struct termio tty_table[] = {
     
 };
 
+int tty_ioctl(struct device *dev, unsigned short cmd, void *data) {
+    /*switch (cmd) {
+        case TTY_GETMODE:
+            break;
+
+        case TTY_SETMODE:
+            break;
+    }*/
+}
+
 int tty_getc(struct inode *inode) {
     struct termio *tty = tty_table + MINOR(inode->kdev);
 
-    wait(&(tty->isem));
+    sem_wait(&(tty->isem));
     char c = *tty->ihead++;
 
     if (tty->ihead >= tty->ibuf + IBUFLEN)
@@ -36,7 +47,7 @@ int tty_getc(struct inode *inode) {
 int tty_putc(struct inode *inode, int c) {
     struct termio *tty = tty_table + MINOR(inode->kdev);
 
-    wait(&(tty->osem));
+    sem_wait(&(tty->osem));
     *tty->otail++ = c;
 
     if (tty->otail >= tty->obuf + OBUFLEN)
@@ -46,16 +57,16 @@ int tty_putc(struct inode *inode, int c) {
     return 0;
 }
 
-int tty_read(struct inode *inode, struct file *file, void *buffer, size_t count) {
+ssize_t tty_read(struct inode *inode, struct file *file, void *buffer, size_t count) {
     if (count > SSIZE_MAX) {
         errno = EINVAL;
         return -1;
     }
     
     char *ptr = buffer;
-    int read;
+    ssize_t read;
 
-    for (read = 0; read < count; ++read) {
+    for (read = 0; read < (ssize_t)count; ++read) {
         int ch = tty_getc(inode);
 
         if (ch == EOF)
@@ -67,16 +78,16 @@ int tty_read(struct inode *inode, struct file *file, void *buffer, size_t count)
     return read;
 }
 
-int tty_write(struct inode *inode, struct file *file, void const *buffer, size_t count) {
+ssize_t tty_write(struct inode *inode, struct file *file, void const *buffer, size_t count) {
     if (count > SSIZE_MAX) {
         errno = EINVAL;
         return -1;
     }
 
-    char *ptr = buffer;
-    int written;
+    char const *ptr = buffer;
+    ssize_t written;
 
-    for (written = 0; written < count; ++written)
+    for (written = 0; written < (ssize_t)count; ++written)
         tty_putc(inode, *ptr++);
 
     return written;

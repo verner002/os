@@ -15,3 +15,5 @@
 #define PAGE_CD         16
 
 int kmap(void *dir, void *virt, void *phys, int flags);
+size_t copy_from_user(void *dst, void const *src, size_t size);
+size_t copy_to_user(void *dst, void const *src, size_t size);
