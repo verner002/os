@@ -10,30 +10,60 @@
 #include <kernel/system.h>
 #include <kernel/paging.h>
 
+// TODO: split memory to LOWMEM and HIGHMEM
+// use LOWMEM for kernel allocations and
+// HIGHMEM for userland and LOWMEM only if
+// there is no HIGHMEM left
 static uint32_t *bitmap;
 static size_t size;
 static size_t last_index;
 
-/**
- * pfa_init
-*/
+#include <kernel/printk.h>
+
+static inline void pfa_free_pfn(uint32_t pfn) {
+    uint32_t idx = pfn >> 5;
+
+    bitmap[idx] &= ~(1u << (pfn & 31));
+
+    if (idx < last_index)
+        last_index = idx;
+}
 
 int pfa_init(struct e820_map *mmap) {
     // we use the last entry to calculate
     // the physical memory bitmap size
+    struct e820_entry *entries = mmap->entries;
     size_t nentries = mmap->nentries;
 
-    struct e820_entry *last_entry = &mmap->entries[nentries - 1];
+    struct e820_entry *last_entry = NULL;
+
+    for (size_t i = nentries; i > 0; --i) {
+        struct e820_entry *entry = entries + i - 1;
+
+        if (entry->type == 1) {
+            last_entry = entry;
+            break;
+        }
+    }
+
+    if (!last_entry)
+        return -1;
 
     size_t const pages_count = (size_t)((last_entry->base / PAGE_SIZE) + (last_entry->size / PAGE_SIZE));
 
-    // memory for pager bitmap
-    bitmap = (uint32_t *)((uint32_t)e820_alloc(pages_count / 8, 1, 768 * (1 << 20)) + KERNEL_VIRT_BASE);
+    size_t const bitmap_size = ((pages_count + 31) / 32) * sizeof(uint32_t);
 
-    if (!bitmap)
+    printk("bitmap size = %u\n", bitmap_size);
+
+    // memory for pager bitmap
+    uint32_t bitmap_phys = (uint32_t)e820_alloc(bitmap_size, 1, 768 * (1 << 20));
+
+    if (!bitmap_phys)
         return -1;
 
-    size = pages_count / sizeof(uint32_t);
+    bitmap = (uint32_t *)(bitmap_phys + KERNEL_VIRT_BASE);
+
+    size = (pages_count + 31) / 32;
 
     // set all pages as reserved
     for (size_t i = 0; i < size; ++i)
@@ -53,8 +83,17 @@ int pfa_init(struct e820_map *mmap) {
         if (pages < 1)
             continue;
 
-        for (size_t j = 0; j < pages; ++j)
-            pfa_dealloc((void *)(entry->base + j * PAGE_SIZE));
+        uint32_t base = entry->base;
+        uint32_t end = base + entry->size - 1;
+
+        uint32_t first = (base >> 12) + ((base & 0xfffu) != 0);
+        uint32_t last = (end >> 12) + ((end & 0xfffu) == 0xfffu);
+
+        if (first >= last)
+            continue;
+        
+        for (uint32_t pfn = first; pfn < last; ++pfn)
+            pfa_free_pfn(pfn);
     }
 
     // reset last index
@@ -62,19 +101,12 @@ int pfa_init(struct e820_map *mmap) {
     return 0;
 }
 
-/**
- * pfa_reserve
-*/
-
 void pfa_reserve(void *ptr) {
     size_t i = (size_t)ptr / PAGE_SIZE;
+    size_t idx = i / 32;
 
-    bitmap[i / 32] |= 1 << (i % 32);
+    bitmap[idx] |= 1u << (i % 32);
 }
-
-/**
- * pfa_alloc
-*/
 
 void *pfa_alloc(void) {
     for (size_t i = last_index; i < size; ++i) {
@@ -105,30 +137,17 @@ void *pfa_alloc(void) {
             ); // returns toggled bit index*/
 
             last_index = i;
-            
-            return (void *)((i * 32 + page) * PAGE_SIZE);
+
+            return (void *)(((i << 5) + page) * PAGE_SIZE);
         }
     }
 
     return NULL;
 }
 
-/**
- * pfa_dealloc
-*/
-
 void pfa_dealloc(void *ptr) {
-    size_t i = (size_t)ptr / PAGE_SIZE;
-
-    bitmap[i / 32] &= ~(1 << (i % 32));
-
-    if (i < last_index)
-        last_index = i;
+    pfa_free_pfn((uint32_t)ptr >> 12);
 }
-
-/**
- * blkalloc
-*/
 
 void *blkalloc(int n) {
     if (!n) return NULL;

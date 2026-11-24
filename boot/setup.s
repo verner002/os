@@ -421,6 +421,10 @@ e820_map:
     jnz .skip_ard
 
     mov edx, dword [es:di+8] ; size low
+
+    test edx, edx
+    jz .skip_ard
+
     add edx, dword [es:di] ; base low
     jnc .ard_ok ; not likely for 32-bit entries
 

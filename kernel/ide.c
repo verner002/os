@@ -160,7 +160,7 @@ static struct ide_request {
 } requests[NREQ];
 
 static uint8_t ide_buffer[2048];
-static uint8_t atapi_buffer[12] = { 0xa8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+//static uint8_t atapi_buffer[12] = { 0xa8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 static volatile int irq_invoked;
 
 /**
@@ -681,11 +681,7 @@ int ide_init(struct pci_header *h) {
     return 0;
 }
 
-/**
- * ide_add_request
-*/
-
-static void ide_add_request(uint8_t cmd, struct block_buffer *buffer) {
+/*static void ide_add_request(uint8_t cmd, struct block_buffer *buffer) {
     struct ide_request *free_req;
 
     struct ide_request *requests_end = requests + NREQ;
@@ -700,7 +696,7 @@ static void ide_add_request(uint8_t cmd, struct block_buffer *buffer) {
 
 set_up_request:
     // set up request
-}
+}*/
 
 void reqinfo(void) {
     unsigned long flags;

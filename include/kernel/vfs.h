@@ -7,7 +7,6 @@
 #pragma once
 
 #include <kernel/dcache.h>
-#include <kernel/fcntl.h>
 
 #define NAME_MAX        255
 #define PATH_MAX        4095

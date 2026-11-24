@@ -6,7 +6,6 @@
 
 #include <stdalign.h>
 #include <stddef.h>
-#include <string.h>
 
 #include <kernel/inode.h>
 #include <kernel/slab.h>
@@ -16,7 +15,7 @@ struct kmem_cache *inode_cache;
 ino_t ino_seq = 1;
 
 void inode_ctor(void *obj) {
-    struct inode *inode = (struct inode *)obj;
+    //struct inode *inode = (struct inode *)obj;
 
     // TODO: init semaphores
 }

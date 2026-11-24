@@ -6,13 +6,13 @@
 
 #pragma once
 
-#define PAGE_SIZE       4096
+#define PAGE_SIZE       4096u
 
-#define PAGE_P          1
-#define PAGE_RW         2
-#define PAGE_US         4
-#define PAGE_WT         8
-#define PAGE_CD         16
+#define PAGE_P          1u
+#define PAGE_RW         2u
+#define PAGE_US         4u
+#define PAGE_WT         8u
+#define PAGE_CD         16u
 
 int kmap(void *dir, void *virt, void *phys, int flags);
 size_t copy_from_user(void *dst, void const *src, size_t size);

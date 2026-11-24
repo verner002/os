@@ -9,6 +9,7 @@
 
 #include <kernel/dcache.h>
 #include <kernel/slab.h>
+#include <kernel/inode.h>
 
 // 1024 dentries (lru strategy)
 #define DCACHE_BITS         10

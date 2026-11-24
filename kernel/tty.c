@@ -19,7 +19,7 @@ struct termio tty_table[] = {
     
 };
 
-int tty_ioctl(struct device *dev, unsigned short cmd, void *data) {
+int tty_ioctl(/*struct device *dev, */unsigned short cmd, void *data) {
     /*switch (cmd) {
         case TTY_GETMODE:
             break;
@@ -27,6 +27,7 @@ int tty_ioctl(struct device *dev, unsigned short cmd, void *data) {
         case TTY_SETMODE:
             break;
     }*/
+   return -ENOSYS;
 }
 
 int tty_getc(struct inode *inode) {

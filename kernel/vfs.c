@@ -10,6 +10,8 @@
 #include <errno.h>
 
 #include <kernel/vfs.h>
+#include <kernel/inode.h>
+#include <kernel/fcntl.h>
 #include <kernel/slab.h>
 #include <kernel/process.h>
 
@@ -25,8 +27,6 @@ void vfs_init(void) {
 
     file_cache = kmem_cache_create("file_cache", sizeof(struct file), alignof(struct file), NULL);
 }
-
-#include <kernel/printk.h>
 
 struct dentry *walk_to_parent(char const *path, char last[NAME_MAX + 1], int *trailing_slash) {
     struct dentry *cd;
@@ -151,14 +151,18 @@ struct file *vfs_open(char const *path, int flags, int mode) {
     
     // TODO: check if allocation didn't fail
     struct file *file = kmem_cache_alloc(file_cache, KM_NOSLEEP);
-    file->inode = iget(dentry->inode);
-    dput(dentry);
-
+    file->count = 1;
+    file->dentry = dentry;
+    file->fops = dentry->inode->fops;
     return file;
 }
 
 int vfs_close(struct file *file) {
-    iput(file->inode);
+    if (--(file->count) > 0)
+        return 0;
+        
+    // TODO: call fops->release
+    dput(file->dentry);
     kmem_cache_free(file_cache, file);
     return 0;
 }

@@ -11,7 +11,9 @@
 #define NR_read         2
 #define NR_write        3
 #define NR_close        4
-#define NR_pause        5
+#define NR_dup          5
+#define NR_dup2         6
+#define NR_pause        7
 
 static inline int fork(void) {
     int result;
@@ -39,6 +41,19 @@ static inline int open(char const *path, int flags, int mode) {
     return result;
 }
 
+static inline int read(int fd, char *buffer, size_t count) {
+    int result;
+
+    asm volatile (
+        "int 0x80"
+        : "=a" (result)
+        : "0" (NR_read), "b" (fd), "c" (buffer), "d" (count)
+        :
+    );
+
+    return result;
+}
+
 static inline int write(int fd, char const *buffer, size_t count) {
     int result;
 
@@ -59,6 +74,32 @@ static inline int close(int fd) {
         "int 0x80"
         : "=a" (result)
         : "0" (NR_close), "b" (fd)
+        :
+    );
+
+    return result;
+}
+
+static inline int dup(int fd) {
+    int result;
+
+    asm volatile (
+        "int 0x80"
+        : "=a" (result)
+        : "0" (NR_dup), "b" (fd)
+        :
+    );
+
+    return result;
+}
+
+static inline int dup2(int oldfd, int newfd) {
+    int result;
+
+    asm volatile (
+        "int 0x80"
+        : "=a" (result)
+        : "0" (NR_dup2), "b" (oldfd), "c" (newfd)
         :
     );
 

@@ -1,5 +1,4 @@
 global int32_handler
-global trampoline
 global int128_handler
 global syscall_return
 
@@ -8,9 +7,6 @@ extern do_timer
 
 extern syscall_table
 extern NSYSCALL
-
-extern init
-extern sys_create
 
 ENOSYS      equ 38
 
@@ -32,12 +28,6 @@ int32_handler:
     popad
     pop ebp
     iretd
-
-trampoline:
-    iretd
-
-extern notify
-extern init
 
 int128_handler:
     pushad

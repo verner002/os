@@ -6,10 +6,9 @@
 
 #pragma once
 
-#include <kernel/atomic.h>
+#include <stddef.h>
+
 #include <kernel/kdev.h>
-#include <kernel/dcache.h>
-#include <kernel/process.h>
 #include <kernel/semaphore.h>
 
 #define S_IROTH         (1 << 0)
@@ -87,7 +86,7 @@ struct inode {
     uid_t uid; // user id
     gid_t gid; // group id
     mode_t mode; // type, special/reserved and permission bits
-    atomic_t refs; // reference counter
+    size_t refs; // reference counter
 
     sem_t rw_lock;
     sem_t turnstile;
@@ -115,10 +114,10 @@ struct inode {
 struct file {
     unsigned short mode; // FMODE_READ, FMODE_WRITE, etc.
     unsigned short flags; // O_CREAT, O_APPEND, etc.
-    struct inode *inode;
-    unsigned long count;
+    struct dentry *dentry;
     unsigned long offset;
-    //struct file_ops *fops; // same ptr as dentry->inode->fops
+    size_t count;
+    struct file_ops *fops; // same ptr as dentry->inode->fops
 };
 
 void inode_init(void);

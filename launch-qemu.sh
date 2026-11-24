@@ -1,13 +1,19 @@
 #!/bin/bash
 
 qemu-system-x86_64 \
+    -machine isapc \
+    -cpu 486 \
+    -m 32M \
+    -accel  tcg,tb-size=1 \
     -no-reboot -no-shutdown \
     -boot order=a \
     -fda ./fdd.img \
     -drive file=disk.img,format=raw,if=ide,index=0 \
-    -d int,cpu_reset -D qemu.log \
+    -d guest_errors,unimp,int,cpu_reset -D qemu.log \
     -debugcon file:/tmp/qemu_e9 \
-    -serial tcp:127.0.0.1:4444,server,nowait
+    -serial tcp:127.0.0.1:4444,server,nowait \
+    -nic none
+    #-icount shift=2 \
     #-device piix3-ide,id=ide \
     #-drive id=disk,file=disk.img,format=raw,if=none \
     #-device ide-hd,drive=disk,bus=ide.0 #\

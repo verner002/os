@@ -25,8 +25,6 @@ typedef int pid_t;
 #define PROC_SUSPENDED      3
 #define PROC_WAITING        4
 
-#define STACK_CANARY    0xcafecafe
-
 #define ISBADPID(x) ((x) < 0 || (x) >= NPROC || proctab[(x)].state == PROC_FREE)
 
 // early declarations
@@ -40,9 +38,8 @@ struct process {
     unsigned long u_time;
     struct dentry *cwd;
     uint32_t cr3;
-    unsigned long stack_base;
-    unsigned long stack_ptr;
-    size_t stack_size;
+    unsigned long ustack_base;
+    size_t ustack_size;
     unsigned long kstack_base;
     unsigned long kstack_ptr;
     size_t kstack_size;

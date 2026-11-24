@@ -15,6 +15,7 @@
 #include <kernel/system.h>
 #include <kernel/pfa.h>
 #include <kernel/paging.h>
+#include <kernel/inode.h>
 
 #define HEAP_TOP            0
 #define HEAP_PARENT(i)      (((i) - 1) / 2)
@@ -28,6 +29,7 @@ static pid_t heap[NPROC];
 static size_t lookup[NPROC];
 
 extern volatile uint32_t ticks;
+extern void syscall_return(void);
 
 static void heapify(pid_t index) {
     pid_t parent_i = index;
@@ -124,17 +126,15 @@ static pid_t new_pid(void) {
     return (pid_t)-1;
 }
 
-void procexit(void) {
-    while (1);
-}
-
-uint32_t read_eip(void);
-
-static int clone_address_space(uint32_t parent_cr3) {
+static int clone_address_space(uint32_t parent_cr3, uint32_t *child_cr3) {
     // TODO: implement copy-on-write (more efficient than
     //  copying whole address space)
     uint32_t *pd_parent = (uint32_t *)((parent_cr3 & ~0xfff) + KERNEL_VIRT_BASE);
     uint32_t pd_child_phys = (uint32_t)pfa_alloc();
+
+    if (!pd_child_phys)
+        return -ENOMEM;
+
     uint32_t *pd_child = (uint32_t *)(pd_child_phys + KERNEL_VIRT_BASE);
 
     memset(pd_child, 0, 4096);
@@ -150,6 +150,10 @@ static int clone_address_space(uint32_t parent_cr3) {
 
         uint32_t *pt_parent = (uint32_t *)((pde & ~0xfff) + KERNEL_VIRT_BASE);
         uint32_t pt_child_phys = (uint32_t)pfa_alloc();
+
+        if (!pt_child_phys)
+            goto fail;
+
         uint32_t *pt_child = (uint32_t *)(pt_child_phys + KERNEL_VIRT_BASE);
         
         memset(pt_child, 0, 4096);
@@ -162,7 +166,10 @@ static int clone_address_space(uint32_t parent_cr3) {
 
             uint32_t pg_child_phys = (uint32_t)pfa_alloc();
 
-            memcpy((void *)(pg_child_phys + KERNEL_VIRT_BASE), (void *)((pte & ~0xfff) + KERNEL_VIRT_BASE), 4096);
+            if (!pg_child_phys)
+                goto fail;
+
+            memcpy((void *)(pg_child_phys + KERNEL_VIRT_BASE), (void *)((pte & ~0xfff) + KERNEL_VIRT_BASE), PAGE_SIZE);
 
             pt_child[j] = pg_child_phys | (pte & 0xfff);
         }
@@ -171,19 +178,31 @@ static int clone_address_space(uint32_t parent_cr3) {
     }
 
     // share kernel pages
-    for (int i = kernel_pde; i < 1024; ++i) {
-        uint32_t pde = pd_parent[i];
+    for (int i = kernel_pde; i < 1024; ++i)
+        pd_child[i] = pd_parent[i];
 
-        if (!(pde & PAGE_P))
+    *child_cr3 = pd_child_phys | (proctab[cproc].cr3 & 0xfff);
+    return 0;
+
+fail:
+    for (size_t i = 0; i < 768; ++i) {
+        if (!(pd_child[i] & PAGE_P))
             continue;
+        
+        uint32_t pt_phys = pd_child[i] & ~0xfffu;
+        uint32_t *pt = (uint32_t *)(pt_phys + KERNEL_VIRT_BASE);
 
-        pd_child[i] = pde;        
+        for (size_t j = 0; j < 1024; ++j) {
+            if (pt[j] & PAGE_P)
+                pfa_dealloc((void *)(pt[j] & ~0xfffu));
+        }
+
+        pfa_dealloc((void *)pt_phys);
     }
 
-    return pd_child_phys | (proctab[cproc].cr3 & 0xfff);
+    pfa_dealloc((void *)pd_child);
+    return -ENOMEM;
 }
-
-extern void syscall_return(void);
 
 pid_t sys_fork(struct regs *regs) {
     struct process *parent = current;
@@ -191,7 +210,12 @@ pid_t sys_fork(struct regs *regs) {
     pid_t pid = new_pid();
     struct process *child = proctab + pid;
 
-    uint32_t child_kstack_base = (uint32_t)(pfa_alloc() + KERNEL_VIRT_BASE); // TODO: alloc_stack
+    uint32_t child_kstack_base_phys = (uint32_t)pfa_alloc();
+
+    if (!child_kstack_base_phys)
+        return -ENOMEM;
+
+    uint32_t child_kstack_base = child_kstack_base_phys + KERNEL_VIRT_BASE; // TODO: alloc_stack
 
     uint32_t child_kstack_top = child_kstack_base + 4096;
 
@@ -210,42 +234,36 @@ pid_t sys_fork(struct regs *regs) {
     for (int i = 0; i < 8; ++i)
         *--child_esp = 0;
 
-    //*(uint32_t *)child_kstack_base = STACK_CANARY;
-
-    // ctxsw switches esp to child->stack_ptr
-    // but we return in kernel mode (returning from
-    // kernel mode), so we have to use kernel
-    // stack after context switch
     child->pid = pid;
-    child->state = PROC_READY;
     child->priority = 1; // init should have priority 1
     child->s_time = child->u_time = 0;
     child->cwd = parent->cwd;
-    child->cr3 = clone_address_space(parent->cr3);
-    child->stack_base = parent->stack_base;
-    child->stack_ptr = (unsigned long)child_esp;
-    child->stack_size = parent->stack_size;
+
+    if (clone_address_space(parent->cr3, &child->cr3)) {
+        pfa_dealloc((void *)child_kstack_base_phys);
+        return -ENOMEM;
+    }
+
+    child->ustack_base = parent->ustack_base;
+    child->ustack_size = parent->ustack_size;
     child->kstack_base = (unsigned long)child_kstack_base;
     child->kstack_ptr = (unsigned long)child_esp;
     child->kstack_size = 4096;
     child->parent_pid = parent->pid;
     list_init(&(child->l_wait));
 
-    for (size_t i = 0; i < NFDESC; ++i)
-        child->fdescs[i] = parent->fdescs[i];
+    for (size_t i = 0; i < NFDESC; ++i) {
+        struct file *fdesc = parent->fdescs[i];
 
-    //printk("ch->stack_base: %p\nch->stack_ptr: %p\nch->stack_size: %p\n", child->stack_base, child->stack_ptr, child->stack_size);
-    //printk("ch->kstack_base: %p\nch->kstack_ptr: %p\nch->kstack_size: %p\n", child->kstack_base, child->kstack_ptr, child->kstack_size);
+        if (fdesc)
+            ++(fdesc->count);
 
+        child->fdescs[i] = fdesc;
+    }
+
+    child->state = PROC_READY;
     push(pid);
     ++nproc;
-
-    /*for (int i = 0; i < nproc; ++i) {
-        struct process *proc = &proctab[i];
-
-        printk("PID=%i, \n", proc->pid);
-    }*/
-
     return pid;
 }
 
@@ -256,82 +274,6 @@ int sys_pause(void) {
     );
 
     return 0;
-}
-
-extern void trampoline(void);
-
-pid_t sys_create(void (*function)(void), unsigned char priority, size_t stack_size) {
-    unsigned long flags;
-    save_flags(flags);
-    cli();
-
-    uint32_t *saddr = (uint32_t *)(pfa_alloc() + KERNEL_VIRT_BASE); // TODO: alloc_stack
-    uint32_t *ksaddr = (uint32_t *)(pfa_alloc() + KERNEL_VIRT_BASE); // TODO: alloc_stack
-
-    pid_t pid = new_pid();
-
-    struct process *proc = proctab + pid;
-
-    proc->pid = pid;
-    proc->state = PROC_READY;
-    proc->priority = priority;
-    proc->cr3 = proctab[cproc].cr3;
-    proc->stack_base = (unsigned long)saddr;
-    proc->stack_size = 4096; // stack_size
-    proc->kstack_base = (unsigned long)ksaddr;
-    proc->kstack_size = 4096;
-    proc->parent_pid = proctab[cproc].pid;
-    list_init(&(proc->l_wait));
-
-    // stack setup
-    saddr += 1024; // stack_size / sizeof(uint32_t)
-
-    *--saddr = STACK_CANARY;
-
-    *--saddr = (uint32_t)&procexit;
-
-    uint32_t temp_esp = (uint32_t)saddr;
-
-    *--saddr = (4 * 8) | 3; // userland data selector
-    *--saddr = temp_esp;
-    *--saddr = 0x00000202; // eflags (if=1)
-    *--saddr = (3 * 8) | 3; // userland code selector
-    *--saddr = (uint32_t)function;
-    *--saddr = (uint32_t)&trampoline;
-    
-    temp_esp = (uint32_t)saddr;
-
-    *--saddr = temp_esp; // push ebp
-
-    uint32_t temp_ebp = (uint32_t)saddr; // corresponds to mov ebp, esp after popad
-
-    *--saddr = 0x00000002; // eflags (if=0)
-
-    temp_esp = (uint32_t)saddr; // pushad temp variable for esp
-
-    *--saddr = 0; // eax
-    *--saddr = 0; // ecx
-    *--saddr = 0; // edx
-    *--saddr = 0; // ebx
-    *--saddr = temp_esp; // esp
-    *--saddr = temp_ebp; // ebp
-    *--saddr = 0; // esi
-    *--saddr = 0; // edi
-
-    proc->stack_ptr = (unsigned long)saddr;
-
-    // kernel stack setup
-    ksaddr += 1024; // kstack_size / sizeof(uint32_t)
-
-    *--ksaddr = STACK_CANARY;
-
-    proc->kstack_ptr = (unsigned long)ksaddr;
-
-    push(pid);
-    ++nproc;
-
-    restore_flags(flags);
-    return pid;
 }
 
 pid_t getpid(void) {
@@ -491,8 +433,8 @@ void schedule(void) {
     struct process *new_proc = proctab + cproc;
     new_proc->state = PROC_RUNNING;
 
-    tss_set_esp0(new_proc->kstack_ptr);
+    tss_set_esp0(new_proc->kstack_base + new_proc->kstack_size);
 
     // perform the context switch
-    ctxsw(&old_proc->stack_ptr, &new_proc->stack_ptr, new_proc->cr3);
+    ctxsw(&old_proc->kstack_ptr, &new_proc->kstack_ptr, new_proc->cr3);
 }

@@ -9,6 +9,7 @@
 #define EPERM           1       // operation not permitted
 #define ENOENT          2       // no such file or directory
 #define ENXIO           6       // no such device or address
+#define EBADF           9       // bad file descriptor
 #define EAGAIN          11      // resource temporarily unavailable
 #define ENOMEM          12      // cannot allocate memory
 #define EACCES          13      // permission denied

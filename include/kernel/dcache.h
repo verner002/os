@@ -6,9 +6,9 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <kernel/list.h>
-#include <kernel/atomic.h>
-#include <kernel/inode.h>
 
 // early declarations
 struct inode;
@@ -21,7 +21,7 @@ struct dentry_ops {
 struct dentry {
     char name[32];
     struct dentry *parent;
-    atomic_t refs;
+    size_t refs;
     struct inode *inode;
     struct dentry_ops *ops;
     struct list_head siblings;

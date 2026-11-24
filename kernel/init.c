@@ -4,10 +4,10 @@
  * @date 18/07/2026
 */
 
-#define LOWMEM_END              (((768 + 128) << 20) - 1)
+#define LOWMEM_SIZE             ((768 + 128) << 20)
+#define LOWMEM_MAX              (LOWMEM_SIZE - 1)
 
 #include <stddef.h>
-#include <stdalign.h>
 #include <errno.h>
 
 #include <kernel/system.h>
@@ -33,10 +33,10 @@
 #include <kernel/panic.h>
 #include <kernel/tty.h>
 #include <kernel/slab.h>
-#include <kernel/kmalloc.h>
 #include <kernel/inode.h>
-#include <kernel/vfs.h>
 #include <kernel/devfs.h>
+#include <kernel/vfs.h>
+#include <kernel/fcntl.h>
 
 extern char __kernel_end[];
 
@@ -209,10 +209,8 @@ int find_free_fd(void) {
         if (!current->fdescs[fd])
             break;
 
-    if (fd >= NFDESC) {
-        errno = EMFILE;
+    if (fd >= NFDESC)
         return -1;
-    }
 
     return fd;
 }
@@ -225,21 +223,28 @@ int sys_open(struct regs *r) {
     int fd = find_free_fd();
 
     if (fd < 0)
-        return -1;
+        return -EMFILE;
 
     struct file *file = vfs_open(path, flags, mode);
 
-    printk("errno=%i\n", errno);
-
     if (!file)
-        return -1;
+        return -ENOENT;
 
     current->fdescs[fd] = file;
     return fd;
 }
 
 int sys_read(struct regs *r) {
-    return -ENOSYS;
+    int fd = (int)r->ebx;
+    void *buffer = (void *)r->ecx;
+    size_t count = (size_t)r->edx;
+
+    struct file *f;
+
+    if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
+        return -EBADF;
+
+    return f->fops->read(f, buffer, count);
 }
 
 int sys_write(struct regs *r) {
@@ -250,10 +255,9 @@ int sys_write(struct regs *r) {
     struct file *f;
 
     if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
-        return -ENOENT;
+        return -EBADF;
 
-    struct inode *i = f->inode;
-    return i->fops->write(f, buffer, count);
+    return f->fops->write(f, buffer, count);
 }
 
 int sys_close(struct regs *r) {
@@ -262,20 +266,70 @@ int sys_close(struct regs *r) {
     struct file *f;
 
     if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
-        return -ENOENT;
+        return -EBADF;
     
-    return vfs_close(f);
+    int err = vfs_close(f);
+
+    if (err)
+        return err;
+
+    current->fdescs[fd] = NULL;
+    return 0;
 }
 
-int (*syscall_table[])(void) = {
-    (int (*)(void))&sys_fork,
-    (int (*)(void))&sys_open,
-    (int (*)(void))&sys_read,
-    (int (*)(void))&sys_write,
-    (int (*)(void))&sys_close
+int sys_dup(struct regs *r) {
+    int fd = (int)r->ebx;
+
+    struct file *f;
+
+    if (fd < 0 || fd >= NFDESC || !(f = current->fdescs[fd]))
+        return -EBADF;
+
+    fd = find_free_fd();
+
+    if (fd < 0)
+        return -EMFILE;
+
+    current->fdescs[fd] = f;
+    ++(f->count);
+    return fd;
+}
+
+int sys_dup2(struct regs *r) {
+    int old_fd = (int)r->ebx;
+    int new_fd = (int)r->ecx;
+
+    struct file *old_f;
+
+    if (old_fd < 0 || old_fd >= NFDESC || new_fd < 0 || new_fd >= NFDESC || !(old_f = current->fdescs[old_fd]))
+        return -EBADF;
+
+    if (new_fd == old_fd)
+        return new_fd;
+
+    struct file *new_f;
+
+    if ((new_f = current->fdescs[new_fd]))
+        vfs_close(new_f);
+
+    current->fdescs[new_fd] = old_f;
+    ++(old_f->count);
+    return new_fd;
+}
+
+typedef int (*syscall_fn_t)(struct regs *);
+
+syscall_fn_t syscall_table[] = {
+    &sys_fork,
+    &sys_open,
+    &sys_read,
+    &sys_write,
+    &sys_close,
+    &sys_dup,
+    &sys_dup2
 };
 
-size_t const NSYSCALL = sizeof(syscall_table) / sizeof(int (*)(void));
+size_t const NSYSCALL = sizeof(syscall_table) / sizeof(syscall_fn_t);
 
 __attribute__((interrupt)) void int32_handler(struct interrupt_frame *);
 __attribute__((interrupt)) void int128_handler(struct interrupt_frame *);
@@ -292,19 +346,55 @@ void do_timer(uint32_t cpl) {
     schedule();
 }
 
-#define STDOUT      0
-#define STDIN       1
+#define STDIN       0
+#define STDOUT      1
 #define STDERR      2
 
 extern int tty_write(struct inode *inode, struct file *file, void const *buffer, size_t count);
 
 extern void enter_userland(uint32_t stack);
 
+int number(char buf[11], int value) {
+    int i = 11;
+    int m = 0;
+
+    if (value < 0) {
+        value = -value;
+        m = 1;
+    }
+
+    do {
+        char d = (value % 10) + '0';
+        buf[--i] = d;
+    } while (value /= 10);
+
+    if (m)
+        buf[--i] = '-';
+
+    return i;
+}
+
 void init(void) {
-    int fd = open("/dev/e9", O_WRONLY, 0);
-    char msg[] = "debug\n";
-    write(fd, msg, sizeof(msg) - 1);
-    close(fd);
+    int pid = fork();
+
+    if (pid > 0) {
+        char msg[] = "\033[33minit:\033[37m process 1\n";
+        write(STDOUT, msg, sizeof(msg) - 1);
+    } else if (pid == 0) {
+        char msg[] = "\033[33minit:\033[37m process 2\n";
+        write(STDOUT, msg, sizeof(msg) - 1);
+    } else {
+        char msg[] = "\033[33minit:\033[37m fork failed\n";
+        write(STDERR, msg, sizeof(msg) - 1);
+    }
+    
+    /*char buf[1024];
+    int rc = read(STDIN, buf, sizeof(buf));
+
+    char err[11];
+    int off = number(err, rc);
+
+    write(STDOUT, err + off, 11 - off);*/
 }
 
 extern struct dentry *root_dentry;
@@ -369,7 +459,7 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
             0, 0,
             NULL,
             0,
-            0, 0, 0,
+            0, 0,
             0, 0, 0,
             -1,
             { NULL, NULL },
@@ -383,8 +473,8 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
         0, 0,                           // system time, user time
         NULL,                           // current working directory
         cr3,                            // cr3
-        0, 0, 0,                        // stack
-        0, 0, 0,                        // kernel stack
+        0, 0,                           // user stack
+        KERNEL_VIRT_STACK, 0, 4096,     // kernel stack
         -1,                             // parent
         { NULL, NULL },
         { NULL }
@@ -405,15 +495,22 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     // discard direct mapping
     pd[0] = 0;
 
-    //e820_dump_mmap();
+    e820_dump_mmap();
 
-    struct e820_entry *ldesc = &mmap.entries[mmap.nentries - 1];
+    uint32_t ram_end;
 
-    uint32_t ram_end = ldesc->base + ldesc->size - 1;
+    for (size_t i = mmap.nentries; i > 0; --i) {
+        struct e820_entry *entry = mmap.entries + i - 1;
 
-    uint32_t lowmem_end = ram_end < LOWMEM_END ? ram_end : LOWMEM_END;
+        if (entry->type == 1) {
+            ram_end = entry->base + entry->size - 1;
+            break;
+        }
+    }
 
-    uint32_t kernel_end_addr = (uint32_t)&__kernel_end;
+    uint32_t lowmem_end = ram_end < LOWMEM_MAX ? ram_end : LOWMEM_MAX;
+
+    //uint32_t kernel_end_addr = (uint32_t)&__kernel_end;
     //bump_alloc = (kernel_end_addr + 4095) & ~4095;
 
     // up to 4 MiB of memory is identity- and
@@ -427,21 +524,43 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     // inside this region and then map the
     // remaining 768+128-4 MiB
 
-    size_t const npt = ((((size_t)lowmem_end + 1) / (1 << 20)) - 4) / 4;
-    size_t const npt_bytes = npt * 4096;
+    // number of 4mb blocks rounded up
+    size_t total_4mb = ((lowmem_end + ((1 << 22) - 1))) >> 22;
+    size_t pt_count = total_4mb > 0 ? total_4mb - 1 : 0;
+    
+    if (pt_count > 0) {
+        // first pt is already filled
+        if (pt_count > (224 - 1))
+            pt_count = (224 - 1);
 
-    uint32_t *pte = e820_alloc(npt_bytes, 1, 4 << 20) + KERNEL_VIRT_BASE;
+        size_t const pts_bytes = pt_count * 4096;
 
-    printk("npt=%u (%u bytes)\npt_array=%p\n", npt, npt_bytes, pte);
+        uint32_t pt_phys = (uint32_t)e820_alloc(pts_bytes, 1, 1 << 22);
 
-    size_t npte = npt * 1024;
+        if (!pt_phys)
+            panic();
 
-    // TODO: do not perform mapping of last 128 MiB
-    for (size_t i = 0; i < npte; ++i)
-        pte[i] = ((4 << 20) + (i * (4 << 10))) | PAGE_RW | PAGE_P;
+        uint32_t *pte = (uint32_t *)(pt_phys + KERNEL_VIRT_BASE);
 
-    for (size_t i = 0; i < npt; ++i)
-        pd[i + 768 + 1] = ((uint32_t)pte + i * (4 << 10)) | PAGE_RW | PAGE_P;
+        printk("pt_count=%u (%u bytes)\npt_array=%p\n", pt_count, pts_bytes, pte);
+
+        size_t pt_entries = pt_count * 1024;
+
+        for (size_t i = 0; i < pt_entries; ++i)
+            pte[i] = ((1 << 22) + (i * PAGE_SIZE)) | PAGE_RW | PAGE_P;
+
+        for (size_t i = 0; i < pt_count; ++i)
+            ((uint32_t *)((char *)pd + KERNEL_VIRT_BASE))[i + 768 + 1] = (pt_phys + i * PAGE_SIZE) | PAGE_RW | PAGE_P;
+    }
+
+    // flush tlb
+    asm volatile (
+        "mov eax, cr3\n\t"
+        "mov cr3, eax"
+        :
+        :
+        : "eax", "memory"
+    );
 
     // up to 768 MiB of memory is now identity mapped
     // and directly accessible by kernel (last 128 MiB)
@@ -463,7 +582,8 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     fdc_buffer = NULL;
 #endif
 
-    pfa_init(&mmap);
+    if (pfa_init(&mmap))
+        panic();
 
     kmem_cache_init();
     
@@ -476,17 +596,14 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     int devfs = devfs_init();
     printk("kernel: devfs: init: %i\n", devfs);
 
-    struct dentry *test = d_lookup(root_dentry, "dev");
-    printk("test=%p\n", test);
-
     int e9 = e9_init();
     printk("kernel: e9: init: %i\n", e9);
 
-    void *heap_start = (void *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
+    /*void *heap_start = (void *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
 
     kheap_init(heap_start, 4096);
 
-    printk("heap_start=%p, heap_end=%p\n", heap_start, heap_start + 4096 - 1);
+    printk("heap_start=%p, heap_end=%p\n", heap_start, heap_start + 4096 - 1);*/
 
     irqs_init();
 
@@ -519,100 +636,52 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
 
     // enable pit irq
     enable_irq(0);
+    
+    // expose syscall handler
+    install_user_interrupt_gate(0x80, &int128_handler);
+
+    printk("kernel: starting init\n");
 
     // set user stack
-    uint32_t *stack_phys = pfa_alloc();
+    uint32_t stack_phys = (uint32_t)pfa_alloc();
+
+    if (!stack_phys)
+        panic();
+
     uint32_t *stack = (uint32_t *)(KERNEL_VIRT_BASE - 4096);
     
-    int map = kmap((void *)(cr3 & ~4095), (void *)stack, (void *)stack_phys, PAGE_US | PAGE_RW | PAGE_P);
+    int map = kmap((void *)(cr3 & ~0xfffu), (void *)stack, (void *)stack_phys, PAGE_US | PAGE_RW | PAGE_P);
 
     if (map) {
         printk("kmap failed\n");
         for (;;);
-    } else
-        printk("kmap ok\n");
+    }
 
-    current->stack_base = (unsigned long)stack;
-    current->stack_size = 4096;
+    current->ustack_base = (unsigned long)stack;
+    current->ustack_size = 4096;
 
     stack += 1024;
-    *--stack = STACK_CANARY;
-    current->stack_ptr = (unsigned long)stack;
 
-    asm volatile (
-        "mov %0, esp"
-        : "=r" (current->kstack_ptr)
-        :
-        :
-    );
-
-    /*uint32_t *kernel_kstack = (uint32_t *)((uint32_t)pfa_alloc() + KERNEL_VIRT_BASE);
-
-    current->stack_base = (unsigned long)kernel_kstack;
-    current->stack_size = 4096;
-
-    // kernel stack setup
-    kernel_kstack += 1024;
-    *--kernel_kstack = STACK_CANARY;
-    current->kstack_ptr = (unsigned long)kernel_kstack;*/
-
-    tss_set_esp0((uint32_t)current->kstack_ptr);
-
-    // expose syscall handler
-    install_user_interrupt_gate(0x80, &int128_handler);
-
-    // dcache test
-    /*struct dentry *test = alloc_dentry(NULL, "test");
-    dput(test);
-    struct dentry *test2 = alloc_dentry(NULL, "test");
-
-    if (test == test2)
-        printk("it works!\n");*/
-
-    printk("kernel: starting init\n");
+    tss_set_esp0(current->kstack_base + current->kstack_size);
 
     enter_userland((uint32_t)stack);
 
-    if (!fork())
+    int pid = fork();
+
+    if (pid == 0) {
+        int fd = open("/dev/e9", O_RDWR, 0);
+        dup2(fd, STDIN);
+        dup2(fd, STDOUT);
+        dup2(fd, STDERR);
+
         init();
+
+        close(STDERR);
+        close(STDOUT);
+        close(STDIN);
+    }
 
     // become idle
     for (;;)
         asm volatile ("pause" :::);
-
-    // try to initialize ps2
-    // NOTE: we won't do that here (parse ACPI first)
-    /*if (!ps2_init()) {
-        // install keyboard irq handler
-        //idt_install_handler(0x21, &keyboard_irq_handler);
-        
-        // enable keyboard irq
-        pic_enable_irq(0x01);
-    }*/
-
-    /*asm volatile (
-        "mov %0, cr3"
-        : "=r" (cr3)
-        :
-        :
-    );*/
-
-    // TODO: initialize fdc
-
-    // at this point we have to export architecture specific functions
-    // to the kernel so it is able to use hardware the same way on almost
-    // every platform
-    // after the vfs initialization, this hardware layer should be able
-    // to create device structure in the vfs so user can interact with it
-    
-    // TODO: init scheduler
-    // TODO: start ksoftirq daemon (better do in kernel)
-    // TODO: install handlers (ksoftirq)
-
-    // export e820_alloc
-    //  - kernel will use it to allocate memory
-    //     for kheap
-    //
-    // export vga_write
-    //  - kernel will use it in tty0
 }
