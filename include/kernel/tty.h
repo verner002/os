@@ -13,6 +13,14 @@
 
 #define EOF             -1
 
+#define TTY_GETMODE    0x5501
+#define TTY_SETMODE    0x5502
+
+enum uart_mode {
+    UART_MODE_POLL,
+    UART_MODE_IRQ
+};
+
 struct termio {
     char *ihead;
     char *itail;

@@ -13,7 +13,7 @@
 #include <kernel/system.h>
 //#include <kernel/process.h>
 
-// early declarations
+// forward declarations
 struct kmem_cache;
 struct kmem_slab;
 

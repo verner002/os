@@ -17,7 +17,7 @@ typedef uint16_t kdev_t;
 
 #define MAJOR(x) (((x) >> 8) & 0xff)
 #define MINOR(x) ((x) & 0xff)
-#define MAJMIN(x, y) (((x) << 8) | (y))
+#define MAJMIN(major, minor) (((major) << 8) | (minor))
 
 kdev_t name2kdev(char const *name);
 char const *kdev2name(kdev_t kdev);

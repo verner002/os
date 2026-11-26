@@ -27,7 +27,7 @@ typedef int pid_t;
 
 #define ISBADPID(x) ((x) < 0 || (x) >= NPROC || proctab[(x)].state == PROC_FREE)
 
-// early declarations
+// forward declarations
 struct file;
 
 struct process {

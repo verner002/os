@@ -10,7 +10,7 @@
 
 #include <kernel/list.h>
 
-// early declarations
+// forward declarations
 struct inode;
 
 struct dentry_ops {

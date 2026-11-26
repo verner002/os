@@ -56,7 +56,7 @@ typedef unsigned short mode_t;
 typedef unsigned short uid_t;
 typedef unsigned short gid_t;
 
-// early declarations
+// forward declarations
 struct inode;
 struct file;
 struct dentry;
@@ -96,9 +96,10 @@ struct inode {
     
     struct super_block *sb;
     struct inode_ops *ops;
-    struct file_ops *fops;
+    struct file_ops const *fops;
 
-    kdev_t kdev;
+    kdev_t dev; // where inode is
+    kdev_t rdev; // what inode represents
 
     union {
         int blk_index;
@@ -117,7 +118,7 @@ struct file {
     struct dentry *dentry;
     unsigned long offset;
     size_t count;
-    struct file_ops *fops; // same ptr as dentry->inode->fops
+    struct file_ops const *fops; // same ptr as dentry->inode->fops
 };
 
 void inode_init(void);

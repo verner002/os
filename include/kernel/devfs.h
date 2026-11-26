@@ -9,4 +9,4 @@
 #include <kernel/inode.h>
 
 int devfs_init(void);
-int devfs_register_chrdev(char const *name, struct file_ops const *fops);
+int devfs_register_chrdev(char const *name, kdev_t kdev, mode_t mode);

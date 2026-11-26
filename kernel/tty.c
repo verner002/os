@@ -20,18 +20,19 @@ struct termio tty_table[] = {
 };
 
 int tty_ioctl(/*struct device *dev, */unsigned short cmd, void *data) {
-    /*switch (cmd) {
+    switch (cmd) {
         case TTY_GETMODE:
             break;
 
         case TTY_SETMODE:
             break;
-    }*/
+    }
+
    return -ENOSYS;
 }
 
 int tty_getc(struct inode *inode) {
-    struct termio *tty = tty_table + MINOR(inode->kdev);
+    struct termio *tty = tty_table + MINOR(inode->rdev);
 
     sem_wait(&(tty->isem));
     char c = *tty->ihead++;
@@ -46,7 +47,7 @@ int tty_getc(struct inode *inode) {
 }
 
 int tty_putc(struct inode *inode, int c) {
-    struct termio *tty = tty_table + MINOR(inode->kdev);
+    struct termio *tty = tty_table + MINOR(inode->rdev);
 
     sem_wait(&(tty->osem));
     *tty->otail++ = c;

@@ -4,8 +4,7 @@
  * @date 18/07/2026
 */
 
-#define LOWMEM_SIZE             ((768 + 128) << 20)
-#define LOWMEM_MAX              (LOWMEM_SIZE - 1)
+#define LOWMEM_MAX              (((768 + 128) << 20) - 1)
 
 #include <stddef.h>
 #include <errno.h>
@@ -35,6 +34,7 @@
 #include <kernel/slab.h>
 #include <kernel/inode.h>
 #include <kernel/devfs.h>
+#include <kernel/device.h>
 #include <kernel/vfs.h>
 #include <kernel/fcntl.h>
 
@@ -595,6 +595,8 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
 
     int devfs = devfs_init();
     printk("kernel: devfs: init: %i\n", devfs);
+
+    device_init();
 
     int e9 = e9_init();
     printk("kernel: e9: init: %i\n", e9);

@@ -8,6 +8,7 @@
 
 #include <kernel/devfs.h>
 #include <kernel/dcache.h>
+#include <kernel/device.h>
 
 extern struct dentry *root_dentry;
 
@@ -37,8 +38,26 @@ int devfs_init(void) {
     return 0;
 }
 
-int devfs_register_chrdev(char const *name, struct file_ops const *fops) {
-    if (!name || !fops)
+static ssize_t chr_dev_open(struct inode *inode, struct file *file) {
+    struct cdev *cdev = cdev_lookup(inode->rdev);
+
+    if (!cdev)
+        return -ENXIO;
+
+    file->fops = cdev->ops;
+
+    if (file->fops && file->fops->open)
+        return file->fops->open(inode, file);
+
+    return 0;
+}
+
+struct file_ops const chr_dev_fops = {
+    .open = &chr_dev_open
+};
+
+int devfs_register_chrdev(char const *name, kdev_t dev, mode_t mode) {
+    if (!name)
         return -EINVAL;
 
     if (!devfs_dentry)
@@ -56,7 +75,15 @@ int devfs_register_chrdev(char const *name, struct file_ops const *fops) {
     if (!dev_inode)
         return -ENOMEM;
 
-    dev_inode->fops = fops;
+    //dev_inode->dev = ... -- virtual dev
+    dev_inode->rdev = dev;
+
+    if (S_ISCHR(mode))
+        dev_inode->fops = &chr_dev_fops;
+    /*else if (S_ISBLK(mode))
+        dev_inode->fops = &blk_dev_fops;*/
+    else
+        dev_inode->fops = NULL;
 
     struct dentry *dev_dentry = alloc_dentry(devfs_dentry, name);
 

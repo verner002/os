@@ -154,6 +154,18 @@ struct file *vfs_open(char const *path, int flags, int mode) {
     file->count = 1;
     file->dentry = dentry;
     file->fops = dentry->inode->fops;
+    file->flags = flags;
+
+    if (file->fops && file->fops->open) {
+        ssize_t err = file->fops->open(dentry->inode, file);
+
+        if (err < 0) {
+            dput(file->dentry);
+            kmem_cache_free(file_cache, file);
+            return NULL;
+        }
+    }
+
     return file;
 }
 

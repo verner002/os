@@ -13,6 +13,7 @@
 #define EAGAIN          11      // resource temporarily unavailable
 #define ENOMEM          12      // cannot allocate memory
 #define EACCES          13      // permission denied
+#define EBUSY           16      // device or resource busy
 #define EEXIST          17      // file exists
 #define ENODEV          19      // no such device
 #define ENOTDIR         20      // not a directory
