@@ -352,7 +352,7 @@ void do_timer(uint32_t cpl) {
 
 extern int tty_write(struct inode *inode, struct file *file, void const *buffer, size_t count);
 
-extern void enter_userland(uint32_t stack);
+extern void enter_userland(void (*entry)(void), uint32_t stack);
 
 int number(char buf[11], int value) {
     int i = 11;
@@ -375,7 +375,7 @@ int number(char buf[11], int value) {
 }
 
 void init(void) {
-    int pid = fork();
+    /*int pid = fork();
 
     if (pid > 0) {
         char msg[] = "\033[33minit:\033[37m process 1\n";
@@ -386,7 +386,16 @@ void init(void) {
     } else {
         char msg[] = "\033[33minit:\033[37m fork failed\n";
         write(STDERR, msg, sizeof(msg) - 1);
+    }*/
+
+    int fd = open("/dev/ttyS0", O_RDWR, 0);
+
+    char buf[16];
+    while (1) {
+        int c = read(fd, buf, sizeof(buf));
+        write(fd, buf, c);
     }
+    close(fd);
     
     /*char buf[1024];
     int rc = read(STDIN, buf, sizeof(buf));
@@ -401,6 +410,29 @@ extern struct dentry *root_dentry;
 
 extern int e9_init(void);
 extern int uart_init(void);
+
+__attribute__((aligned(16))) static char kstack0[4096];
+
+__attribute__((noreturn)) static void user_main(void) {
+    int pid = fork();
+
+    if (pid == 0) {
+        /*int fd = open("/dev/e9", O_RDWR, 0);
+        dup2(fd, STDIN);
+        dup2(fd, STDOUT);
+        dup2(fd, STDERR);*/
+
+        init();
+
+        /*close(STDERR);
+        close(STDOUT);
+        close(STDIN);*/
+    }
+
+    // become idle
+    for (;;)
+        asm volatile ("pause" :::);
+}
 
 void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct e820_entry *e820_entries) {
     // reinitialize gdt
@@ -474,7 +506,7 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
         NULL,                           // current working directory
         cr3,                            // cr3
         0, 0,                           // user stack
-        KERNEL_VIRT_STACK, 0, 4096,     // kernel stack
+        (unsigned long)kstack0, 0, sizeof(kstack0),    // kernel stack
         -1,                             // parent
         { NULL, NULL },
         { NULL }
@@ -619,6 +651,9 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
     // enable external interrupts
     sti();
 
+    int tty = tty_init();
+    printk("kernel: tty: init: %i\n", tty);
+
     // initialize uart
     int uart = uart_init();
     printk("kernel: uart: init: %i\n", uart);
@@ -666,24 +701,5 @@ void main(int cursor_x, int cursor_y, char *config, size_t e820_nentries, struct
 
     tss_set_esp0(current->kstack_base + current->kstack_size);
 
-    enter_userland((uint32_t)stack);
-
-    int pid = fork();
-
-    if (pid == 0) {
-        int fd = open("/dev/e9", O_RDWR, 0);
-        dup2(fd, STDIN);
-        dup2(fd, STDOUT);
-        dup2(fd, STDERR);
-
-        init();
-
-        close(STDERR);
-        close(STDOUT);
-        close(STDIN);
-    }
-
-    // become idle
-    for (;;)
-        asm volatile ("pause" :::);
+    enter_userland(&user_main, (uint32_t)stack);
 }

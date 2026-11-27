@@ -8,8 +8,8 @@
 
 #include <kernel/semaphore.h>
 
-#define IBUFLEN         16
-#define OBUFLEN         16
+#define RX_BUF_LEN      16
+#define TX_BUF_LEN      16
 
 #define EOF             -1
 
@@ -17,22 +17,42 @@
 #define TTY_SETMODE    0x5502
 
 enum uart_mode {
-    UART_MODE_POLL,
-    UART_MODE_IRQ
+    TTY_MODE_POLL,
+    TTY_MODE_IRQ
 };
+
+// forward declarions
+struct tty;
 
 struct termio {
-    char *ihead;
-    char *itail;
-    char ibuf[IBUFLEN];
-    sem_t isem;
-    char *ohead;
-    char *otail;
-    char obuf[OBUFLEN];
-    sem_t osem;
     int eof;
     char eofc;
-    void (*kickout)(void);
 };
 
-extern struct termio tty_table[];
+struct tty_ops {
+    void (*kickout)(struct tty *tty);
+};
+
+struct tty {
+    int free;
+    int minor;
+    struct device *dev;
+
+    struct termio termio;
+
+    char *rx_head;
+    char *rx_tail;
+    char rx_buf[RX_BUF_LEN];
+    sem_t rx_sem;
+
+    char *tx_head;
+    char *tx_tail;
+    char tx_buf[TX_BUF_LEN];
+    sem_t tx_sem;
+
+    struct tty_ops const *ops;
+    void *private_data;
+};
+
+int tty_init(void);
+struct tty *tty_register(struct tty_ops const *ops, void *private_data, char const *name);

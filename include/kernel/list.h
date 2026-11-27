@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #define containerof(ptr, type, member) ((type *)((char *)/*(typeof(((type *)0)->member) *)*/ptr - (char *)&((type *)0)->member))
 
 struct list {
@@ -48,12 +50,11 @@ static inline void list_link(struct list_head *prev, struct list_head *next) {
 }
 
 static inline struct list_head *list_pop(struct list_head *head) {
-    list_link(head->prev, head->next);
-    list_init(head);
-    return head;
-}
-
-static inline void list_move(struct list_head *head, struct list_head *item) {
-    list_link(item->prev, item->next);
-    list_push(head, item);
+    if (list_empty(head))
+        return NULL;
+    
+    struct list_head *first = head->next;
+    list_link(first->prev, first->next);
+    list_init(first);
+    return first;
 }

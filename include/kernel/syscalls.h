@@ -15,7 +15,7 @@
 #define NR_dup2         6
 #define NR_pause        7
 
-static inline int fork(void) {
+__attribute__((always_inline)) static inline int fork(void) {
     int result;
     
     asm volatile (
@@ -28,7 +28,7 @@ static inline int fork(void) {
     return result;
 }
 
-static inline int open(char const *path, int flags, int mode) {
+__attribute__((always_inline)) static inline int open(char const *path, int flags, int mode) {
     int result;
 
     asm volatile (
@@ -41,7 +41,7 @@ static inline int open(char const *path, int flags, int mode) {
     return result;
 }
 
-static inline int read(int fd, char *buffer, size_t count) {
+__attribute__((always_inline)) static inline int read(int fd, char *buffer, size_t count) {
     int result;
 
     asm volatile (
@@ -54,7 +54,7 @@ static inline int read(int fd, char *buffer, size_t count) {
     return result;
 }
 
-static inline int write(int fd, char const *buffer, size_t count) {
+__attribute__((always_inline)) static inline int write(int fd, char const *buffer, size_t count) {
     int result;
 
     asm volatile (
@@ -67,7 +67,7 @@ static inline int write(int fd, char const *buffer, size_t count) {
     return result;
 }
 
-static inline int close(int fd) {
+__attribute__((always_inline)) static inline int close(int fd) {
     int result;
 
     asm volatile (
@@ -80,7 +80,7 @@ static inline int close(int fd) {
     return result;
 }
 
-static inline int dup(int fd) {
+__attribute__((always_inline)) static inline int dup(int fd) {
     int result;
 
     asm volatile (
@@ -93,7 +93,7 @@ static inline int dup(int fd) {
     return result;
 }
 
-static inline int dup2(int oldfd, int newfd) {
+__attribute__((always_inline)) static inline int dup2(int oldfd, int newfd) {
     int result;
 
     asm volatile (
@@ -106,7 +106,7 @@ static inline int dup2(int oldfd, int newfd) {
     return result;
 }
 
-static inline int pause(void) {
+__attribute__((always_inline)) static inline int pause(void) {
     int result;
 
     asm volatile (

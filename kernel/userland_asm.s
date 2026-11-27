@@ -1,8 +1,8 @@
 global enter_userland
 
 enter_userland:
-	pop edx ; return address
-	pop eax ; user stack
+	mov edx, dword [esp+4] ; return address
+	mov eax, dword [esp+8] ; user stack
 
 	mov cx, (4 * 8) | 3 ; data selector
 	mov ds, cx

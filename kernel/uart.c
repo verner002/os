@@ -4,6 +4,7 @@
  * @date 03/11/2026
 */
 
+#include <stddef.h>
 #include <errno.h>
 
 #include <kernel/types.h>
@@ -79,11 +80,13 @@
 
 // line status register
 #define DATA_RDY        0x01
-#define TX_EMPTY        0x40
+#define THR_EMPTY       0x20
 
 // interrupt enable register
 #define RX_IRQ          1
 #define TX_IRQ          2
+
+#define FIFO_SIZE       16
 
 // internal clock tick rate
 #define CLOCK           115200u
@@ -91,40 +94,66 @@
 // supported rates
 #define B9600           (CLOCK / 9600u)
 
-void uart_kickout(void) {
-    uint8_t ls = inb(COM1 + LSR);
+static struct tty *com1_tty;
 
-    if (!(ls & TX_EMPTY))
+void uart_kickout(struct tty *tty) {
+    if (!(inb(COM1 + LSR) & THR_EMPTY))
         return;
 
-    outb(COM1 + IER, inb(COM1 + IER) | TX_IRQ);
+    // enforce new thre interrupt
+    uint8_t ier = inb(COM1 + IER);
+    outb(COM1 + IER, ier & ~TX_IRQ);
+    outb(COM1 + IER, ier | TX_IRQ);
 }
-
-#include <kernel/printk.h>
 
 __attribute__((interrupt)) static void com1_handler(struct interrupt_frame *) {    
     acknowledge_irq(4);
-    
-    uint8_t iir = inb(COM1 + IIR);
 
     // is it our problem?
-    if (iir & INT_PENDING)
+    if (inb(COM1 + IIR) & INT_PENDING)
         return;
 
-    // who caused the interrupt?
-    iir &= 6;
-    
     uint8_t ls;
     
     while ((ls = inb(COM1 + LSR)) & DATA_RDY) {
-        printk("%c", inb(COM1 + RBR));
+        char c = inb(COM1 + RBR);
+
+        int count;
+        sem_read(&(com1_tty->rx_sem), &count);
+
+        if (count < RX_BUF_LEN) {
+            *com1_tty->rx_tail++ = c;
+
+            if (com1_tty->rx_tail >= com1_tty->rx_buf + RX_BUF_LEN)
+                com1_tty->rx_tail = com1_tty->rx_buf;
+
+            sem_signal(&(com1_tty->rx_sem));
+        }
     }
 
-    if (ls & TX_EMPTY) {
-        // fill thr
-        outb(COM1 + THR, '!');
+    if (ls & THR_EMPTY) {
+        for (size_t i = 0; i < FIFO_SIZE; ++i) {
+            // fill thr
+            int count;
+            sem_read(&(com1_tty->tx_sem), &count);
+
+            if (count >= TX_BUF_LEN)
+                break;
+
+            char c = *com1_tty->tx_head++;
+
+            if (com1_tty->tx_head >= (com1_tty->tx_buf + TX_BUF_LEN))
+                com1_tty->tx_head = com1_tty->tx_buf;
+
+            outb(COM1 + THR, c);
+            sem_signal(&(com1_tty->tx_sem));
+        }
     }
 }
+
+static struct tty_ops const uart_ops = {
+    .kickout = &uart_kickout
+};
 
 int uart_init(void) {
     outb(COM1 + LCR, DLAB_ACCESS);
@@ -173,10 +202,10 @@ int uart_init(void) {
 
     while (!(inb(COM1 + LSR) & DATA_RDY))
         if (!--timeout)
-            return 1;
+            return -EBUSY;
 
     if (inb(COM1 + RBR) != 0xae)
-        return 1;
+        return -ENODEV;
     
     // disable loopback
     outb(COM1 + MCR, OUT2 | DATA_TERM_RDY | REQ_TO_SEND);
@@ -187,6 +216,13 @@ int uart_init(void) {
     inb(COM1 + MSR);
     inb(COM1 + IIR);
 
+    struct tty *tty = tty_register(&uart_ops, NULL, "ttyS0");
+
+    if (!tty)
+        return -ENODEV;
+
+    com1_tty = tty;
+
     // com1 handler
     install_interrupt_gate(0x24, &com1_handler);
 
@@ -195,5 +231,6 @@ int uart_init(void) {
 
     // enable rx interrupt
     outb(COM1 + IER, RX_IRQ);
+
     return 0;
 }

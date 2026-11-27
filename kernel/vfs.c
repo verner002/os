@@ -123,6 +123,7 @@ struct file *vfs_open(char const *path, int flags, int mode) {
             return NULL;
         }
 
+        // TODO: create inode and pass mode variable to it
         dentry = alloc_dentry(parent, last);
 
         if (!dentry) {
@@ -155,6 +156,8 @@ struct file *vfs_open(char const *path, int flags, int mode) {
     file->dentry = dentry;
     file->fops = dentry->inode->fops;
     file->flags = flags;
+    // TODO: translate O_RDONLY, O_WRONLY and O_RDWR to
+    // file->mode for easier testing (masks)
 
     if (file->fops && file->fops->open) {
         ssize_t err = file->fops->open(dentry->inode, file);
